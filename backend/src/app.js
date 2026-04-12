@@ -12,7 +12,9 @@ const telegramService = require('./services/telegramService');
 const authMiddleware = require('./routes/authMiddleware');
 
 const PORT = process.env.PORT || 7286;
+const app = express();
 
+app.use(morgan('dev'));
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
     ? [/https:\/\/.*\.netlify\.app/, /https:\/\/your-custom-domain\.com/] 
