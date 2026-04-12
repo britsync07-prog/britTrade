@@ -17,7 +17,7 @@ const app = express();
 app.use(morgan('dev'));
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
-    ? [/https:\/\/.*\.netlify\.app/, /https:\/\/your-custom-domain\.com/] 
+    ? [/https:\/\/.*\.netlify\.app/, /https:\/\/.*\.pages\.dev/, /https:\/\/your-custom-domain\.com/] 
     : '*',
   credentials: true
 }));
