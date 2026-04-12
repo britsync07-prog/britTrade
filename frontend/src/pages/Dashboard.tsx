@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Play, TrendingUp, Shield, BarChart3, Zap, ArrowRight, Wallet } from 'lucide-react';
+import { BarChart3, Zap, ArrowRight, Wallet } from 'lucide-react';
 import api from '../services/api';
 
 export default function Dashboard() {
