@@ -112,23 +112,29 @@ export default function Dashboard() {
 
                   <CardContent className="flex-grow pt-4">
                     <CardTitle className="text-2xl font-bold mb-3 tracking-tight group-hover:text-white transition-colors">{strat.name}</CardTitle>
-                    <p className="text-slate-400 text-sm leading-relaxed mb-8">
-                      {strat.description || "High-performance automated trading strategy utilizing advanced deep learning models for predictive market analysis."}
-                    </p>
+                  <p className="text-slate-400 text-sm leading-relaxed mb-8 min-h-[3rem]">
+                    {strat.description || "High-performance automated trading strategy utilizing advanced deep learning models for predictive market analysis."}
+                  </p>
 
                     <div className="grid grid-cols-3 gap-4 mb-8 pt-6 border-t border-white/5">
                       <div>
-                        <div className="text-[10px] text-slate-500 uppercase font-bold mb-1 tracking-wider">Risk</div>
-                        <div className="text-sm font-bold text-yellow-500/80">Medium</div>
+                      <div className="text-[10px] text-slate-500 uppercase font-bold mb-1 tracking-wider">Risk</div>
+                      <div className={`text-sm font-bold ${strat.risk === 'High' ? 'text-red-500' : strat.risk === 'Medium' ? 'text-yellow-500' : 'text-emerald-400'}`}>
+                        {strat.risk || 'Medium'}
                       </div>
-                      <div>
-                        <div className="text-[10px] text-slate-500 uppercase font-bold mb-1 tracking-wider">24h Prof</div>
-                        <div className="text-sm font-bold text-emerald-400">+3.2%</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-slate-500 uppercase font-bold mb-1 tracking-wider">24h Prof</div>
+                      <div className={`text-sm font-bold ${parseFloat(strat.prof24h) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {parseFloat(strat.prof24h) >= 0 ? '+' : ''}{strat.prof24h || '0.00'}%
                       </div>
-                      <div>
-                        <div className="text-[10px] text-slate-500 uppercase font-bold mb-1 tracking-wider">Mode</div>
-                        <div className="text-[10px] font-bold bg-white/5 text-slate-300 px-2 py-0.5 rounded-full inline-block">Futures</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-slate-500 uppercase font-bold mb-1 tracking-wider">Mode</div>
+                      <div className="text-[10px] font-bold bg-white/5 text-slate-300 px-2 py-0.5 rounded-full inline-block uppercase tracking-tighter">
+                        {strat.type || 'Spot'}
                       </div>
+                    </div>
                     </div>
 
                     <Link to={`/strategy/${strat.id}`} className="block">

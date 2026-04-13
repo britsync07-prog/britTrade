@@ -91,7 +91,24 @@ class StrategyService {
   }
 
   async getAll() {
-    return await db.query("SELECT * FROM strategies");
+    const strategies = await db.query("SELECT * FROM strategies");
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    
+    for (const s of strategies) {
+      const trades = await db.query(
+        "SELECT pnl, status FROM trades WHERE strategyId = ? AND timestamp > ?",
+        [s.id, yesterday]
+      );
+      const closed = trades.filter(t => t.status === 'closed');
+      let prof24h = 0;
+      if (closed.length > 0) {
+        const totalPnl = closed.reduce((acc, t) => acc + (t.pnl || 0), 0);
+        const totalStake = closed.length * 100; // Assuming default $100 stake
+        prof24h = (totalPnl / totalStake) * 100;
+      }
+      s.prof24h = prof24h.toFixed(2);
+    }
+    return strategies;
   }
 
   async getSubscribed(userId) {

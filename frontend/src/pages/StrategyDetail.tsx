@@ -194,6 +194,9 @@ export default function StrategyDetail() {
                 Live Market Node Sync Enabled
               </div>
             </div>
+            <p className="text-slate-400 max-w-2xl mt-6 leading-relaxed text-sm">
+              {strategy?.description || "High-performance automated trading strategy utilizing advanced deep learning models for predictive market analysis."}
+            </p>
           </div>
 
           <div className="flex flex-wrap gap-4 w-full lg:w-auto">

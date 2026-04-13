@@ -20,16 +20,34 @@ const initDb = () => {
       db.run(`CREATE TABLE IF NOT EXISTS strategies (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
-        type TEXT NOT NULL
+        type TEXT NOT NULL,
+        risk TEXT DEFAULT 'Medium',
+        description TEXT
       )`, (err) => {
         if (err) return reject(err);
+        
+        // Migration: Ensure new columns exist
+        db.all("PRAGMA table_info(strategies)", (err, rows) => {
+          if (err) return;
+          const hasRisk = rows.some(r => r.name === 'risk');
+          if (!hasRisk) {
+            db.run("ALTER TABLE strategies ADD COLUMN risk TEXT DEFAULT 'Medium'");
+            db.run("ALTER TABLE strategies ADD COLUMN description TEXT");
+          }
+        });
+
         // Seed strategies if empty
         db.get("SELECT count(*) as count FROM strategies", (err, row) => {
           if (err) return reject(err);
           if (row.count === 0) {
-            db.run("INSERT INTO strategies (name, type) VALUES ('GridMeanReversion', 'spot')");
-            db.run("INSERT INTO strategies (name, type) VALUES ('TrendFollower', 'spot')");
-            db.run("INSERT INTO strategies (name, type) VALUES ('UltimateFuturesScalper', 'futures')");
+            db.run("INSERT INTO strategies (name, type, risk, description) VALUES ('GridMeanReversion', 'spot', 'Low', 'Stable grid strategy capturing small price movements in sideways markets.')");
+            db.run("INSERT INTO strategies (name, type, risk, description) VALUES ('TrendFollower', 'spot', 'Medium', 'Dynamic trend tracking algorithm utilizing SuperTrend and ADX filters.')");
+            db.run("INSERT INTO strategies (name, type, risk, description) VALUES ('UltimateFuturesScalper', 'futures', 'High', 'Aggressive futures scalping engine with RSI and volume momentum triggers.')");
+          } else {
+            // Update descriptions for existing ones
+            db.run("UPDATE strategies SET risk = 'Low', description = 'Stable grid strategy capturing small price movements in sideways markets.' WHERE name = 'GridMeanReversion'");
+            db.run("UPDATE strategies SET risk = 'Medium', description = 'Dynamic trend tracking algorithm utilizing SuperTrend and ADX filters.' WHERE name = 'TrendFollower'");
+            db.run("UPDATE strategies SET risk = 'High', description = 'Aggressive futures scalping engine with RSI and volume momentum triggers.' WHERE name = 'UltimateFuturesScalper'");
           }
         });
       });
