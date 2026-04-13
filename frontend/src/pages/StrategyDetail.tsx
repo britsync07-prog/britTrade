@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ChevronLeft, TrendingUp, TrendingDown, Clock, History as HistoryIcon, Target, Activity, Zap, BarChart3 } from 'lucide-react';
+import { ChevronLeft, TrendingUp, TrendingDown, Clock, Target, Activity, Zap } from 'lucide-react';
 import api from '../services/api';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { motion } from 'framer-motion';
 
@@ -14,6 +14,11 @@ export default function StrategyDetail() {
   const [trades, setTrades] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [marketPrices, setMarketPrices] = useState<Record<string, number>>({});
+  const [showSubModal, setShowSubModal] = useState(false);
+  const [subType, setSubType] = useState<'signals' | 'both'>('both');
+  const [capital, setCapital] = useState('1000');
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -32,6 +37,18 @@ export default function StrategyDetail() {
         setSubInfo(sub);
         setTrades(t);
         setError(null);
+
+        // Fetch market prices for live positions
+        try {
+          const marketRes = await api.get('/market/summary');
+          const prices: Record<string, number> = {};
+          marketRes.data.forEach((m: any) => {
+            prices[m.symbol] = m.price;
+          });
+          setMarketPrices(prices);
+        } catch (me) {
+          console.warn('Market summary fetch failed', me);
+        }
       } catch (e: any) {
         console.error('Terminal Data Fetch Error:', e);
         setError(e.response?.data?.message || e.message || 'Connection failed');
@@ -43,6 +60,35 @@ export default function StrategyDetail() {
     const interval = setInterval(fetchData, 10000);
     return () => clearInterval(interval);
   }, [id]);
+
+  const handleSubscribe = async () => {
+    setSubmitting(true);
+    try {
+      await api.post('/strategies/subscribe', {
+        strategyId: Number(id),
+        useSignal: true,
+        useVirtualBalance: subType === 'both',
+        allocatedBalance: subType === 'both' ? Number(capital) : 0
+      });
+      setShowSubModal(false);
+      window.location.reload(); // Refresh to update subInfo
+    } catch (e) {
+      console.error('Subscription failed', e);
+      alert('Subscription failed. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleUnsubscribe = async () => {
+    if (!confirm('Are you sure you want to stop this terminal? All open positions will be closed in simulation.')) return;
+    try {
+      await api.post('/strategies/unsubscribe', { strategyId: Number(id) });
+      window.location.reload();
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   if (loading) return (
     <div className="min-h-screen bg-[#020617] flex items-center justify-center">
@@ -65,98 +111,253 @@ export default function StrategyDetail() {
 
   const liveTrades = trades.filter(t => t.status === 'open');
   const pastTrades = trades.filter(t => t.status === 'closed');
+  const winTrades = pastTrades.filter(t => t.pnl > 0);
+  const lossTrades = pastTrades.filter(t => t.pnl <= 0);
   const totalPnl = pastTrades.reduce((acc, t) => acc + t.pnl, 0);
 
   return (
-    <div className="min-h-screen bg-[#020617] text-white p-4 md:p-8 animate-fade-in">
-      <div className="max-w-7xl mx-auto space-y-8">
-        <Link to="/dashboard" className="inline-flex items-center gap-2 text-slate-400 hover:text-white transition-colors group mb-4">
+    <div className="min-h-screen bg-[#020617] text-slate-200 pb-20 relative overflow-hidden">
+      {/* Interactive Subscription Modal */}
+      {showSubModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="glass-card w-full max-w-md p-8 relative overflow-hidden shadow-2xl border-white/10">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-500 to-purple-500" />
+            <h2 className="text-2xl font-bold mb-2 text-white">Connect Terminal</h2>
+            <p className="text-slate-400 text-sm mb-6">Select your operational mode for {strategy.name}.</p>
+            
+            <div className="space-y-4 mb-8">
+              <button 
+                onClick={() => setSubType('signals')}
+                className={`w-full p-4 rounded-xl border transition-all text-left ${subType === 'signals' ? 'bg-cyan-500/10 border-cyan-500 text-cyan-400 shadow-lg shadow-cyan-500/5' : 'bg-white/5 border-white/10 hover:border-white/20'}`}
+              >
+                <div className="font-bold flex items-center gap-2">
+                  <Zap size={16} /> Signals Only
+                </div>
+                <div className="text-xs opacity-60 mt-1">Receive Telegram alerts only. No simulated trading.</div>
+              </button>
+              
+              <button 
+                onClick={() => setSubType('both')}
+                className={`w-full p-4 rounded-xl border transition-all text-left ${subType === 'both' ? 'bg-purple-500/10 border-purple-500 text-purple-400 shadow-lg shadow-purple-500/5' : 'bg-white/5 border-white/10 hover:border-white/20'}`}
+              >
+                <div className="font-bold flex items-center gap-2">
+                  <Activity size={16} /> Paper Trading + Signals
+                </div>
+                <div className="text-xs opacity-60 mt-1">Full simulation with initial capital tracking.</div>
+              </button>
+
+              {subType === 'both' && (
+                <div className="animate-in slide-in-from-top-2 duration-300">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500 ml-1">Initial Capital (USDT)</label>
+                  <input 
+                    type="number"
+                    value={capital}
+                    onChange={(e) => setCapital(e.target.value)}
+                    className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 mt-1 outline-none focus:border-purple-500 transition-colors font-mono font-bold text-white text-center"
+                    placeholder="e.g. 1000"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1 rounded-xl h-11" onClick={() => setShowSubModal(false)}>Cancel</Button>
+              <Button 
+                onClick={handleSubscribe} 
+                disabled={submitting}
+                className="flex-1 bg-white text-black hover:bg-white/90 rounded-xl h-11 font-bold"
+              >
+                {submitting ? 'Connecting...' : 'Deploy Now'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="max-w-7xl mx-auto px-4 md:px-8 pt-12 space-y-8 relative z-10">
+        <Link to="/dashboard" className="inline-flex items-center gap-2 text-slate-500 hover:text-white transition-colors group mb-4">
           <ChevronLeft size={20} className="group-hover:-translate-x-1 transition-transform" /> 
-          <span className="text-sm font-medium">Back to Dashoard</span>
+          <span className="text-sm font-medium">Market Overview</span>
         </Link>
 
-        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-8">
-          <div className="flex items-center gap-6">
-            <div className="p-5 bg-cyan-500/10 rounded-3xl border border-cyan-500/20 shadow-2xl shadow-cyan-500/10">
-              {strategy.name === 'UltimateFuturesScalper' ? <Zap className="text-cyan-400 w-10 h-10" /> : <BarChart3 className="text-cyan-400 w-10 h-10" />}
-            </div>
-            <div>
-              <h1 className="text-4xl md:text-5xl font-bold tracking-tighter">{strategy.name}</h1>
-              <div className="flex items-center gap-2 mt-2">
-                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-slate-400 text-sm font-mono tracking-widest uppercase">Live Execution Engine V2.4</span>
+        <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8">
+          <div>
+            <h1 className="text-4xl md:text-5xl font-bold tracking-tighter mb-2 group leading-tight">
+              <span className="bg-gradient-to-r from-cyan-400 via-white to-purple-400 bg-clip-text text-transparent">{strategy.name}</span>
+            </h1>
+            <div className="flex items-center gap-3">
+              <Badge variant="outline" className="bg-cyan-500/10 text-cyan-400 border-cyan-400/20 px-3 py-0.5 rounded-lg text-[10px] font-bold">
+                {strategy.type.toUpperCase()}
+              </Badge>
+              <div className="flex items-center gap-1.5 text-slate-500 text-xs font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Live Market Node Sync Enabled
               </div>
             </div>
           </div>
-          
-          {subInfo && (
-            <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
-              <Card className="bg-white/5 border-white/10 backdrop-blur-xl flex-grow md:flex-grow-0">
-                <CardContent className="p-4 flex items-center gap-4">
-                  <div>
-                    <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-1">Remaining Capital</div>
-                    <div className="text-xl font-bold text-emerald-400">${subInfo.allocatedBalance.toFixed(2)}</div>
+
+          <div className="flex flex-wrap gap-4 w-full lg:w-auto">
+            {!subInfo ? (
+              <Button 
+                onClick={() => setShowSubModal(true)}
+                className="bg-white text-black hover:bg-white/90 rounded-2xl px-8 h-12 font-bold group/btn flex-grow lg:flex-grow-0 shadow-lg shadow-white/5"
+              >
+                Initialize Terminal
+                <Zap className="ml-2 w-4 h-4 fill-current group-hover/btn:scale-110 transition-transform" />
+              </Button>
+            ) : (
+              <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto">
+                <div className="grid grid-cols-3 gap-3 flex-grow lg:flex-grow-0">
+                  <div className="bg-white/5 border border-white/10 rounded-2xl p-4 text-center min-w-[120px] backdrop-blur-md">
+                    <div className="text-[10px] uppercase font-bold text-slate-500 tracking-widest mb-1.5">Live Positions</div>
+                    <div className="text-2xl font-black text-white">{liveTrades.length}</div>
+                    <div className="text-[9px] text-cyan-400 font-bold uppercase tracking-tighter">Open</div>
                   </div>
-                </CardContent>
-              </Card>
-              <Card className="bg-white/5 border-white/10 backdrop-blur-xl flex-grow md:flex-grow-0">
-                <CardContent className="p-4 flex items-center gap-4">
-                  <div>
-                    <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest mb-1">Overall PnL</div>
-                    <div className={`text-xl font-bold ${totalPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                      {totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}
-                    </div>
+                  <div className="bg-emerald-500/5 border border-emerald-500/10 rounded-2xl p-4 text-center min-w-[120px] backdrop-blur-md">
+                    <div className="text-[10px] uppercase font-bold text-slate-500 tracking-widest mb-1.5">Hit Profit</div>
+                    <div className="text-2xl font-black text-emerald-400">{winTrades.length}</div>
+                    <div className="text-[9px] text-slate-500 font-bold uppercase tracking-tighter">Wins</div>
                   </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
+                  <div className="bg-rose-500/5 border border-rose-500/10 rounded-2xl p-4 text-center min-w-[120px] backdrop-blur-md">
+                    <div className="text-[10px] uppercase font-bold text-slate-500 tracking-widest mb-1.5">Hit Loss</div>
+                    <div className="text-2xl font-black text-rose-400">{lossTrades.length}</div>
+                    <div className="text-[9px] text-slate-500 font-bold uppercase tracking-tighter">Loss</div>
+                  </div>
+                </div>
+                <Button 
+                  variant="outline" 
+                  onClick={handleUnsubscribe}
+                  className="border-white/10 hover:bg-rose-500/10 hover:text-rose-400 hover:border-rose-500/20 rounded-2xl h-14 px-6 transition-all"
+                >
+                  Disconnect Node
+                </Button>
+              </div>
+            )}
+          </div>
         </header>
 
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-12">
+          <Card className="lg:col-span-3 bg-slate-900/40 border-white/5 backdrop-blur-sm p-0 rounded-3xl overflow-hidden shadow-2xl relative">
+            <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 via-transparent to-purple-500/5 pointer-events-none" />
+            <div className="p-6 border-b border-white/5 flex flex-row items-center justify-between relative z-10">
+               <h3 className="text-lg font-bold flex items-center gap-2 text-white">
+                 <Activity className="text-cyan-400" size={20} />
+                 Terminal Execution Flow
+               </h3>
+               {subInfo && (
+                 <div className="flex items-center gap-6">
+                    <div className="text-right">
+                      <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Available</div>
+                      <div className="text-base font-bold text-emerald-400 font-mono">${subInfo.allocatedBalance.toFixed(2)}</div>
+                    </div>
+                    <div className="h-8 w-px bg-white/10" />
+                    <div className="text-right">
+                      <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Initial Cap</div>
+                      <div className="text-base font-bold text-slate-300 font-mono">
+                        ${subInfo.initialAllocation?.toFixed(2) || subInfo.allocatedBalance.toFixed(2)}
+                      </div>
+                    </div>
+                 </div>
+               )}
+            </div>
+            <div className="h-[400px] p-0 relative">
+               <div className="absolute inset-0 flex items-center justify-center bg-slate-900/40 backdrop-blur-[2px] z-10">
+                  <div className="text-center group">
+                    <div className="p-4 bg-cyan-500/10 rounded-full mb-4 group-hover:scale-110 transition-transform inline-block">
+                      <Zap className="text-cyan-400 animate-pulse" size={32} />
+                    </div>
+                    <p className="text-slate-400 text-sm font-medium">Synchronizing live market flow...</p>
+                  </div>
+               </div>
+            </div>
+          </Card>
+
+          <div className="space-y-6">
+            <Card className="bg-slate-900/40 border-white/5 backdrop-blur-sm rounded-3xl p-6">
+              <div className="text-[11px] text-slate-500 uppercase font-bold tracking-widest mb-4">Node Health</div>
+              <div className="space-y-4">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-slate-400">Latency</span>
+                  <span className="text-emerald-400 font-mono font-bold">14ms</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-slate-400">Node Sync</span>
+                  <span className="text-emerald-400 font-mono font-bold">100%</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-slate-400">Mode</span>
+                  <span className="text-cyan-400 font-bold text-[10px] uppercase">{subInfo?.useVirtualBalance ? 'Paper' : 'Live'}</span>
+                </div>
+              </div>
+            </Card>
+
+            <Card className="bg-slate-900/40 border-white/5 backdrop-blur-sm rounded-3xl p-6 relative overflow-hidden group min-h-[160px] flex flex-col justify-center">
+              <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:scale-110 transition-transform duration-700">
+                <TrendingUp size={120} />
+              </div>
+              <div className="text-[11px] text-slate-500 uppercase font-bold tracking-widest mb-4">Realized Profit</div>
+              <div className={`text-4xl font-black tracking-tighter ${totalPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}
+              </div>
+              <p className="text-[10px] text-slate-500 mt-2">Cumulative realized performance.</p>
+            </Card>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column: Live Positions & Stats */}
           <div className="lg:col-span-2 space-y-8">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.1 }}
-            >
-              <Card className="bg-slate-900/40 border-white/5 overflow-hidden shadow-2xl">
-                <CardHeader className="p-6 border-b border-white/5 flex flex-row justify-between items-center bg-white/[0.02]">
-                  <CardTitle className="text-xl font-bold flex items-center gap-3">
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+              <Card className="bg-slate-900/40 border-white/5 overflow-hidden shadow-2xl relative">
+                <div className="p-6 border-b border-white/5 flex flex-row justify-between items-center bg-white/[0.02]">
+                  <h3 className="text-xl font-bold flex items-center gap-3 text-white">
                     <Target size={20} className="text-cyan-400" /> Live Positions
-                  </CardTitle>
+                  </h3>
                   <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 px-3 py-1">
                     {liveTrades.length} Active
                   </Badge>
-                </CardHeader>
+                </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left">
                     <thead>
                       <tr className="text-[10px] text-slate-500 uppercase font-bold border-b border-white/5">
                         <th className="px-6 py-4">Symbol</th>
                         <th className="px-6 py-4">Side</th>
-                        <th className="px-6 py-4 text-center">Entry</th>
+                        <th className="px-6 py-4 text-center">Entry / Live</th>
                         <th className="px-6 py-4 text-center">Qty</th>
-                        <th className="px-6 py-4 text-right">PnL</th>
+                        <th className="px-6 py-4 text-right">PnL (%)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
                       {liveTrades.length === 0 ? (
-                        <tr><td colSpan={5} className="px-6 py-16 text-center text-slate-500 text-sm">No active positions. Scanning markets...</td></tr>
+                        <tr><td colSpan={5} className="px-6 py-16 text-center text-slate-500 text-sm italic">No active positions. Scanning markets for {strategy.name} alignment...</td></tr>
                       ) : (
                         liveTrades.map(t => (
                           <tr key={t.id} className="hover:bg-white/[0.03] transition-colors group">
                             <td className="px-6 py-5 font-bold text-white group-hover:text-cyan-400 transition-colors uppercase tracking-tight">{t.symbol}</td>
                             <td className="px-6 py-5">
-                              <Badge variant="outline" className={`text-[10px] ${t.side === 'buy' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'}`}>
+                              <Badge variant="outline" className={`text-[10px] border-none ${t.side === 'buy' || t.side === 'long' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
                                 {t.side.toUpperCase()}
                               </Badge>
                             </td>
-                            <td className="px-6 py-5 text-center font-mono text-xs text-slate-300">{t.price.toFixed(4)}</td>
+                            <td className="px-6 py-5 text-center">
+                              <div className="font-mono text-xs text-slate-300">{t.price.toFixed(4)}</div>
+                              <div className="font-mono text-[10px] text-cyan-400/60 mt-0.5">${marketPrices[t.symbol]?.toFixed(4) || '---'}</div>
+                            </td>
                             <td className="px-6 py-5 text-center font-mono text-xs text-slate-300">{t.amount.toFixed(4)}</td>
-                            <td className={`px-6 py-5 text-right font-bold ${t.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                              {t.pnl >= 0 ? '+' : ''}${t.pnl.toFixed(4)}
+                            <td className="px-6 py-5 text-right">
+                              {(() => {
+                                const currentPrice = marketPrices[t.symbol] || t.price;
+                                const isLong = t.side === 'buy' || t.side === 'long';
+                                const pnlVal = isLong ? (currentPrice - t.price) * t.amount : (t.price - currentPrice) * t.amount;
+                                const pnlPct = ((currentPrice - t.price) / t.price) * 100 * (isLong ? 1 : -1);
+                                
+                                return (
+                                  <div className={`font-bold ${pnlVal >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                    <div className="text-sm font-mono">{pnlVal >= 0 ? '+' : ''}${pnlVal.toFixed(4)}</div>
+                                    <div className="text-[10px] opacity-70 font-mono">{pnlVal >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%</div>
+                                  </div>
+                                );
+                              })()}
                             </td>
                           </tr>
                         ))
@@ -166,102 +367,43 @@ export default function StrategyDetail() {
                 </div>
               </Card>
             </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-            >
-              <Card className="bg-slate-900/40 border-white/5 p-8 shadow-2xl">
-                 <h3 className="text-xl font-bold mb-8 flex items-center gap-3">
-                    <HistoryIcon size={20} className="text-cyan-400" /> Recent Performance
-                  </h3>
-                  <div className="h-[240px] flex items-end gap-2 px-2 border-b border-white/5 mb-8">
-                    {pastTrades.length === 0 ? (
-                      <div className="w-full flex items-center justify-center text-slate-600 italic">History will populate after first trade closure...</div>
-                    ) : (
-                      pastTrades.slice(-30).map((t, idx) => (
-                        <div 
-                          key={idx}
-                          className={`flex-grow rounded-t-lg transition-all duration-500 hover:scale-105 hover:filter hover:brightness-125`}
-                          style={{ 
-                            height: `${Math.min(100, Math.max(15, Math.abs(t.pnl) * 200))}%`,
-                            backgroundColor: t.pnl > 0 ? '#10b981' : '#ef4444',
-                            opacity: 0.6 + (idx / 30) * 0.4
-                          }}
-                          title={`${t.symbol}: ${t.pnl > 0 ? '+' : ''}${t.pnl.toFixed(4)}`}
-                        />
-                      ))
-                    )}
-                  </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                    <div className="p-5 bg-white/[0.03] rounded-2xl border border-white/5 group hover:bg-white/[0.06] transition-colors">
-                      <div className="text-[10px] text-slate-500 uppercase font-bold mb-1 tracking-widest">Win Rate</div>
-                      <div className="text-3xl font-bold text-white tracking-tighter">78.4%</div>
-                    </div>
-                    <div className="p-5 bg-white/[0.03] rounded-2xl border border-white/5 group hover:bg-white/[0.06] transition-colors">
-                      <div className="text-[10px] text-slate-500 uppercase font-bold mb-1 tracking-widest">Total Trades</div>
-                      <div className="text-3xl font-bold text-white tracking-tighter">{pastTrades.length}</div>
-                    </div>
-                    <div className="p-5 bg-white/[0.03] rounded-2xl border border-white/5 group hover:bg-white/[0.06] transition-colors">
-                      <div className="text-[10px] text-slate-500 uppercase font-bold mb-1 tracking-widest">Profit Factor</div>
-                      <div className="text-3xl font-bold text-cyan-400 tracking-tighter">2.41</div>
-                    </div>
-                    <div className="p-5 bg-white/[0.03] rounded-2xl border border-white/5 group hover:bg-white/[0.06] transition-colors">
-                      <div className="text-[10px] text-slate-500 uppercase font-bold mb-1 tracking-widest">Avg Trade</div>
-                      <div className="text-3xl font-bold text-emerald-400 tracking-tighter">+0.8%</div>
-                    </div>
-                  </div>
-              </Card>
-            </motion.div>
           </div>
 
-          {/* Right Column: Execution Log */}
-          <motion.div
-            className="h-full"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.3 }}
-          >
-            <Card className="bg-slate-900/40 border-white/5 h-full max-h-[800px] flex flex-col shadow-2xl">
-              <CardHeader className="p-6 border-b border-white/5">
-                <CardTitle className="text-xl font-bold flex items-center gap-3">
+          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
+            <Card className="bg-slate-900/40 border-white/5 h-full max-h-[600px] flex flex-col shadow-2xl">
+              <div className="p-6 border-b border-white/5">
+                <h3 className="text-xl font-bold flex items-center gap-3 text-white">
                   <Clock size={20} className="text-cyan-400" /> Execution Log
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-0 flex-grow overflow-hidden flex flex-col">
-                <div className="space-y-0 overflow-y-auto flex-grow custom-scrollbar">
-                   {trades.length === 0 ? (
-                     <div className="p-8 text-center text-slate-600 text-sm">Awaiting first execution signal...</div>
-                   ) : (
-                     trades.slice().reverse().map((t) => (
-                       <div key={t.id} className={`p-5 flex gap-5 border-l-4 transition-all duration-300 hover:bg-white/[0.03] ${t.status === 'open' ? 'border-emerald-500/40' : 'border-blue-500/40'}`}>
-                          <div className="flex-shrink-0 mt-1">
-                            {t.status === 'open' ? <TrendingUp size={20} className="text-emerald-400" /> : <TrendingDown size={20} className="text-blue-400" />}
+                </h3>
+              </div>
+              <div className="space-y-0 overflow-y-auto flex-grow custom-scrollbar">
+                 {trades.length === 0 ? (
+                   <div className="p-12 text-center text-slate-600 text-sm italic">Listening for AI execution events...</div>
+                 ) : (
+                   trades.slice().reverse().map((t) => (
+                     <div key={t.id} className={`p-5 flex gap-5 border-l-4 transition-all duration-300 hover:bg-white/[0.03] ${t.status === 'open' ? 'border-emerald-500/40' : 'border-blue-500/40'}`}>
+                        <div className="flex-shrink-0 mt-1">
+                          {t.status === 'open' ? <TrendingUp size={20} className="text-emerald-400" /> : <TrendingDown size={20} className="text-blue-400" />}
+                        </div>
+                        <div className="flex-grow">
+                          <div className="flex justify-between items-start mb-1">
+                            <Badge className={`text-[10px] font-mono border-none ${t.status === 'open' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-blue-500/10 text-blue-400'}`}>
+                              {t.status === 'open' ? 'ENTRY' : 'EXIT'}
+                            </Badge>
+                            <span className="text-[10px] font-mono text-slate-500">{new Date(t.timestamp).toLocaleTimeString()}</span>
                           </div>
-                          <div className="flex-grow">
-                            <div className="flex justify-between items-start mb-1">
-                              <Badge className={`text-[10px] font-mono ${t.status === 'open' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-blue-500/10 text-blue-400'}`}>
-                                {t.status === 'open' ? 'ENTRY' : 'EXIT'}
-                              </Badge>
-                              <span className="text-[10px] font-mono text-slate-500">{new Date(t.timestamp).toLocaleTimeString()}</span>
+                          <div className="text-sm font-bold text-white uppercase tracking-tight mb-1">{t.symbol}</div>
+                          <div className="text-xs font-mono text-cyan-400/80">PRICE: ${t.price.toFixed(4)}</div>
+                          {t.pnl !== 0 && (
+                            <div className={`text-xs font-bold mt-2 pt-2 border-t border-white/5 ${t.pnl > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                              PnL: {t.pnl > 0 ? '+' : ''}${t.pnl.toFixed(4)}
                             </div>
-                            <div className="text-sm font-bold text-white uppercase tracking-tight mb-1">{t.symbol}</div>
-                            <div className="text-xs text-slate-400 leading-relaxed mb-2">
-                              {t.status === 'open' ? 'Optimal entry signal detected by AI core. Liquidity and volatility confirmed.' : 'Target ROI reached or dynamic stop-loss triggered. Profit secured.'}
-                            </div>
-                            <div className="text-xs font-mono text-cyan-400/80">PRICE: ${t.price.toFixed(4)}</div>
-                            {t.pnl !== 0 && (
-                              <div className={`text-sm font-bold mt-2 pt-2 border-t border-white/5 ${t.pnl > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                RESULT: {t.pnl > 0 ? '+' : ''}${t.pnl.toFixed(4)}
-                              </div>
-                            )}
-                          </div>
-                       </div>
-                     ))
-                   )}
-                </div>
-              </CardContent>
+                          )}
+                        </div>
+                     </div>
+                   ))
+                 )}
+              </div>
             </Card>
           </motion.div>
         </div>

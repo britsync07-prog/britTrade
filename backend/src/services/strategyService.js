@@ -96,13 +96,13 @@ class StrategyService {
 
   async getSubscribed(userId) {
     return await db.query(
-      "SELECT s.*, sub.useSignal, sub.useVirtualBalance, sub.allocatedBalance FROM strategies s JOIN subscriptions sub ON s.id = sub.strategyId WHERE sub.userId = ?",
+      "SELECT s.*, sub.useSignal, sub.useVirtualBalance, sub.allocatedBalance, sub.initialAllocation FROM strategies s JOIN subscriptions sub ON s.id = sub.strategyId WHERE sub.userId = ?",
       [userId]
     );
   }
 
   async subscribe(userId, strategyId, useSignal = true, useVirtualBalance = true, allocatedBalance = 0) {
-    return await db.run("INSERT OR REPLACE INTO subscriptions (userId, strategyId, useSignal, useVirtualBalance, allocatedBalance) VALUES (?, ?, ?, ?, ?)", [userId, strategyId, useSignal, useVirtualBalance, allocatedBalance]);
+    return await db.run("INSERT OR REPLACE INTO subscriptions (userId, strategyId, useSignal, useVirtualBalance, allocatedBalance, initialAllocation) VALUES (?, ?, ?, ?, ?, ?)", [userId, strategyId, useSignal, useVirtualBalance, allocatedBalance, allocatedBalance]);
   }
 
   async unsubscribe(userId, strategyId) {

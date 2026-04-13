@@ -66,6 +66,7 @@ const initDb = () => {
         useSignal BOOLEAN DEFAULT 1,
         useVirtualBalance BOOLEAN DEFAULT 1,
         allocatedBalance REAL DEFAULT 0,
+        initialAllocation REAL DEFAULT 0,
         PRIMARY KEY (userId, strategyId)
       )`);
 
