@@ -67,7 +67,7 @@ export default function Dashboard() {
         </div>
         
         <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
-          <Card className="bg-white/5 border-white/10 backdrop-blur-xl flex-grow md:flex-grow-0 hover:bg-white/10 transition-colors cursor-pointer group/telegram" onClick={() => window.open('https://t.me/UltimateTradingBot', '_blank')}>
+          <Card className="bg-white/5 border-white/10 backdrop-blur-xl flex-grow md:flex-grow-0 hover:bg-white/10 transition-colors cursor-pointer group/telegram" onClick={() => window.open('https://t.me/BritSyncAI_bot', '_blank')}>
             <CardContent className="p-4 flex items-center gap-4">
               <div className="p-3 bg-cyan-500/10 rounded-2xl group-hover/telegram:bg-cyan-500/20 transition-colors">
                 <Send className="text-cyan-400" size={24} />
