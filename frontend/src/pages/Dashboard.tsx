@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { BarChart3, Zap, ArrowRight, Wallet, Activity, TrendingUp } from 'lucide-react';
+import { BarChart, Zap, ArrowRight, Wallet, Activity, TrendingUp } from 'lucide-react';
 import api from '../services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,18 +11,25 @@ export default function Dashboard() {
   const [strategies, setStrategies] = useState<any[]>([]);
   const [subscribed, setSubscribed] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
+        console.log('[Dashboard] Fetching strategies...');
         const [stratsRes, subRes] = await Promise.all([
-          api.get('/strategies'),
-          api.get('/strategies/subscribed')
+          api.get('/strategies').catch(err => { console.error('Strats fetch failed', err); throw err; }),
+          api.get('/strategies/subscribed').catch(err => { console.error('Subscribed fetch failed', err); throw err; })
         ]);
-        setStrategies(stratsRes.data);
-        setSubscribed(subRes.data);
-      } catch (e) {
+        
+        console.log('[Dashboard] Strats:', stratsRes.data);
+        console.log('[Dashboard] Subscribed:', subRes.data);
+        
+        setStrategies(Array.isArray(stratsRes.data) ? stratsRes.data : []);
+        setSubscribed(Array.isArray(subRes.data) ? subRes.data : []);
+      } catch (e: any) {
         console.error('Error fetching dashboard data:', e);
+        setError(e.message || 'Failed to connect to server');
       } finally {
         setLoading(false);
       }
@@ -31,15 +38,28 @@ export default function Dashboard() {
   }, []);
 
   if (loading) return (
-    <div className="min-h-[60vh] flex items-center justify-center">
+    <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4">
       <Activity className="w-12 h-12 text-cyan-400 animate-pulse" />
+      <div className="text-slate-400 animate-pulse">Establishing Secure Connection...</div>
+    </div>
+  );
+
+  if (error) return (
+    <div className="min-h-[60vh] flex flex-col items-center justify-center gap-6 px-4">
+      <div className="p-6 bg-red-500/10 border border-red-500/20 rounded-3xl text-center max-w-md">
+        <h2 className="text-xl font-bold text-red-500 mb-2">Connection Offline</h2>
+        <p className="text-slate-400 mb-6">{error}</p>
+        <Button onClick={() => window.location.reload()} variant="outline" className="border-red-500/20 text-red-400 hover:bg-red-500/10">
+          Retry Connection
+        </Button>
+      </div>
     </div>
   );
 
   return (
     <div className="space-y-12 animate-fade-in px-4 py-8 max-w-7xl mx-auto">
       <header className="flex flex-col md:flex-row justify-between items-end gap-6">
-        <div className="w-full">
+        <div className="w-full text-left">
           <h1 className="text-4xl md:text-5xl font-bold tracking-tighter mb-2">
             Market <span className="bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">Terminals</span>
           </h1>
@@ -51,7 +71,7 @@ export default function Dashboard() {
             <div className="p-3 bg-cyan-500/10 rounded-2xl">
               <Wallet className="text-cyan-400" size={24} />
             </div>
-            <div>
+            <div className="text-left">
               <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Account Balance</div>
               <div className="text-2xl font-bold text-white leading-tight">$10,000.00</div>
             </div>
@@ -59,67 +79,73 @@ export default function Dashboard() {
         </Card>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {strategies.map((strat, idx) => {
-          const isSubscribed = subscribed.some(s => s.id === strat.id);
-          const Icon = strat.name === 'UltimateFuturesScalper' ? Zap : (idx % 2 === 0 ? BarChart3 : TrendingUp);
-          
-          return (
-            <motion.div
-              key={strat.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: idx * 0.1 }}
-            >
-              <Card className="group relative bg-slate-900/40 border-white/5 hover:border-white/20 transition-all duration-500 overflow-hidden h-full flex flex-col hover:shadow-2xl hover:shadow-cyan-500/10 hover:-translate-y-1">
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                
-                <CardHeader className="flex flex-row justify-between items-start pb-2">
-                  <div className="p-3 bg-white/5 rounded-2xl group-hover:bg-cyan-500/10 transition-colors">
-                    <Icon className="text-slate-400 group-hover:text-cyan-400" size={24} />
-                  </div>
-                  {isSubscribed && (
-                    <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 px-3 py-1">
-                      Active
-                    </Badge>
-                  )}
-                </CardHeader>
-
-                <CardContent className="flex-grow pt-4">
-                  <CardTitle className="text-2xl font-bold mb-3 tracking-tight group-hover:text-white transition-colors">{strat.name}</CardTitle>
-                  <p className="text-slate-400 text-sm leading-relaxed mb-8">
-                    {strat.description || "High-performance automated trading strategy utilizing advanced deep learning models for predictive market analysis."}
-                  </p>
-
-                  <div className="grid grid-cols-3 gap-4 mb-8 pt-6 border-t border-white/5">
-                    <div>
-                      <div className="text-[10px] text-slate-500 uppercase font-bold mb-1 tracking-wider">Risk</div>
-                      <div className="text-sm font-bold text-yellow-500/80">Medium</div>
+      {strategies.length === 0 ? (
+        <div className="py-20 text-center border border-dashed border-white/10 rounded-3xl">
+          <div className="text-xl text-slate-500">No active strategies found in database.</div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 text-left">
+          {strategies.map((strat, idx) => {
+            const isSubscribed = Array.isArray(subscribed) && subscribed.some(s => s.id === strat.id);
+            const Icon = strat.name === 'UltimateFuturesScalper' ? Zap : (idx % 2 === 0 ? BarChart : TrendingUp);
+            
+            return (
+              <motion.div
+                key={strat.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.1 }}
+              >
+                <Card className="group relative bg-slate-900/40 border-white/5 hover:border-white/20 transition-all duration-500 overflow-hidden h-full flex flex-col hover:shadow-2xl hover:shadow-cyan-500/10 hover:-translate-y-1 text-left">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                  
+                  <CardHeader className="flex flex-row justify-between items-start pb-2">
+                    <div className="p-3 bg-white/5 rounded-2xl group-hover:bg-cyan-500/10 transition-colors">
+                      <Icon className="text-slate-400 group-hover:text-cyan-400" size={24} />
                     </div>
-                    <div>
-                      <div className="text-[10px] text-slate-500 uppercase font-bold mb-1 tracking-wider">24h Prof</div>
-                      <div className="text-sm font-bold text-emerald-400">+3.2%</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-slate-500 uppercase font-bold mb-1 tracking-wider">Mode</div>
-                      <div className="text-[10px] font-bold bg-white/5 text-slate-300 px-2 py-0.5 rounded-full inline-block">Futures</div>
-                    </div>
-                  </div>
+                    {isSubscribed && (
+                      <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 px-3 py-1">
+                        Active
+                      </Badge>
+                    )}
+                  </CardHeader>
 
-                  <Link to={`/strategy/${strat.id}`} className="block">
-                    <Button 
-                      className={`w-full h-12 rounded-2xl group/btn ${isSubscribed ? 'bg-white text-black hover:bg-white/90' : 'bg-slate-800 text-white hover:bg-slate-700'}`}
-                    >
-                      <span className="font-bold">{isSubscribed ? 'Open Terminal' : 'View Details'}</span>
-                      <ArrowRight className="ml-2 w-4 h-4 group-hover/btn:translate-x-1 transition-transform" />
-                    </Button>
-                  </Link>
-                </CardContent>
-              </Card>
-            </motion.div>
-          );
-        })}
-      </div>
+                  <CardContent className="flex-grow pt-4">
+                    <CardTitle className="text-2xl font-bold mb-3 tracking-tight group-hover:text-white transition-colors">{strat.name}</CardTitle>
+                    <p className="text-slate-400 text-sm leading-relaxed mb-8">
+                      {strat.description || "High-performance automated trading strategy utilizing advanced deep learning models for predictive market analysis."}
+                    </p>
+
+                    <div className="grid grid-cols-3 gap-4 mb-8 pt-6 border-t border-white/5">
+                      <div>
+                        <div className="text-[10px] text-slate-500 uppercase font-bold mb-1 tracking-wider">Risk</div>
+                        <div className="text-sm font-bold text-yellow-500/80">Medium</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-slate-500 uppercase font-bold mb-1 tracking-wider">24h Prof</div>
+                        <div className="text-sm font-bold text-emerald-400">+3.2%</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-slate-500 uppercase font-bold mb-1 tracking-wider">Mode</div>
+                        <div className="text-[10px] font-bold bg-white/5 text-slate-300 px-2 py-0.5 rounded-full inline-block">Futures</div>
+                      </div>
+                    </div>
+
+                    <Link to={`/strategy/${strat.id}`} className="block">
+                      <Button 
+                        className={`w-full h-12 rounded-2xl group/btn ${isSubscribed ? 'bg-white text-black hover:bg-white/90' : 'bg-slate-800 text-white hover:bg-slate-700'}`}
+                      >
+                        <span className="font-bold">{isSubscribed ? 'Open Terminal' : 'View Details'}</span>
+                        <ArrowRight className="ml-2 w-4 h-4 group-hover/btn:translate-x-1 transition-transform" />
+                      </Button>
+                    </Link>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

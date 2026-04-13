@@ -93,8 +93,26 @@ const initDb = () => {
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
       )`, (err) => {
         if (err) return reject(err);
-        console.log('Database initialized successfully.');
-        resolve();
+        
+        // Migration: Ensure initialAllocation exists in subscriptions
+        db.all("PRAGMA table_info(subscriptions)", (err, rows) => {
+          if (err) {
+            console.error('Migration check failed', err);
+            return resolve(); // Continue anyway 
+          }
+          const hasCol = rows.some(r => r.name === 'initialAllocation');
+          if (!hasCol) {
+            console.log('Migrating database: Adding initialAllocation to subscriptions...');
+            db.run("ALTER TABLE subscriptions ADD COLUMN initialAllocation REAL DEFAULT 0", (err) => {
+              if (err) console.error('Migration failed', err);
+              console.log('Database initialized successfully (migrated).');
+              resolve();
+            });
+          } else {
+            console.log('Database initialized successfully.');
+            resolve();
+          }
+        });
       });
     });
   });
