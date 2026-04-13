@@ -84,7 +84,7 @@ class TelegramService {
     if (!strategy) return;
 
     const users = await db.query(
-      "SELECT telegramId FROM users u JOIN subscriptions s ON u.id = s.userId WHERE s.strategyId = ? AND u.telegramId IS NOT NULL",
+      "SELECT DISTINCT telegramId FROM users u JOIN subscriptions s ON u.id = s.userId WHERE s.strategyId = ? AND u.telegramId IS NOT NULL",
       [strategyId]
     );
 

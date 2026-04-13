@@ -150,6 +150,9 @@ class StrategyService {
     const id = parseInt(strategyId, 10);
     if (isNaN(id)) throw new Error('Invalid strategyId');
 
+    // Prevent duplicate intervals for the same strategy
+    await this.stopStrategy(id);
+
     const strategy = await db.get("SELECT * FROM strategies WHERE id = ?", [id]);
     if (!strategy) throw new Error("Strategy not found");
 
