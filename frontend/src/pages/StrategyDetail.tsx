@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ChevronLeft, TrendingUp, TrendingDown, Clock, History as HistoryIcon, Target, Activity, Zap, BarChart3 } from 'lucide-react';
 import api from '../services/api';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { motion } from 'framer-motion';
@@ -12,6 +13,7 @@ export default function StrategyDetail() {
   const [subInfo, setSubInfo] = useState<any>(null);
   const [trades, setTrades] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -29,8 +31,10 @@ export default function StrategyDetail() {
         setStrategy(s);
         setSubInfo(sub);
         setTrades(t);
-      } catch (e) {
-        console.error(e);
+        setError(null);
+      } catch (e: any) {
+        console.error('Terminal Data Fetch Error:', e);
+        setError(e.response?.data?.message || e.message || 'Connection failed');
       } finally {
         setLoading(false);
       }
@@ -40,9 +44,22 @@ export default function StrategyDetail() {
     return () => clearInterval(interval);
   }, [id]);
 
-  if (loading || !strategy) return (
+  if (loading) return (
     <div className="min-h-screen bg-[#020617] flex items-center justify-center">
       <Activity className="w-12 h-12 text-cyan-400 animate-pulse" />
+    </div>
+  );
+
+  if (error || !strategy) return (
+    <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center p-8 text-center">
+      <div className="p-4 bg-rose-500/10 rounded-full mb-6">
+        <Activity className="w-12 h-12 text-rose-400" />
+      </div>
+      <h2 className="text-2xl font-bold mb-2">Terminal Offline</h2>
+      <p className="text-slate-400 max-w-md mb-8">{error || 'Strategy node not found or connection lost.'}</p>
+      <Link to="/dashboard">
+        <Button variant="outline">Back to Market</Button>
+      </Link>
     </div>
   );
 

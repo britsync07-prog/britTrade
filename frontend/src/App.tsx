@@ -5,6 +5,7 @@ import RadialOrbitalTimeline from './components/ui/radial-orbital-timeline';
 import { Code, Clock, Activity, Shield, TrendingUp } from "lucide-react";
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
+import StrategyDetail from './pages/StrategyDetail';
 
 const timelineData = [
   {
@@ -162,6 +163,10 @@ function App() {
         <Route 
           path="/dashboard/*" 
           element={user ? <Dashboard /> : <Navigate to="/login" />} 
+        />
+        <Route 
+          path="/strategy/:id" 
+          element={user ? <StrategyDetail /> : <Navigate to="/login" />} 
         />
       </Routes>
     </Router>
