@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { BarChart, Zap, ArrowRight, Activity, TrendingUp, LogOut } from 'lucide-react';
+import { BarChart, Zap, ArrowRight, Activity, TrendingUp, LogOut, Send } from 'lucide-react';
 import api from '../services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -66,17 +66,32 @@ export default function Dashboard() {
           <p className="text-slate-400 text-lg">Deploy advanced AI strategies across 100+ crypto markets.</p>
         </div>
         
-        <Card className="bg-white/5 border-white/10 backdrop-blur-xl w-full md:w-auto hover:bg-white/10 transition-colors cursor-pointer group/logout" onClick={() => { localStorage.clear(); window.location.href = '/'; }}>
-          <CardContent className="p-4 flex items-center gap-4">
-            <div className="p-3 bg-rose-500/10 rounded-2xl group-hover/logout:bg-rose-500/20 transition-colors">
-              <LogOut className="text-rose-400" size={24} />
-            </div>
-            <div className="text-left pr-4">
-              <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Session Control</div>
-              <div className="text-2xl font-bold text-white leading-tight">Logout</div>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
+          <Card className="bg-white/5 border-white/10 backdrop-blur-xl flex-grow md:flex-grow-0 hover:bg-white/10 transition-colors cursor-pointer group/telegram" onClick={() => window.open('https://t.me/UltimateTradingBot', '_blank')}>
+            <CardContent className="p-4 flex items-center gap-4">
+              <div className="p-3 bg-cyan-500/10 rounded-2xl group-hover/telegram:bg-cyan-500/20 transition-colors">
+                <Send className="text-cyan-400" size={24} />
+              </div>
+              <div className="text-left pr-4">
+                <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Bot Alerts</div>
+                <div className="text-2xl font-bold text-white leading-tight">Telegram</div>
+                <div className="text-[10px] text-slate-400 mt-1 leading-tight max-w-[150px]">Get real-time signals and check your account logs on the go.</div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white/5 border-white/10 backdrop-blur-xl flex-grow md:flex-grow-0 hover:bg-rose-500/10 transition-colors cursor-pointer group/logout" onClick={() => { localStorage.clear(); window.location.href = '/'; }}>
+            <CardContent className="p-4 flex items-center gap-4">
+              <div className="p-3 bg-rose-500/10 rounded-2xl group-hover/logout:bg-rose-500/20 transition-colors">
+                <LogOut className="text-rose-400" size={24} />
+              </div>
+              <div className="text-left pr-4">
+                <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Session Control</div>
+                <div className="text-2xl font-bold text-white leading-tight">Logout</div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </header>
 
       {strategies.length === 0 ? (
