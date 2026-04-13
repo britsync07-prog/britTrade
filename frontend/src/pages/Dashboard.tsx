@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { BarChart, Zap, ArrowRight, Wallet, Activity, TrendingUp } from 'lucide-react';
+import { BarChart, Zap, ArrowRight, Activity, TrendingUp, LogOut } from 'lucide-react';
 import api from '../services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -66,14 +66,14 @@ export default function Dashboard() {
           <p className="text-slate-400 text-lg">Deploy advanced AI strategies across 100+ crypto markets.</p>
         </div>
         
-        <Card className="bg-white/5 border-white/10 backdrop-blur-xl w-full md:w-auto">
+        <Card className="bg-white/5 border-white/10 backdrop-blur-xl w-full md:w-auto hover:bg-white/10 transition-colors cursor-pointer group/logout" onClick={() => { localStorage.clear(); window.location.href = '/'; }}>
           <CardContent className="p-4 flex items-center gap-4">
-            <div className="p-3 bg-cyan-500/10 rounded-2xl">
-              <Wallet className="text-cyan-400" size={24} />
+            <div className="p-3 bg-rose-500/10 rounded-2xl group-hover/logout:bg-rose-500/20 transition-colors">
+              <LogOut className="text-rose-400" size={24} />
             </div>
-            <div className="text-left">
-              <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Account Balance</div>
-              <div className="text-2xl font-bold text-white leading-tight">$10,000.00</div>
+            <div className="text-left pr-4">
+              <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Session Control</div>
+              <div className="text-2xl font-bold text-white leading-tight">Logout</div>
             </div>
           </CardContent>
         </Card>

@@ -170,31 +170,39 @@ app.post('/telegram/connect', authMiddleware, async (req, res, next) => {
 // --- Phase 3: Market & Portfolio ---
 app.get('/market/summary', authMiddleware, async (req, res) => {
   try {
-    // Binance Ticker 24hr endpoint - symbols param must be a stringified array
-    const symbolsParam = JSON.stringify(["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","ADAUSDT","DOTUSDT","XRPUSDT","LINKUSDT","AVAXUSDT","MATICUSDT"]);
+    // 1. Get default symbols
+    const defaultSymbols = ["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","ADAUSDT","DOTUSDT","XRPUSDT","LINKUSDT","AVAXUSDT","MATICUSDT"];
+    
+    // 2. Get active trade symbols from database
+    const activeTrades = await db.query("SELECT DISTINCT symbol FROM trades WHERE status = 'open'");
+    const activeSymbols = activeTrades.map(t => t.symbol.replace('/', ''));
+    
+    // 3. Merge and deduplicate
+    const allSymbols = Array.from(new Set([...defaultSymbols, ...activeSymbols]));
+    
+    // 4. Fetch from Binance
+    const symbolsParam = JSON.stringify(allSymbols);
     const resB = await axios.get(`https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(symbolsParam)}`);
     
-    const mapping = {
-      'BTCUSDT': 'BTC/USDT',
-      'ETHUSDT': 'ETH/USDT',
-      'SOLUSDT': 'SOL/USDT',
-      'BNBUSDT': 'BNB/USDT',
-      'ADAUSDT': 'ADA/USDT',
-      'DOTUSDT': 'DOT/USDT',
-      'XRPUSDT': 'XRP/USDT',
-      'LINKUSDT': 'LINK/USDT',
-      'AVAXUSDT': 'AVAX/USDT',
-      'MATICUSDT': 'MATIC/USDT'
-    };
-
-    const data = resB.data.map(item => ({
-      symbol: mapping[item.symbol],
-      price: parseFloat(item.lastPrice),
-      change24h: parseFloat(item.priceChangePercent).toFixed(2),
-      volume24h: (parseFloat(item.quoteVolume) / 1000000).toFixed(2)
-    }));
+    const data = resB.data.map(item => {
+      // Dynamic mapping back to symbol/USDT format
+      // Binance symbols like BTCUSDT -> BTC/USDT
+      let mappedSymbol = item.symbol;
+      if (item.symbol.endsWith('USDT')) {
+        mappedSymbol = item.symbol.replace('USDT', '/USDT');
+      }
+      
+      return {
+        symbol: mappedSymbol,
+        price: parseFloat(item.lastPrice),
+        change24h: parseFloat(item.priceChangePercent).toFixed(2),
+        volume24h: (parseFloat(item.quoteVolume) / 1000000).toFixed(2)
+      };
+    });
     res.json(data);
   } catch (e) {
+    console.error('[Market Summary Error]', e.message);
+    // Fallback logic
     const symbols = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'ADA/USDT', 'DOT/USDT', 'XRP/USDT', 'LINK/USDT', 'AVAX/USDT', 'MATIC/USDT'];
     const data = symbols.map(s => ({
         symbol: s,
