@@ -21,27 +21,7 @@ app.use((req, res, next) => {
 });
 
 app.use(cors({
-  origin: (origin, callback) => {
-    // In production, strictly check the allowed origins
-    const allowedPatterns = [
-      /https:\/\/.*\.netlify\.app/,
-      /https:\/\/.*\.pages\.dev/,
-      /https:\/\/trade\.mayfairmarketing\.online/,
-      /https:\/\/brittrade\.pages\.dev/
-    ];
-    
-    if (!origin || !process.env.NODE_ENV === 'production') {
-      return callback(null, true);
-    }
-    
-    const isAllowed = allowedPatterns.some(pattern => pattern.test(origin));
-    if (isAllowed) {
-      callback(null, true);
-    } else {
-      console.warn(`[CORS Blocked] Origin: ${origin}`);
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
+  origin: true, // Allow all origins for now to fix connection issues
   credentials: true
 }));
 
@@ -238,7 +218,16 @@ app.get('/strategies/:id/notes', authMiddleware, async (req, res, next) => {
 // --- Global Error Handler ---
 app.use((err, req, res, next) => {
   console.error('[Middleware Error]', err);
-  res.status(500).json({ error: err.message || 'Internal server error' });
+  
+  // CRITICAL: Ensure CORS headers are present on EVERY error
+  res.header('Access-Control-Allow-Origin', 'https://brittrade.pages.dev');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  const status = err.status || 500;
+  res.status(status).json({ 
+    error: err.message || 'Internal server error',
+    redirect: status === 401 ? '/auth/signup' : undefined
+  });
 });
 
 // --- Startup ---

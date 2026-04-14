@@ -14,7 +14,18 @@ const initDb = () => {
         password TEXT NOT NULL,
         telegramId TEXT,
         balance REAL DEFAULT 10000.0
-      )`, (err) => { if (err) return reject(err); });
+      )`, (err) => {
+        if (err) return reject(err);
+        
+        // Seed first user if empty
+        db.get("SELECT count(*) as count FROM users", (err, row) => {
+          if (!err && row && row.count === 0) {
+            console.log('Seeding initial user: mehedy303@gmail.com');
+            db.run("INSERT INTO users (email, password, balance) VALUES (?, ?, ?)", 
+              ['mehedy303@gmail.com', '$2b$10$R/mdOipHB1McLKD.FDwCr.BkVzcYpFeS7xOQScxOhRr9iLXhJnKrm', 10000.0]);
+          }
+        });
+      });
 
       // Strategies table
       db.run(`CREATE TABLE IF NOT EXISTS strategies (

@@ -1,13 +1,41 @@
 const jwt = require('jsonwebtoken');
+const db = require('../db');
 const SECRET = process.env.JWT_SECRET || 'your_super_secret_key';
 
-module.exports = (req, res, next) => {
-  const token = req.headers['authorization']?.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'No token provided' });
+module.exports = async (req, res, next) => {
+  // Explicitly set CORS headers for error responses
+  res.header('Access-Control-Allow-Origin', 'https://brittrade.pages.dev');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
 
-  jwt.verify(token, SECRET, (err, decoded) => {
-    if (err) return res.status(401).json({ error: 'Failed to authenticate token' });
-    req.userId = decoded.id;
-    next();
-  });
+  try {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    try {
+      const decoded = jwt.verify(token, SECRET);
+      const user = await db.get("SELECT id FROM users WHERE id = ?", [decoded.id]);
+      
+      if (!user) {
+        console.warn(`[Auth] Ghost user ${decoded.id} - DB reset?`);
+        return res.status(401).json({ 
+          error: 'Session invalid due to DB reset. Please sign up again.',
+          code: 'USER_NOT_FOUND',
+          redirect: '/auth/signup'
+        });
+      }
+      
+      req.userId = decoded.id;
+      next();
+    } catch (err) {
+      return res.status(401).json({ error: 'Invalid session. Please login.' });
+    }
+  } catch (e) {
+    res.status(500).json({ error: 'Auth failed' });
+  }
 };

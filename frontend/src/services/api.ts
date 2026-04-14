@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:7286';
+const API_URL = import.meta.env.VITE_API_URL || 'https://trade.mayfairmarketing.online';
 
 const api = axios.create({
   baseURL: API_URL,
@@ -16,5 +16,17 @@ api.interceptors.request.use((config: any) => {
   }
   return config;
 });
+
+// Intercept 401s to logout user
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token');
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
 
 export default api;

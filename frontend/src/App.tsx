@@ -6,6 +6,7 @@ import { Code, Clock, Activity, Shield, TrendingUp } from "lucide-react";
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import StrategyDetail from './pages/StrategyDetail';
+import api from './services/api';
 
 const timelineData = [
   {
@@ -134,11 +135,14 @@ function App() {
       try {
         const token = localStorage.getItem('token');
         if (token) {
-          // In a real app, verify token with /auth/me
-          setUser({ email: 'mehedy303@gmail.com' }); 
+          // ACTUALLY VERIFY TOKEN
+          const res = await api.get('/auth/me');
+          setUser(res.data); 
         }
       } catch (e) {
-        console.error('Auth check failed');
+        console.error('Auth verification failed, clearing session');
+        localStorage.removeItem('token');
+        setUser(null);
       } finally {
         setLoading(false);
       }
