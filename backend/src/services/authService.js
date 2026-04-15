@@ -9,10 +9,14 @@ class AuthService {
     if (!email || !email.trim()) throw new Error('Email is required');
     if (!password || password.length < 6) throw new Error('Password must be at least 6 characters');
 
+    const emailNormalized = email.trim().toLowerCase();
+    const existing = await db.get("SELECT id FROM users WHERE email = ?", [emailNormalized]);
+    if (existing) throw new Error('Account with this email already exists');
+
     const hashedPassword = await bcrypt.hash(password, 10);
     const result = await db.run(
       "INSERT INTO users (email, password) VALUES (?, ?)",
-      [email.trim().toLowerCase(), hashedPassword]
+      [emailNormalized, hashedPassword]
     );
     return { id: result.id, email };
   }
