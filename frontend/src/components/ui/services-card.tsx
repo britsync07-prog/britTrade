@@ -6,16 +6,13 @@ import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Shadcn UI Carousel Imports
-import useEmblaCarousel, {
-  type EmblaCarouselType,
-  type EmblaOptionsType,
-} from "embla-carousel-react";
+import useEmblaCarousel from "embla-carousel-react";
 import { Button } from "@/components/ui/button";
 
 // --- Carousel Context ---
-type CarouselApi = EmblaCarouselType | undefined;
+type CarouselApi = any;
 type UseCarouselParameters = Parameters<typeof useEmblaCarousel>;
-type CarouselOptions = UseCarouselParameters[0];
+type CarouselOptions = any;
 type CarouselPlugin = UseCarouselParameters[1];
 type CarouselProps = {
   opts?: CarouselOptions;
