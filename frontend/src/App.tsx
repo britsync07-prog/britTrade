@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { Hero } from './components/ui/animated-hero';
 import RadialOrbitalTimeline from './components/ui/radial-orbital-timeline';
 import { ServiceCarousel, type Service } from './components/ui/services-card';
-import { Code, Clock, Activity, Shield, TrendingUp, Coins, Rocket, Layers } from "lucide-react";
+import { Clock, Activity, Shield, TrendingUp, Coins, Rocket, Layers } from "lucide-react";
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import StrategyDetail from './pages/StrategyDetail';

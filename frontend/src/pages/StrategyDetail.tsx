@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ChevronLeft, TrendingUp, TrendingDown, Clock, Target, Activity, Zap } from 'lucide-react';
+import { ChevronLeft, TrendingUp, Target, Activity, Zap } from 'lucide-react';
 import api from '../services/api';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -11,15 +11,10 @@ export default function StrategyDetail() {
   const { id } = useParams();
   const [strategy, setStrategy] = useState<any>(null);
   const [subInfo, setSubInfo] = useState<any>(null);
-  const [trades, setTrades] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [marketPrices, setMarketPrices] = useState<Record<string, number>>({});
   const [showSubModal, setShowSubModal] = useState(false);
-  const [subType, setSubType] = useState<'signals' | 'both'>('both');
-  const [capital, setCapital] = useState('1000');
   const [submitting, setSubmitting] = useState(false);
-  const [signalsData, setSignalsData] = useState<any>({ signals: [] });
   const [signalsData, setSignalsData] = useState<any>({ signals: [] });
 
   useEffect(() => {
