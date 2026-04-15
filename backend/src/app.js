@@ -10,6 +10,7 @@ const strategyService = require('./services/strategyService');
 const paperService = require('./services/paperService');
 const telegramService = require('./services/telegramService');
 const authMiddleware = require('./routes/authMiddleware');
+const paymentRoutes = require('./routes/paymentRoutes');
 
 const PORT = process.env.PORT || 7286;
 const app = express();
@@ -24,6 +25,8 @@ app.use(cors({
   origin: true, // Allow all origins for now to fix connection issues
   credentials: true
 }));
+
+app.use('/payments', paymentRoutes);
 
 app.use(express.json());
 
@@ -57,6 +60,13 @@ app.post('/auth/balance', authMiddleware, async (req, res, next) => {
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
+app.post('/auth/purchase', authMiddleware, async (req, res, next) => {
+  try {
+    const result = await authService.purchasePlan(req.userId, req.body.planId);
+    res.json(result);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
 // --- Strategy Management ---
 app.get('/strategies', authMiddleware, async (req, res, next) => {
   try {
@@ -75,6 +85,25 @@ app.get('/strategies/subscribed', authMiddleware, async (req, res, next) => {
 app.post('/strategies/subscribe', authMiddleware, async (req, res, next) => {
   try {
     const { strategyId, useSignal = true, useVirtualBalance = true, allocatedBalance = 0 } = req.body;
+    
+    // Gate access by purchase
+    const user = await authService.me(req.userId);
+    const planToStrat = {
+      'low_risk': [1],
+      'medium_risk': [2],
+      'high_risk': [3],
+      'bundle': [1, 2, 3]
+    };
+    
+    const hasAccess = user.purchasedPlans.some(planId => {
+      const allowedStrats = planToStrat[planId] || [];
+      return allowedStrats.includes(Number(strategyId));
+    });
+
+    if (!hasAccess) {
+      return res.status(403).json({ error: 'Purchase required for this strategy' });
+    }
+
     await strategyService.subscribe(req.userId, strategyId, useSignal, useVirtualBalance, allocatedBalance);
     res.json({ status: 'Subscribed' });
   } catch (e) { next(e); }
@@ -91,7 +120,7 @@ app.post('/strategies/unsubscribe', authMiddleware, async (req, res, next) => {
 
 app.get('/strategies/:id/signals', authMiddleware, async (req, res, next) => {
   try {
-    const signals = await strategyService.getSignals(req.params.id);
+    const signals = await strategyService.getSignals(req.params.id, req.userId);
     res.json(signals);
   } catch (e) { next(e); }
 });

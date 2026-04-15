@@ -32,7 +32,36 @@ class AuthService {
 
   async me(userId) {
     const user = await db.get("SELECT id, email, telegramId, balance FROM users WHERE id = ?", [userId]);
+    if (!user) return null;
+    const purchases = await db.query("SELECT planId FROM purchases WHERE userId = ?", [userId]);
+    user.purchasedPlans = purchases.map(p => p.planId);
     return user;
+  }
+
+  async purchasePlan(userId, planId) {
+    if (!planId) throw new Error('Plan ID is required');
+    
+    // Check if already purchased
+    const existing = await db.get("SELECT id FROM purchases WHERE userId = ? AND planId = ?", [userId, planId]);
+    if (existing) return { status: 'Already purchased' };
+
+    await db.run("INSERT INTO purchases (userId, planId) VALUES (?, ?)", [userId, planId]);
+    
+    // Automatic subscription logic
+    const strategyService = require('./strategyService');
+    const planToStrat = {
+      'low_risk': [1],
+      'medium_risk': [2],
+      'high_risk': [3],
+      'bundle': [1, 2, 3]
+    };
+
+    const stratIds = planToStrat[planId] || [];
+    for (const sid of stratIds) {
+      await strategyService.subscribe(userId, sid, true, true, 1000); // Auto-subscribe with $1000 balance
+    }
+
+    return { status: 'Success', planId };
   }
 
   async updateBalance(userId, newBalance) {

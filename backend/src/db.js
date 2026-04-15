@@ -70,8 +70,25 @@ const initDb = () => {
         symbol TEXT,
         side TEXT,
         price REAL,
+        tp REAL,
+        sl REAL,
+        pnl REAL DEFAULT 0,
+        status TEXT DEFAULT 'active',
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-      )`, (err) => { if (err) return reject(err); });
+      )`, (err) => { 
+        if (err) return reject(err); 
+        // Migration: Ensure new columns exist
+        db.all("PRAGMA table_info(signals)", (err, rows) => {
+          if (err) return;
+          const hasTp = rows.some(r => r.name === 'tp');
+          if (!hasTp) {
+            db.run("ALTER TABLE signals ADD COLUMN tp REAL");
+            db.run("ALTER TABLE signals ADD COLUMN sl REAL");
+            db.run("ALTER TABLE signals ADD COLUMN pnl REAL DEFAULT 0");
+            db.run("ALTER TABLE signals ADD COLUMN status TEXT DEFAULT 'active'");
+          }
+        });
+      });
 
       // Paper Trades table
       db.run(`CREATE TABLE IF NOT EXISTS paper_trades (
@@ -110,6 +127,14 @@ const initDb = () => {
         amount REAL,
         status TEXT,
         pnl REAL,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+
+      // Purchases table
+      db.run(`CREATE TABLE IF NOT EXISTS purchases (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        userId INTEGER,
+        planId TEXT,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
 

@@ -53,6 +53,54 @@ class StrategyService {
     this.runningProcesses = new Map();
     this.lastSignals = {}; 
     this.configs = this.loadConfigs();
+    this.startSignalTracker();
+  }
+
+  startSignalTracker() {
+    setInterval(async () => {
+      try {
+        const activeSignals = await db.query("SELECT * FROM signals WHERE status = 'active'");
+        if (activeSignals.length === 0) return;
+
+        // Group by symbol to minimize price fetches
+        const symbols = [...new Set(activeSignals.map(s => s.symbol))];
+        const prices = {};
+        for (const s of symbols) {
+          try {
+            const data = await this.fetchOHLC(s, '1m');
+            prices[s] = data.price;
+          } catch (pe) {}
+        }
+
+        for (const sig of activeSignals) {
+          const currentPrice = prices[sig.symbol];
+          if (!currentPrice) continue;
+
+          let status = 'active';
+          let pnl = 0;
+
+          if (sig.side === 'buy' || sig.side === 'long') {
+            if (currentPrice >= sig.tp) status = 'tp_hit';
+            else if (currentPrice <= sig.sl) status = 'sl_hit';
+            pnl = ((currentPrice - sig.price) / sig.price) * 100;
+          } else {
+            if (currentPrice <= sig.tp) status = 'tp_hit';
+            else if (currentPrice >= sig.sl) status = 'sl_hit';
+            pnl = ((sig.price - currentPrice) / sig.price) * 100;
+          }
+
+          if (status !== 'active') {
+            await db.run(
+              "UPDATE signals SET status = ?, pnl = ? WHERE id = ?",
+              [status, pnl, sig.id]
+            );
+            console.log(`[Signal Tracker] Signal ${sig.id} (${sig.symbol}) closed: ${status} (PnL: ${pnl.toFixed(2)}%)`);
+          }
+        }
+      } catch (e) {
+        console.error('[Signal Tracker Error]', e.message);
+      }
+    }, 30000); // Check every 30 seconds
   }
 
   loadConfigs() {
@@ -143,7 +191,7 @@ class StrategyService {
       volumes.push(parseFloat(k[5]));
     });
 
-    return { highs, lows, closes, volumes, price: closes[closes.length - 1] };
+    return { highs, lows, closes, volumes, price: closes[closes.length - 1], atr: ATR.calculate({ high: highs, low: lows, close: closes, period: 14 }).pop() };
   }
 
   async runStrategy(strategyId) {
@@ -234,19 +282,33 @@ class StrategyService {
             if (this.lastSignals[signalKey] !== signalSide) {
                this.lastSignals[signalKey] = signalSide;
 
+               const atr = data.atr || (currentPrice * 0.02); // Fallback to 2% if ATR fails
+               let tp = 0;
+               let sl = 0;
+
+               if (signalSide === 'buy' || signalSide === 'long') {
+                 tp = currentPrice + (atr * 3); // 3:1 Reward/Risk approx
+                 sl = currentPrice - (atr * 1.5);
+               } else if (signalSide === 'sell' || signalSide === 'short') {
+                 tp = currentPrice - (atr * 3);
+                 sl = currentPrice + (atr * 1.5);
+               }
+
                const signal = {
                  strategyId: id,
                  strategyName: strategy.name,
                  symbol: symbol,
                  side: signalSide,
                  price: currentPrice,
+                 tp: tp,
+                 sl: sl,
                  stakeAmount: config.stakeAmount,
                  timestamp: new Date().toISOString()
                };
 
                await db.run(
-                 "INSERT INTO signals (strategyId, symbol, side, price) VALUES (?, ?, ?, ?)",
-                 [signal.strategyId, signal.symbol, signal.side, signal.price]
+                 "INSERT INTO signals (strategyId, symbol, side, price, tp, sl, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                 [signal.strategyId, signal.symbol, signal.side, signal.price, signal.tp, signal.sl, 'active']
                );
 
                // Only broadcast Entry signals to Telegram from here. 
@@ -283,7 +345,22 @@ class StrategyService {
     return { status: 'Not running' };
   }
 
-  async getSignals(strategyId) {
+  async getSignals(strategyId, userId = null) {
+    if (userId) {
+       // Check if user has purchased the plan for this strategy
+       const planToStrat = { 1: 'low_risk', 2: 'medium_risk', 3: 'high_risk' };
+       const targetPlan = planToStrat[strategyId];
+       
+       if (targetPlan) {
+         const hasPurchase = await db.get(
+           "SELECT id FROM purchases WHERE userId = ? AND (planId = ? OR planId = 'bundle')",
+           [userId, targetPlan]
+         );
+         if (!hasPurchase) {
+           return { locked: true, message: 'Subscribe to view detailed signals' };
+         }
+       }
+    }
     return await db.query("SELECT * FROM signals WHERE strategyId = ? ORDER BY timestamp DESC LIMIT 50", [strategyId]);
   }
 
