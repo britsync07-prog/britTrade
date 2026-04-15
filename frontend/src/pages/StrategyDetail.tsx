@@ -286,82 +286,75 @@ export default function StrategyDetail() {
                 ) : (
                   <div className="space-y-6">
                      {/* Performance Stats */}
-                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-2">
-                        <div className="p-4 bg-white/[0.03] border border-white/5 rounded-2xl">
-                          <div className="text-[9px] text-slate-500 uppercase font-black tracking-widest mb-1">Signal Win Rate</div>
-                          <div className="text-xl font-bold text-emerald-400">
-                            {closedSigs.length > 0 ? `${((winSigs.length / closedSigs.length) * 100).toFixed(0)}%` : '0%'}
+                     <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-6">
+                        <div className="p-3 bg-white/[0.03] border border-white/5 rounded-xl">
+                          <div className="text-[8px] text-slate-500 uppercase font-black tracking-widest mb-1">Signal Win Rate</div>
+                          <div className="text-lg font-bold text-emerald-400">
+                            {closedSigs.length > 0 ? `${((winSigs.length / closedSigs.length) * 100).toFixed(1)}%` : '0.0%'}
                           </div>
                         </div>
-                        <div className="p-4 bg-white/[0.03] border border-white/5 rounded-2xl">
-                          <div className="text-[9px] text-slate-500 uppercase font-black tracking-widest mb-1">Total Signals</div>
-                          <div className="text-xl font-bold text-white">{sigs.length}</div>
+                        <div className="p-3 bg-white/[0.03] border border-white/5 rounded-xl">
+                          <div className="text-[8px] text-slate-500 uppercase font-black tracking-widest mb-1">Total Signals</div>
+                          <div className="text-lg font-bold text-white">{sigs.length}</div>
                         </div>
-                        <div className="p-4 bg-white/[0.03] border border-white/5 rounded-2xl">
-                          <div className="text-[9px] text-slate-500 uppercase font-black tracking-widest mb-1">Avg Signal PnL</div>
-                          <div className="text-xl font-bold text-purple-400">
+                        <div className="p-3 bg-white/[0.03] border border-white/5 rounded-xl">
+                          <div className="text-[8px] text-slate-500 uppercase font-black tracking-widest mb-1">Avg Signal PnL</div>
+                          <div className="text-lg font-bold text-purple-400">
                             {(() => {
-                              const avg = closedSigs.length > 0 ? closedSigs.reduce((acc:number, s:any) => acc + s.pnl, 0) / closedSigs.length : 0;
-                              return `+${avg.toFixed(2)}%`;
+                              const avg = closedSigs.length > 0 ? closedSigs.reduce((acc:number, s:any) => acc + (s.pnl || 0), 0) / closedSigs.length : 0;
+                              return `${avg >= 0 ? '+' : ''}${avg.toFixed(2)}%`;
                             })()}
                           </div>
                         </div>
-                        <div className="p-4 bg-white/[0.03] border border-white/5 rounded-2xl">
-                          <div className="text-[9px] text-slate-500 uppercase font-black tracking-widest mb-1">Active Signals</div>
-                          <div className="text-xl font-bold text-cyan-400">{sigs.filter((s:any) => s.status === 'active').length}</div>
+                        <div className="p-3 bg-white/[0.03] border border-white/5 rounded-xl">
+                          <div className="text-[8px] text-slate-500 uppercase font-black tracking-widest mb-1">Active Signals</div>
+                          <div className="text-lg font-bold text-cyan-400">{sigs.filter((s:any) => s.status === 'active').length}</div>
+                        </div>
+                        <div className="p-3 bg-white/[0.03] border border-white/5 rounded-xl border-emerald-500/10">
+                          <div className="text-[8px] text-emerald-500/70 uppercase font-black tracking-widest mb-1">TP Hits</div>
+                          <div className="text-lg font-bold text-emerald-500">{winSigs.length}</div>
+                        </div>
+                        <div className="p-3 bg-white/[0.03] border border-white/5 rounded-xl border-rose-500/10">
+                          <div className="text-[8px] text-rose-500/70 uppercase font-black tracking-widest mb-1">SL Hits</div>
+                          <div className="text-lg font-bold text-rose-500">{lossSigs.length}</div>
                         </div>
                      </div>
 
-                     {/* Signal List */}
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {sigs.map((s: any) => (
-                          <div key={s.id} className={`p-5 rounded-2xl border transition-all ${s.status === 'active' ? 'bg-white/[0.03] border-white/10 hover:border-purple-500/50' : 'bg-black/20 border-white/5 opacity-80'}`}>
-                             <div className="flex justify-between items-start mb-4">
-                                <div>
-                                   <div className="text-xs font-mono text-slate-500 mb-1">{new Date(s.timestamp).toLocaleString()}</div>
-                                   <div className="flex items-center gap-2">
-                                      <span className="text-lg font-black text-white">{s.symbol}</span>
-                                      <Badge className={`text-[9px] ${s.side === 'buy' || s.side === 'long' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
-                                        {s.side.toUpperCase()}
-                                      </Badge>
-                                   </div>
-                                </div>
-                                <div className="text-right">
-                                   <div className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${s.status === 'tp_hit' ? 'text-emerald-400' : s.status === 'sl_hit' ? 'text-rose-400' : 'text-cyan-400 animate-pulse'}`}>
-                                      {s.status.replace('_', ' ')}
-                                   </div>
-                                   <div className="text-xs font-mono font-bold text-white">${s.price.toFixed(4)}</div>
-                                </div>
-                             </div>
+                     {/* Signal List Split View */}
+                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        {/* Active Trades Column */}
+                        <div>
+                           <div className="flex items-center gap-2 mb-4">
+                              <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                              <h3 className="text-sm font-black text-white uppercase tracking-wider">Active Signals</h3>
+                              <Badge className="bg-white/5 text-slate-400 border-none ml-auto">{sigs.filter((s:any) => s.status === 'active').length}</Badge>
+                           </div>
+                           <div className="space-y-4">
+                              {sigs.filter((s: any) => s.status === 'active').map((s: any) => (
+                                <SignalCard key={s.id} signal={s} />
+                              ))}
+                              {sigs.filter((s: any) => s.status === 'active').length === 0 && (
+                                <div className="py-8 bg-white/[0.01] border border-dashed border-white/5 rounded-2xl text-center text-slate-600 text-[10px] uppercase font-bold tracking-widest">No active signals found</div>
+                              )}
+                           </div>
+                        </div>
 
-                             <div className="grid grid-cols-3 gap-2 py-3 border-y border-white/5 mb-3 bg-white/[0.01]">
-                                <div className="text-center">
-                                   <div className="text-[8px] text-slate-500 uppercase font-bold mb-1">Target TP</div>
-                                   <div className="text-xs font-mono text-emerald-400 font-bold">${s.tp?.toFixed(4) || '---'}</div>
-                                </div>
-                                <div className="text-center border-x border-white/5">
-                                   <div className="text-[8px] text-slate-500 uppercase font-bold mb-1">Stop Loss</div>
-                                   <div className="text-xs font-mono text-rose-400 font-bold">${s.sl?.toFixed(4) || '---'}</div>
-                                </div>
-                                <div className="text-center">
-                                   <div className="text-[8px] text-slate-500 uppercase font-bold mb-1">Signal PnL</div>
-                                   <div className={`text-xs font-mono font-bold ${s.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                      {s.pnl >= 0 ? '+' : ''}{s.pnl.toFixed(2)}%
-                                   </div>
-                                </div>
-                             </div>
-                             
-                             <div className="flex items-center justify-between gap-2">
-                                <div className="text-[10px] text-slate-500 italic">Recommended Stake: ${s.stakeAmount || 100}</div>
-                                {s.status === 'active' && (
-                                  <Badge className="bg-purple-500/20 text-purple-400 border-none px-2 py-0.5 text-[9px]">ACTIONABLE NOW</Badge>
-                                )}
-                             </div>
-                          </div>
-                        ))}
-                        {sigs.length === 0 && (
-                          <div className="col-span-2 py-12 text-center text-slate-500 text-sm italic">Scanning markets for high-probability signals...</div>
-                        )}
+                        {/* Closed Trades Column */}
+                        <div>
+                           <div className="flex items-center gap-2 mb-4">
+                              <div className="w-2 h-2 rounded-full bg-slate-700" />
+                              <h3 className="text-sm font-black text-white uppercase tracking-wider">Closed Signals</h3>
+                              <Badge className="bg-white/5 text-slate-400 border-none ml-auto">{closedSigs.length}</Badge>
+                           </div>
+                           <div className="space-y-4">
+                              {closedSigs.map((s: any) => (
+                                <SignalCard key={s.id} signal={s} />
+                              ))}
+                              {closedSigs.length === 0 && (
+                                <div className="py-8 bg-white/[0.01] border border-dashed border-white/5 rounded-2xl text-center text-slate-600 text-[10px] uppercase font-bold tracking-widest">No closed signals yet</div>
+                              )}
+                           </div>
+                        </div>
                      </div>
                   </div>
                 )}
@@ -370,6 +363,54 @@ export default function StrategyDetail() {
           </motion.div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function SignalCard({ signal: s }: { signal: any }) {
+  return (
+    <div className={`p-4 rounded-xl border transition-all ${s.status === 'active' ? 'bg-white/[0.04] border-white/10 hover:border-purple-500/50' : 'bg-black/20 border-white/5 opacity-80'}`}>
+       <div className="flex justify-between items-start mb-3">
+          <div>
+             <div className="text-[8px] font-mono text-slate-500 mb-0.5">{new Date(s.timestamp).toLocaleString()}</div>
+             <div className="flex items-center gap-2">
+                <span className="text-sm font-black text-white">{s.symbol}</span>
+                <Badge className={`text-[8px] px-1 py-0 h-4 leading-none ${s.side === 'buy' || s.side === 'long' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                  {s.side.toUpperCase()}
+                </Badge>
+             </div>
+          </div>
+          <div className="text-right">
+             <div className={`text-[8px] font-black uppercase tracking-widest mb-0.5 ${s.status === 'tp_hit' ? 'text-emerald-400' : s.status === 'sl_hit' ? 'text-rose-400' : 'text-cyan-400 animate-pulse'}`}>
+                {s.status.replace('_', ' ')}
+             </div>
+             <div className="text-[10px] font-mono font-bold text-white">${s.price.toFixed(4)}</div>
+          </div>
+       </div>
+
+       <div className="grid grid-cols-3 gap-1.5 py-2.5 border-y border-white/5 mb-2.5 bg-white/[0.01]">
+          <div className="text-center">
+             <div className="text-[7px] text-slate-500 uppercase font-black mb-0.5">Target TP</div>
+             <div className="text-[9px] font-mono text-emerald-400 font-bold">${s.tp?.toFixed(4) || '---'}</div>
+          </div>
+          <div className="text-center border-x border-white/5">
+             <div className="text-[7px] text-slate-500 uppercase font-black mb-0.5">Stop Loss</div>
+             <div className="text-[9px] font-mono text-rose-400 font-bold">${s.sl?.toFixed(4) || '---'}</div>
+          </div>
+          <div className="text-center">
+             <div className="text-[7px] text-slate-500 uppercase font-black mb-0.5">Signal PnL</div>
+             <div className={`text-[9px] font-mono font-bold ${s.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {s.pnl >= 0 ? '+' : ''}{s.pnl.toFixed(2)}%
+             </div>
+          </div>
+       </div>
+       
+       <div className="flex items-center justify-between">
+          <div className="text-[8px] text-slate-600 font-bold uppercase tracking-tight">STAKE: ${s.stakeAmount || 100}</div>
+          {s.status === 'active' && (
+            <Badge className="bg-purple-500/20 text-purple-400 border-none px-1.5 py-0 h-4 text-[7px] font-black tracking-widest">LIVE</Badge>
+          )}
+       </div>
     </div>
   );
 }
