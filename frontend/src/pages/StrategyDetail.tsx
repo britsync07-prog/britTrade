@@ -362,24 +362,43 @@ export default function StrategyDetail() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/5">
-                        {liveTrades.length === 0 ? (
-                          <tr><td colSpan={5} className="px-6 py-16 text-center text-slate-500 text-sm italic">No active positions. Scanning markets...</td></tr>
+                        {trades.length === 0 ? (
+                          <tr><td colSpan={5} className="px-6 py-16 text-center text-slate-500 text-sm italic">No operation history. Scanning markets...</td></tr>
                         ) : (
-                          liveTrades.map(t => (
+                          trades.slice().reverse().map(t => (
                             <tr key={t.id} className="hover:bg-white/[0.03] transition-colors group">
-                              <td className="px-6 py-5 font-bold text-white group-hover:text-cyan-400 transition-colors uppercase tracking-tight">{t.symbol}</td>
+                              <td className="px-6 py-5 font-bold text-white group-hover:text-cyan-400 transition-colors uppercase tracking-tight">
+                                {t.symbol}
+                                {t.status === 'closed' && <span className="ml-2 text-[8px] opacity-40 uppercase font-black tracking-tighter">History</span>}
+                              </td>
                               <td className="px-6 py-5">
-                                <Badge variant="outline" className={`text-[10px] border-none ${t.side === 'buy' || t.side === 'long' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
-                                  {t.side.toUpperCase()}
-                                </Badge>
+                                <div className="flex flex-col gap-1">
+                                  <Badge variant="outline" className={`text-[10px] w-fit border-none ${t.side === 'buy' || t.side === 'long' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                                    {t.side.toUpperCase()}
+                                  </Badge>
+                                  <Badge variant="outline" className={`text-[8px] w-fit border-none ${t.status === 'open' ? 'bg-cyan-500/10 text-cyan-400' : 'bg-slate-500/10 text-slate-400'}`}>
+                                    {t.status.toUpperCase()}
+                                  </Badge>
+                                </div>
                               </td>
                               <td className="px-6 py-5 text-center">
                                 <div className="font-mono text-xs text-slate-300">{t.price.toFixed(4)}</div>
-                                <div className="font-mono text-[10px] text-cyan-400/60 mt-0.5">${marketPrices[t.symbol]?.toFixed(4) || '---'}</div>
+                                {t.status === 'open' && (
+                                  <div className="font-mono text-[10px] text-cyan-400/60 mt-0.5">${marketPrices[t.symbol]?.toFixed(4) || '---'}</div>
+                                )}
                               </td>
                               <td className="px-6 py-5 text-center font-mono text-xs text-slate-300">{t.amount.toFixed(4)}</td>
                               <td className="px-6 py-5 text-right">
                                 {(() => {
+                                  if (t.status === 'closed') {
+                                    return (
+                                      <div className={`font-bold ${t.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                        <div className="text-sm font-mono">{t.pnl >= 0 ? '+' : ''}${t.pnl.toFixed(4)}</div>
+                                        <div className="text-[10px] opacity-70 font-mono">Realized</div>
+                                      </div>
+                                    );
+                                  }
+                                  
                                   const currentPrice = marketPrices[t.symbol] || t.price;
                                   const isLong = t.side === 'buy' || t.side === 'long';
                                   const pnlVal = isLong ? (currentPrice - t.price) * t.amount : (t.price - currentPrice) * t.amount;
