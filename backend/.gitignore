@@ -1,8 +1,0 @@
-.env
-node_modules/
-platform.db
-backend.log
-dist/
-.DS_Store
-*.pyc
-__pycache__/
