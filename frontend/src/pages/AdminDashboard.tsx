@@ -19,7 +19,6 @@ import { cn } from '@/lib/utils';
 interface User {
   id: number;
   email: string;
-  balance: number;
   role: string;
   status: string;
   planCount: number;
@@ -127,15 +126,6 @@ export default function AdminDashboard() {
     }
   };
 
-  const updateBalance = async (user: User, amount: number) => {
-    try {
-      await api.put(`/admin/users/${user.id}`, { ...user, balance: amount });
-      fetchData();
-    } catch (e) {
-      alert('Failed to update balance');
-    }
-  };
-
   if (loading && !users.length) {
     return (
       <div className="min-h-screen bg-[#020617] flex items-center justify-center">
@@ -232,7 +222,6 @@ export default function AdminDashboard() {
                   <th className="px-8 py-4">User</th>
                   <th className="px-8 py-4">Status</th>
                   <th className="px-8 py-4">Role</th>
-                  <th className="px-8 py-4 text-right">Balance</th>
                   <th className="px-8 py-4 text-center">Purchases</th>
                   <th className="px-8 py-4 text-right">Actions</th>
                 </tr>
@@ -259,9 +248,6 @@ export default function AdminDashboard() {
                       )}>
                         {user.role}
                       </span>
-                    </td>
-                    <td className="px-8 py-6 text-right font-mono text-sm">
-                      ${user.balance.toFixed(2)}
                     </td>
                     <td className="px-8 py-6 text-center">
                       <div className="flex items-center justify-center gap-1.5">
@@ -327,27 +313,6 @@ export default function AdminDashboard() {
             </div>
             
             <div className="p-8 max-h-[70vh] overflow-y-auto space-y-8 custom-scrollbar">
-              {/* Balance Section */}
-              <section>
-                <div className="flex items-center gap-2 mb-4">
-                  <CreditCard className="w-4 h-4 text-cyan-400" />
-                  <h4 className="text-xs font-bold text-slate-300 uppercase tracking-widest">Financial Overrides</h4>
-                </div>
-                <div className="bg-slate-950/50 border border-white/5 rounded-2xl p-6">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 block">Available Balance</label>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-cyan-500 font-mono font-bold">$</span>
-                    <input 
-                      type="number" 
-                      defaultValue={editingUser.balance}
-                      step="0.01"
-                      onBlur={(e) => updateBalance(editingUser, parseFloat(e.target.value))}
-                      className="w-full bg-slate-900 border border-white/10 rounded-xl py-3 pl-8 pr-4 text-lg font-mono focus:outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all"
-                    />
-                  </div>
-                </div>
-              </section>
-
               {/* Plans Section */}
               <section>
                 <div className="flex items-center justify-between mb-4">

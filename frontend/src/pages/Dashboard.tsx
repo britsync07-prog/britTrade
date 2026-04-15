@@ -78,7 +78,7 @@ export default function Dashboard() {
               <div className="text-left pr-4">
                 <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Bot Alerts</div>
                 <div className="text-2xl font-bold text-white leading-tight">Telegram</div>
-                <div className="text-[10px] text-slate-400 mt-1 leading-tight max-w-[150px]">Get real-time signals and check your account logs on the go.</div>
+                <div className="text-[10px] text-slate-400 mt-1 leading-tight max-w-[150px]">Get real-time signals and check your performance metrics on the go.</div>
               </div>
             </CardContent>
           </Card>

@@ -67,12 +67,12 @@ const timelineData = [
   },
   {
     id: 2,
-    title: "Live Market",
-    date: "Real-time",
-    content: "Direct WebSocket feeds from Binance and OKX for zero-latency trading.",
-    category: "Data",
+    title: "Signal Mining",
+    date: "Ready",
+    content: "Direct access to real-time premium signals with entry and exit targets.",
+    category: "Connectivity",
     icon: Activity,
-    relatedIds: [1, 3],
+    relatedIds: [2],
     status: "completed" as const,
     energy: 95,
   },
@@ -80,7 +80,7 @@ const timelineData = [
     id: 3,
     title: "AI Analysis",
     date: "Running",
-    content: "Advanced machine learning models scanning 200+ pairs simultaneously.",
+    content: "Advanced machine learning models scanning 200+ pairs for high-probability setups.",
     category: "AI",
     icon: TrendingUp,
     relatedIds: [2, 4],
@@ -89,14 +89,14 @@ const timelineData = [
   },
   {
     id: 4,
-    title: "Auto Execution",
-    date: "Ready",
-    content: "Precision trade execution with adaptive slippage protection.",
-    category: "Execution",
-    icon: Code,
+    title: "Risk Calibration",
+    date: "Active",
+    content: "Dynamic take-profit and stop-loss calculations based on market volatility.",
+    category: "Risk",
+    icon: Shield,
     relatedIds: [3, 5],
-    status: "in-progress" as const,
-    energy: 70,
+    status: "completed" as const,
+    energy: 90,
   },
   {
     id: 5,
@@ -176,8 +176,8 @@ function LandingPage() {
               <div className="grid md:grid-cols-3 gap-12">
                 <div className="p-8 rounded-3xl bg-slate-900/50 border border-white/5">
                   <Activity className="w-12 h-12 text-cyan-400 mb-6 mx-auto" />
-                  <h3 className="text-xl font-bold mb-4">24/7 Autonomy</h3>
-                  <p className="text-slate-400">The engine never sleeps. It scans markets and executes trades while you enjoy your life.</p>
+                  <h3 className="text-xl font-bold mb-4">24/7 Signals</h3>
+                  <p className="text-slate-400">The engine never sleeps. It scans markets and identifies premium signals while you enjoy your life.</p>
                 </div>
                 <div className="p-8 rounded-3xl bg-slate-900/50 border border-white/5">
                   <Shield className="w-12 h-12 text-purple-400 mb-6 mx-auto" />
