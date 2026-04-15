@@ -8,7 +8,7 @@ import { Link } from "react-router-dom";
 function Hero() {
   const [titleNumber, setTitleNumber] = useState(0);
   const titles = useMemo(
-    () => ["amazing", "new", "wonderful", "beautiful", "smart"],
+    () => ["profitable", "automated", "precise", "reliable", "efficient"],
     []
   );
 
@@ -29,7 +29,7 @@ function Hero() {
         <div className="flex gap-8 py-20 lg:py-40 items-center justify-center flex-col">
           <div className="flex gap-4 flex-col">
             <h1 className="text-5xl md:text-7xl max-w-2xl tracking-tighter text-center font-regular">
-              <span className="text-cyan-400">This is something</span>
+              <span className="text-cyan-400">Trading crypto is now</span>
               <span className="relative flex w-full justify-center overflow-hidden text-center md:pb-4 md:pt-1">
                 &nbsp;
                 {titles.map((title, index) => (
@@ -57,10 +57,10 @@ function Hero() {
             </h1>
 
             <p className="text-lg md:text-xl leading-relaxed tracking-tight text-white/60 max-w-2xl text-center mt-8">
-              Managing a small business today is already tough. Avoid further
-              complications by ditching outdated, tedious trade methods. Our
-              goal is to streamline SMB trade, making it easier and faster than
-              ever.
+              Navigating the volatile crypto market is a challenge. Avoid costly
+              mistakes by ditching manual monitoring and guesswork. Our goal is
+              to deliver real-time, high-accuracy crypto signals, making your
+              trading journey more profitable and efficient than ever.
             </p>
           </div>
           <div className="flex flex-row gap-3">

@@ -10,16 +10,18 @@ import { motion } from 'framer-motion';
 export default function Dashboard() {
   const [strategies, setStrategies] = useState<any[]>([]);
   const [subscribed, setSubscribed] = useState<any[]>([]);
+  const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        console.log('[Dashboard] Fetching strategies...');
-        const [stratsRes, subRes] = await Promise.all([
+        console.log('[Dashboard] Fetching stats...');
+        const [stratsRes, subRes, userRes] = await Promise.all([
           api.get('/strategies').catch(err => { console.error('Strats fetch failed', err); throw err; }),
-          api.get('/strategies/subscribed').catch(err => { console.error('Subscribed fetch failed', err); throw err; })
+          api.get('/strategies/subscribed').catch(err => { console.error('Subscribed fetch failed', err); throw err; }),
+          api.get('/auth/me').catch(err => { console.error('User fetch failed', err); throw err; })
         ]);
         
         console.log('[Dashboard] Strats:', stratsRes.data);
@@ -27,6 +29,7 @@ export default function Dashboard() {
         
         setStrategies(Array.isArray(stratsRes.data) ? stratsRes.data : []);
         setSubscribed(Array.isArray(subRes.data) ? subRes.data : []);
+        setUser(userRes.data);
       } catch (e: any) {
         console.error('Error fetching dashboard data:', e);
         setError(e.message || 'Failed to connect to server');
@@ -152,14 +155,37 @@ export default function Dashboard() {
                     </div>
                     </div>
 
-                    <Link to={`/strategy/${strat.id}`} className="block">
-                      <Button 
-                        className={`w-full h-12 rounded-2xl group/btn ${isSubscribed ? 'bg-white text-black hover:bg-white/90' : 'bg-slate-800 text-white hover:bg-slate-700'}`}
-                      >
-                        <span className="font-bold">{isSubscribed ? 'Open Terminal' : 'View Details'}</span>
-                        <ArrowRight className="ml-2 w-4 h-4 group-hover/btn:translate-x-1 transition-transform" />
-                      </Button>
-                    </Link>
+                    {(() => {
+                      const planToStrat: Record<string, number[]> = {
+                        'low_risk': [1],
+                        'medium_risk': [2],
+                        'high_risk': [3],
+                        'bundle': [1, 2, 3]
+                      };
+                      const hasAccess = user?.purchasedPlans?.some((p: string) => planToStrat[p]?.includes(strat.id));
+                      
+                      if (hasAccess) {
+                        return (
+                          <Link to={`/strategy/${strat.id}`} className="block">
+                            <Button 
+                              className={`w-full h-12 rounded-2xl group/btn ${isSubscribed ? 'bg-white text-black hover:bg-white/90' : 'bg-slate-800 text-white hover:bg-slate-700'}`}
+                            >
+                              <span className="font-bold">{isSubscribed ? 'Open Terminal' : 'View Details'}</span>
+                              <ArrowRight className="ml-2 w-4 h-4 group-hover/btn:translate-x-1 transition-transform" />
+                            </Button>
+                          </Link>
+                        );
+                      } else {
+                        return (
+                          <Link to="/" className="block">
+                            <Button className="w-full h-12 rounded-2xl bg-cyan-500 text-white hover:bg-cyan-600">
+                              <span className="font-bold">Purchase Plan</span>
+                              <Zap className="ml-2 w-4 h-4" />
+                            </Button>
+                          </Link>
+                        );
+                      }
+                    })()}
                   </CardContent>
                 </Card>
               </motion.div>

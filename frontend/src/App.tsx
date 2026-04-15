@@ -2,11 +2,55 @@ import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Hero } from './components/ui/animated-hero';
 import RadialOrbitalTimeline from './components/ui/radial-orbital-timeline';
-import { Code, Clock, Activity, Shield, TrendingUp } from "lucide-react";
+import { ServiceCarousel, type Service } from './components/ui/services-card';
+import { Code, Clock, Activity, Shield, TrendingUp, Zap, Coins, Rocket, Layers } from "lucide-react";
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import StrategyDetail from './pages/StrategyDetail';
 import api from './services/api';
+
+const services: Service[] = [
+  {
+    number: "001",
+    title: "Low Risk Strategy",
+    description:
+      "Conservative spot trading focusing on BTC and ETH. Minimal drawdown with consistent long-term growth.",
+    icon: Shield,
+    gradient: "from-emerald-500/50 to-emerald-800/50",
+    price: "$25",
+    planId: "low_risk"
+  },
+  {
+    number: "002",
+    title: "Medium Risk Strategy",
+    description:
+      "Dynamic altcoin rotation and mid-cap gems. Balanced approach for higher returns with managed volatility.",
+    icon: Coins,
+    gradient: "from-blue-500/50 to-blue-800/50",
+    price: "$20",
+    planId: "medium_risk"
+  },
+  {
+    number: "003",
+    title: "High Risk Strategy",
+    description:
+      "Leveraged futures scalping and momentum trading. Engineered for aggressive growth in volatile markets.",
+    icon: Rocket,
+    gradient: "from-purple-500/50 to-purple-800/50",
+    price: "$15",
+    planId: "high_risk"
+  },
+  {
+    number: "004",
+    title: "All Strategies Bundle",
+    description:
+      "Complete access to all strategies, custom alerts, and priority AI signals. The ultimate trading toolkit.",
+    icon: Layers,
+    gradient: "from-cyan-500/50 to-cyan-800/50",
+    price: "$50",
+    planId: "bundle"
+  },
+];
 
 const timelineData = [
   {
@@ -67,6 +111,26 @@ const timelineData = [
 ];
 
 function LandingPage() {
+  const handlePurchase = async (planId: string) => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      window.location.href = `/login?redirect=purchase&planId=${planId}`;
+      return;
+    }
+
+    try {
+      const { data } = await api.post('/payments/create-session', { planId });
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error('No checkout URL received');
+      }
+    } catch (e: any) {
+      console.error('Purchase failed', e);
+      alert(e.response?.data?.error || 'Purchase failed');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#020617] selection:bg-cyan-500/30">
       <nav className="fixed top-0 w-full z-50 border-b border-white/5 bg-slate-950/50 backdrop-blur-md">
@@ -84,6 +148,18 @@ function LandingPage() {
 
       <main className="pt-20">
         <Hero />
+
+        <section className="py-24 bg-slate-950/20">
+          <div className="container mx-auto px-6 text-center mb-16">
+            <h2 className="text-4xl md:text-5xl font-bold mb-4 tracking-tighter">
+              Choose Your <span className="text-cyan-400">Strategy</span>
+            </h2>
+            <p className="text-slate-400 max-w-2xl mx-auto">
+              Select a signal package tailored to your risk tolerance and trading goals.
+            </p>
+          </div>
+          <ServiceCarousel services={services} onPurchase={handlePurchase} />
+        </section>
         
         <section className="py-24 relative">
           <div className="container mx-auto px-6 text-center mb-16">
@@ -135,7 +211,6 @@ function App() {
       try {
         const token = localStorage.getItem('token');
         if (token) {
-          // ACTUALLY VERIFY TOKEN
           const res = await api.get('/auth/me');
           setUser(res.data); 
         }

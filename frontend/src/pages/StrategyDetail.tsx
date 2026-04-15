@@ -19,14 +19,18 @@ export default function StrategyDetail() {
   const [subType, setSubType] = useState<'signals' | 'both'>('both');
   const [capital, setCapital] = useState('1000');
   const [submitting, setSubmitting] = useState(false);
+  const [signalsData, setSignalsData] = useState<any>({ signals: [] });
+  const [activeTab, setActiveTab] = useState<'trades' | 'signals'>('trades');
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [stratRes, subRes, tradesRes] = await Promise.all([
+        const [stratRes, subRes, tradesRes, userRes, signalsRes] = await Promise.all([
           api.get(`/strategies`),
           api.get('/strategies/subscribed'),
-          api.get('/portfolio/history')
+          api.get('/portfolio/history'),
+          api.get('/auth/me'),
+          api.get(`/strategies/${id}/signals`)
         ]);
         
         const s = stratRes.data.find((x: any) => x.id === Number(id));
@@ -36,6 +40,21 @@ export default function StrategyDetail() {
         setStrategy(s);
         setSubInfo(sub);
         setTrades(t);
+        setSignalsData(signalsRes.data);
+
+        // Security Check: Verify purchase
+        const planToStrat: Record<string, number[]> = {
+          'low_risk': [1],
+          'medium_risk': [2],
+          'high_risk': [3],
+          'bundle': [1, 2, 3]
+        };
+        const hasAccess = userRes.data?.purchasedPlans?.some((p: string) => planToStrat[p]?.includes(Number(id)));
+        if (!hasAccess) {
+          window.location.href = '/dashboard';
+          return;
+        }
+
         setError(null);
 
         // Fetch market prices for live positions
@@ -313,60 +332,176 @@ export default function StrategyDetail() {
               <Card className="bg-slate-900/40 border-white/5 overflow-hidden shadow-2xl relative">
                 <div className="p-6 border-b border-white/5 flex flex-row justify-between items-center bg-white/[0.02]">
                   <h3 className="text-xl font-bold flex items-center gap-3 text-white">
-                    <Target size={20} className="text-cyan-400" /> Live Positions
+                    <Target size={20} className="text-cyan-400" /> Active Operations
                   </h3>
-                  <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 px-3 py-1">
-                    {liveTrades.length} Active
-                  </Badge>
+                  <div className="flex bg-white/5 p-1 rounded-xl border border-white/5">
+                    <button 
+                      onClick={() => setActiveTab('trades')}
+                      className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === 'trades' ? 'bg-cyan-500 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
+                    >
+                      Trade History
+                    </button>
+                    <button 
+                      onClick={() => setActiveTab('signals')}
+                      className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === 'signals' ? 'bg-purple-500 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
+                    >
+                      Live Signals
+                    </button>
+                  </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr className="text-[10px] text-slate-500 uppercase font-bold border-b border-white/5">
-                        <th className="px-6 py-4">Symbol</th>
-                        <th className="px-6 py-4">Side</th>
-                        <th className="px-6 py-4 text-center">Entry / Live</th>
-                        <th className="px-6 py-4 text-center">Qty</th>
-                        <th className="px-6 py-4 text-right">PnL (%)</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5">
-                      {liveTrades.length === 0 ? (
-                        <tr><td colSpan={5} className="px-6 py-16 text-center text-slate-500 text-sm italic">No active positions. Scanning markets for {strategy.name} alignment...</td></tr>
+                  {activeTab === 'trades' ? (
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="text-[10px] text-slate-500 uppercase font-bold border-b border-white/5">
+                          <th className="px-6 py-4">Symbol</th>
+                          <th className="px-6 py-4">Side</th>
+                          <th className="px-6 py-4 text-center">Entry / Live</th>
+                          <th className="px-6 py-4 text-center">Qty</th>
+                          <th className="px-6 py-4 text-right">PnL (%)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {liveTrades.length === 0 ? (
+                          <tr><td colSpan={5} className="px-6 py-16 text-center text-slate-500 text-sm italic">No active positions. Scanning markets...</td></tr>
+                        ) : (
+                          liveTrades.map(t => (
+                            <tr key={t.id} className="hover:bg-white/[0.03] transition-colors group">
+                              <td className="px-6 py-5 font-bold text-white group-hover:text-cyan-400 transition-colors uppercase tracking-tight">{t.symbol}</td>
+                              <td className="px-6 py-5">
+                                <Badge variant="outline" className={`text-[10px] border-none ${t.side === 'buy' || t.side === 'long' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                                  {t.side.toUpperCase()}
+                                </Badge>
+                              </td>
+                              <td className="px-6 py-5 text-center">
+                                <div className="font-mono text-xs text-slate-300">{t.price.toFixed(4)}</div>
+                                <div className="font-mono text-[10px] text-cyan-400/60 mt-0.5">${marketPrices[t.symbol]?.toFixed(4) || '---'}</div>
+                              </td>
+                              <td className="px-6 py-5 text-center font-mono text-xs text-slate-300">{t.amount.toFixed(4)}</td>
+                              <td className="px-6 py-5 text-right">
+                                {(() => {
+                                  const currentPrice = marketPrices[t.symbol] || t.price;
+                                  const isLong = t.side === 'buy' || t.side === 'long';
+                                  const pnlVal = isLong ? (currentPrice - t.price) * t.amount : (t.price - currentPrice) * t.amount;
+                                  const pnlPct = ((currentPrice - t.price) / t.price) * 100 * (isLong ? 1 : -1);
+                                  
+                                  return (
+                                    <div className={`font-bold ${pnlVal >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                      <div className="text-sm font-mono">{pnlVal >= 0 ? '+' : ''}${pnlVal.toFixed(4)}</div>
+                                      <div className="text-[10px] opacity-70 font-mono">{pnlVal >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%</div>
+                                    </div>
+                                  );
+                                })()}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div className="p-6">
+                      {signalsData.locked ? (
+                        <div className="p-12 text-center rounded-2xl bg-white/[0.02] border border-white/5 space-y-4">
+                           <div className="inline-flex items-center justify-center p-4 bg-purple-500/10 rounded-full mb-2">
+                             <Zap className="text-purple-400" size={32} />
+                           </div>
+                           <h4 className="text-xl font-bold">Premium Signals Locked</h4>
+                           <p className="text-slate-400 text-sm max-w-sm mx-auto">Subscribe to the {strategy.risk} Risk plan to unlock detailed entry, take profit, and stop loss signals for this node.</p>
+                           <Link to="/">
+                             <Button className="mt-4 bg-purple-600 hover:bg-purple-700">Upgrade Access</Button>
+                           </Link>
+                        </div>
                       ) : (
-                        liveTrades.map(t => (
-                          <tr key={t.id} className="hover:bg-white/[0.03] transition-colors group">
-                            <td className="px-6 py-5 font-bold text-white group-hover:text-cyan-400 transition-colors uppercase tracking-tight">{t.symbol}</td>
-                            <td className="px-6 py-5">
-                              <Badge variant="outline" className={`text-[10px] border-none ${t.side === 'buy' || t.side === 'long' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
-                                {t.side.toUpperCase()}
-                              </Badge>
-                            </td>
-                            <td className="px-6 py-5 text-center">
-                              <div className="font-mono text-xs text-slate-300">{t.price.toFixed(4)}</div>
-                              <div className="font-mono text-[10px] text-cyan-400/60 mt-0.5">${marketPrices[t.symbol]?.toFixed(4) || '---'}</div>
-                            </td>
-                            <td className="px-6 py-5 text-center font-mono text-xs text-slate-300">{t.amount.toFixed(4)}</td>
-                            <td className="px-6 py-5 text-right">
-                              {(() => {
-                                const currentPrice = marketPrices[t.symbol] || t.price;
-                                const isLong = t.side === 'buy' || t.side === 'long';
-                                const pnlVal = isLong ? (currentPrice - t.price) * t.amount : (t.price - currentPrice) * t.amount;
-                                const pnlPct = ((currentPrice - t.price) / t.price) * 100 * (isLong ? 1 : -1);
-                                
-                                return (
-                                  <div className={`font-bold ${pnlVal >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                    <div className="text-sm font-mono">{pnlVal >= 0 ? '+' : ''}${pnlVal.toFixed(4)}</div>
-                                    <div className="text-[10px] opacity-70 font-mono">{pnlVal >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%</div>
-                                  </div>
-                                );
-                              })()}
-                            </td>
-                          </tr>
-                        ))
+                        <div className="space-y-6">
+                           {/* Performance Stats */}
+                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-2">
+                              <div className="p-4 bg-white/[0.03] border border-white/5 rounded-2xl">
+                                <div className="text-[9px] text-slate-500 uppercase font-black tracking-widest mb-1">Signal Wins</div>
+                                <div className="text-xl font-bold text-emerald-400">
+                                  {(() => {
+                                    const sigs = Array.isArray(signalsData) ? signalsData : (signalsData.signals || []);
+                                    const closed = sigs.filter((s:any) => s.status !== 'active');
+                                    const wins = closed.filter((s:any) => s.status === 'tp_hit');
+                                    return closed.length > 0 ? `${((wins.length / closed.length) * 100).toFixed(0)}%` : '0%';
+                                  })()}
+                                </div>
+                              </div>
+                              <div className="p-4 bg-white/[0.03] border border-white/5 rounded-2xl">
+                                <div className="text-[9px] text-slate-500 uppercase font-black tracking-widest mb-1">Total Signals</div>
+                                <div className="text-xl font-bold text-white">{(Array.isArray(signalsData) ? signalsData : (signalsData.signals || [])).length}</div>
+                              </div>
+                              <div className="p-4 bg-white/[0.03] border border-white/5 rounded-2xl">
+                                <div className="text-[9px] text-slate-500 uppercase font-black tracking-widest mb-1">Avg Signal PnL</div>
+                                <div className="text-xl font-bold text-purple-400">
+                                  {(() => {
+                                    const sigs = Array.isArray(signalsData) ? signalsData : (signalsData.signals || []);
+                                    const closed = sigs.filter((s:any) => s.status !== 'active');
+                                    const avg = closed.length > 0 ? closed.reduce((acc:number, s:any) => acc + s.pnl, 0) / closed.length : 0;
+                                    return `+${avg.toFixed(2)}%`;
+                                  })()}
+                                </div>
+                              </div>
+                              <div className="p-4 bg-white/[0.03] border border-white/5 rounded-2xl">
+                                <div className="text-[9px] text-slate-500 uppercase font-black tracking-widest mb-1">Live Signals</div>
+                                <div className="text-xl font-bold text-cyan-400">{(Array.isArray(signalsData) ? signalsData : (signalsData.signals || [])).filter((s:any) => s.status === 'active').length}</div>
+                              </div>
+                           </div>
+
+                           {/* Signal List */}
+                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {(Array.isArray(signalsData) ? signalsData : (signalsData.signals || [])).map((s: any) => (
+                                <div key={s.id} className={`p-5 rounded-2xl border transition-all ${s.status === 'active' ? 'bg-white/[0.03] border-white/10 hover:border-purple-500/50' : 'bg-black/20 border-white/5 opacity-80'}`}>
+                                   <div className="flex justify-between items-start mb-4">
+                                      <div>
+                                         <div className="text-xs font-mono text-slate-500 mb-1">{new Date(s.timestamp).toLocaleString()}</div>
+                                         <div className="flex items-center gap-2">
+                                            <span className="text-lg font-black text-white">{s.symbol}</span>
+                                            <Badge className={`text-[9px] ${s.side === 'buy' || s.side === 'long' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                                              {s.side.toUpperCase()}
+                                            </Badge>
+                                         </div>
+                                      </div>
+                                      <div className="text-right">
+                                         <div className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${s.status === 'tp_hit' ? 'text-emerald-400' : s.status === 'sl_hit' ? 'text-rose-400' : 'text-cyan-400 animate-pulse'}`}>
+                                            {s.status.replace('_', ' ')}
+                                         </div>
+                                         <div className="text-xs font-mono font-bold text-white">${s.price.toFixed(4)}</div>
+                                      </div>
+                                   </div>
+
+                                   <div className="grid grid-cols-3 gap-2 py-3 border-y border-white/5 mb-3 bg-white/[0.01]">
+                                      <div className="text-center">
+                                         <div className="text-[8px] text-slate-500 uppercase font-bold mb-1">Target TP</div>
+                                         <div className="text-xs font-mono text-emerald-400 font-bold">${s.tp?.toFixed(4) || '---'}</div>
+                                      </div>
+                                      <div className="text-center border-x border-white/5">
+                                         <div className="text-[8px] text-slate-500 uppercase font-bold mb-1">Stop Loss</div>
+                                         <div className="text-xs font-mono text-rose-400 font-bold">${s.sl?.toFixed(4) || '---'}</div>
+                                      </div>
+                                      <div className="text-center">
+                                         <div className="text-[8px] text-slate-500 uppercase font-bold mb-1">Signal PnL</div>
+                                         <div className={`text-xs font-mono font-bold ${s.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                            {s.pnl >= 0 ? '+' : ''}{s.pnl.toFixed(2)}%
+                                         </div>
+                                      </div>
+                                   </div>
+                                   
+                                   <div className="flex items-center justify-between gap-2">
+                                      <div className="text-[10px] text-slate-500 italic">Recommended Stake: ${s.stakeAmount || 100}</div>
+                                      {s.status === 'active' && (
+                                        <Badge className="bg-purple-500/20 text-purple-400 border-none px-2 py-0.5 text-[9px]">ACTIONABLE NOW</Badge>
+                                      )}
+                                   </div>
+                                </div>
+                              ))}
+                              {(Array.isArray(signalsData) ? signalsData : (signalsData.signals || [])).length === 0 && (
+                                <div className="col-span-2 py-12 text-center text-slate-500 text-sm italic">Scanning markets for high-probability signals...</div>
+                              )}
+                           </div>
+                        </div>
                       )}
-                    </tbody>
-                  </table>
+                    </div>
+                  )}
                 </div>
               </Card>
             </motion.div>
