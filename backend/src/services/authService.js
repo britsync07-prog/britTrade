@@ -35,8 +35,13 @@ class AuthService {
   async me(userId) {
     const user = await db.get("SELECT id, email, telegramId, balance, role, status FROM users WHERE id = ?", [userId]);
     if (!user) return null;
-    const purchases = await db.query("SELECT planId FROM purchases WHERE userId = ?", [userId]);
-    user.purchasedPlans = purchases.map(p => p.planId);
+    
+    if (user.role === 'admin') {
+      user.purchasedPlans = ['low_risk', 'medium_risk', 'high_risk', 'bundle'];
+    } else {
+      const purchases = await db.query("SELECT planId FROM purchases WHERE userId = ?", [userId]);
+      user.purchasedPlans = purchases.map(p => p.planId);
+    }
     return user;
   }
 

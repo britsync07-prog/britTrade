@@ -32,16 +32,29 @@ interface Stats {
   totalSales: number;
 }
 
+interface UserPlan {
+  planId: string;
+  timestamp: string;
+}
+
 export default function AdminDashboard() {
   const [users, setUsers] = useState<User[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [userPlans, setUserPlans] = useState<UserPlan[]>([]);
+  const [addingPlan, setAddingPlan] = useState(false);
 
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (editingUser) {
+      fetchUserPlans(editingUser.id);
+    }
+  }, [editingUser]);
 
   const fetchData = async () => {
     try {
@@ -56,6 +69,36 @@ export default function AdminDashboard() {
       console.error('Failed to fetch admin data', e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchUserPlans = async (userId: number) => {
+    try {
+      const res = await api.get(`/admin/users/${userId}/purchases`);
+      setUserPlans(res.data);
+    } catch (e) {
+      console.error('Failed to fetch user plans');
+    }
+  };
+
+  const grantPlan = async (userId: number, planId: string) => {
+    try {
+      await api.post(`/admin/users/${userId}/purchases`, { planId });
+      fetchUserPlans(userId);
+      fetchData();
+      setAddingPlan(false);
+    } catch (e) {
+      alert('Failed to grant plan');
+    }
+  };
+
+  const revokePlan = async (userId: number, planId: string) => {
+    try {
+      await api.delete(`/admin/users/${userId}/purchases/${planId}`);
+      fetchUserPlans(userId);
+      fetchData();
+    } catch (e) {
+      alert('Failed to revoke plan');
     }
   };
 
@@ -87,7 +130,6 @@ export default function AdminDashboard() {
   const updateBalance = async (user: User, amount: number) => {
     try {
       await api.put(`/admin/users/${user.id}`, { ...user, balance: amount });
-      setEditingUser(null);
       fetchData();
     } catch (e) {
       alert('Failed to update balance');
@@ -101,6 +143,13 @@ export default function AdminDashboard() {
       </div>
     );
   }
+
+  const availablePlans = [
+    { id: 'low_risk', name: 'Low Risk ($25)' },
+    { id: 'medium_risk', name: 'Medium Risk ($20)' },
+    { id: 'high_risk', name: 'High Risk ($15)' },
+    { id: 'bundle', name: 'Premium Bundle ($50)' },
+  ];
 
   return (
     <div className="min-h-screen bg-[#020617] text-white selection:bg-cyan-500/30">
@@ -266,38 +315,108 @@ export default function AdminDashboard() {
       {/* Edit User Modal */}
       {editingUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-xl">
-          <div className="bg-slate-900 border border-white/10 rounded-3xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="p-8 border-b border-white/5 flex justify-between items-center">
-              <h3 className="text-xl font-bold">Edit User</h3>
-              <button onClick={() => setEditingUser(null)} className="text-slate-500 hover:text-white transition-colors">
+          <div className="bg-slate-900 border border-white/10 rounded-3xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200 shadow-2xl shadow-black">
+            <div className="p-8 border-b border-white/5 flex justify-between items-center bg-slate-950/30">
+              <div>
+                <h3 className="text-xl font-bold">Manage Account</h3>
+                <p className="text-xs text-slate-500 mt-1 uppercase tracking-widest font-bold">{editingUser.email}</p>
+              </div>
+              <button onClick={() => setEditingUser(null)} className="text-slate-500 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-full">
                 <XCircle className="w-6 h-6" />
               </button>
             </div>
-            <div className="p-8 space-y-6">
-              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2 block">User Email</label>
-                <div className="px-4 py-3 bg-slate-950/50 border border-white/5 rounded-xl text-slate-400">
-                  {editingUser.email}
+            
+            <div className="p-8 max-h-[70vh] overflow-y-auto space-y-8 custom-scrollbar">
+              {/* Balance Section */}
+              <section>
+                <div className="flex items-center gap-2 mb-4">
+                  <CreditCard className="w-4 h-4 text-cyan-400" />
+                  <h4 className="text-xs font-bold text-slate-300 uppercase tracking-widest">Financial Overrides</h4>
                 </div>
-              </div>
-              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2 block">Adjust Balance</label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500">$</span>
-                  <input 
-                    type="number" 
-                    defaultValue={editingUser.balance}
-                    onBlur={(e) => updateBalance(editingUser, parseFloat(e.target.value))}
-                    className="w-full bg-slate-950/50 border border-white/10 rounded-xl py-3 pl-8 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/50"
-                  />
+                <div className="bg-slate-950/50 border border-white/5 rounded-2xl p-6">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 block">Available Balance</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-cyan-500 font-mono font-bold">$</span>
+                    <input 
+                      type="number" 
+                      defaultValue={editingUser.balance}
+                      step="0.01"
+                      onBlur={(e) => updateBalance(editingUser, parseFloat(e.target.value))}
+                      className="w-full bg-slate-900 border border-white/10 rounded-xl py-3 pl-8 pr-4 text-lg font-mono focus:outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all"
+                    />
+                  </div>
                 </div>
-              </div>
+              </section>
+
+              {/* Plans Section */}
+              <section>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-purple-400" />
+                    <h4 className="text-xs font-bold text-slate-300 uppercase tracking-widest">Subscription Mastery</h4>
+                  </div>
+                  <button 
+                    onClick={() => setAddingPlan(!addingPlan)}
+                    className="text-[10px] font-bold text-cyan-400 uppercase tracking-tighter hover:text-cyan-300"
+                  >
+                    {addingPlan ? 'Cancel' : '+ Grant New Plan'}
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {addingPlan && (
+                    <div className="bg-cyan-500/5 border border-cyan-500/20 rounded-2xl p-2 animate-in slide-in-from-top-2 duration-300">
+                      <div className="grid grid-cols-1 gap-1">
+                        {availablePlans.map(plan => {
+                          const hasIt = userPlans.some(up => up.planId === plan.id);
+                          return (
+                            <button
+                              key={plan.id}
+                              disabled={hasIt}
+                              onClick={() => grantPlan(editingUser.id, plan.id)}
+                              className={cn(
+                                "flex items-center justify-between px-4 py-3 rounded-xl transition-all text-sm",
+                                hasIt ? "opacity-30 cursor-not-allowed bg-slate-950/50" : "hover:bg-cyan-500/10 text-slate-300 hover:text-cyan-400"
+                              )}
+                            >
+                              <span>{plan.name}</span>
+                              <CheckCircle2 className={cn("w-4 h-4", hasIt ? "text-slate-700" : "text-cyan-500 opacity-0 group-hover:opacity-100")} />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="bg-slate-950/50 border border-white/5 rounded-2xl divide-y divide-white/5">
+                    {userPlans.length === 0 ? (
+                      <div className="p-8 text-center text-slate-500 text-sm">No active subscriptions</div>
+                    ) : (
+                      userPlans.map(plan => (
+                        <div key={plan.planId} className="flex items-center justify-between p-4 group">
+                          <div>
+                            <div className="text-sm font-bold uppercase tracking-tight text-slate-200">{plan.planId.replace('_', ' ')}</div>
+                            <div className="text-[10px] text-slate-500 font-mono mt-0.5">Granted: {new Date(plan.timestamp).toLocaleDateString()}</div>
+                          </div>
+                          <button 
+                            onClick={() => revokePlan(editingUser.id, plan.planId)}
+                            className="p-2 text-slate-600 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                          >
+                            <UserMinus className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </section>
+
               <div className="pt-4">
                 <button 
                   onClick={() => setEditingUser(null)}
-                  className="w-full py-4 bg-white text-black font-bold rounded-2xl hover:bg-slate-200 transition-colors"
+                  className="w-full py-4 bg-white text-black font-bold rounded-2xl hover:bg-slate-200 transition-all hover:scale-[1.01] active:scale-95 shadow-xl shadow-white/5"
                 >
-                  Save Changes
+                  Done Managing
                 </button>
               </div>
             </div>
@@ -310,9 +429,9 @@ export default function AdminDashboard() {
 
 function StatCard({ title, value, icon: Icon, color, sub }: any) {
   return (
-    <div className="p-6 bg-slate-900/50 border border-white/5 rounded-3xl relative overflow-hidden group">
-      <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
-        <Icon className={cn("w-12 h-12", color)} />
+    <div className="p-6 bg-slate-900/50 border border-white/5 rounded-3xl relative overflow-hidden group hover:border-white/10 transition-colors">
+      <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 group-hover:scale-125 transition-all">
+        <Icon className={cn("w-16 h-16", color)} />
       </div>
       <div className="relative z-10">
         <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">{title}</div>

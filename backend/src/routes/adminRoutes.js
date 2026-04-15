@@ -60,6 +60,44 @@ router.delete('/users/:id', authMiddleware, adminMiddleware, async (req, res) =>
   }
 });
 
+// --- User Plan Management ---
+
+// Get user purchases
+router.get('/users/:id/purchases', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const purchases = await db.query("SELECT planId, timestamp FROM purchases WHERE userId = ?", [req.params.id]);
+    res.json(purchases);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Add plan manually
+router.post('/users/:id/purchases', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { planId } = req.body;
+    await db.run("INSERT OR IGNORE INTO purchases (userId, planId) VALUES (?, ?)", [req.params.id, planId]);
+    
+    // Trigger auto-subscription
+    const authService = require('../services/authService');
+    await authService.purchasePlan(req.params.id, planId); // Re-uses existing logic for strategy subscription
+    
+    res.json({ message: 'Plan granted' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Remove plan
+router.delete('/users/:id/purchases/:planId', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    await db.run("DELETE FROM purchases WHERE userId = ? AND planId = ?", [req.params.id, req.params.planId]);
+    res.json({ message: 'Plan revoked' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // --- Platform Stats ---
 router.get('/stats', authMiddleware, adminMiddleware, async (req, res) => {
   try {

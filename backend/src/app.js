@@ -146,7 +146,7 @@ app.post('/strategies/unsubscribe', authMiddleware, async (req, res, next) => {
 
 app.get('/strategies/:id/signals', authMiddleware, async (req, res, next) => {
   try {
-    const signals = await strategyService.getSignals(req.params.id, req.userId);
+    const signals = await strategyService.getSignals(req.params.id, req.userId, req.userRole === 'admin');
     res.json(signals);
   } catch (e) { next(e); }
 });

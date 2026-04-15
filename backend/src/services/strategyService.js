@@ -346,8 +346,8 @@ class StrategyService {
     return { status: 'Not running' };
   }
 
-  async getSignals(strategyId, userId = null) {
-    if (userId) {
+  async getSignals(strategyId, userId = null, isAdmin = false) {
+    if (userId && !isAdmin) {
        // Check if user has purchased the plan for this strategy
        const planToStrat = { 1: 'low_risk', 2: 'medium_risk', 3: 'high_risk' };
        const targetPlan = planToStrat[strategyId];
