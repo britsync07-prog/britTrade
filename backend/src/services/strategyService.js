@@ -94,6 +94,16 @@ class StrategyService {
               "UPDATE signals SET status = ?, pnl = ? WHERE id = ?",
               [status, pnl, sig.id]
             );
+
+            // Notify PaperService to close associated trades
+            const exitSide = (sig.side === 'buy' || sig.side === 'long') ? 'sell' : 'cover';
+            await getPaperService().handleSignal({
+              ...sig,
+              side: exitSide,
+              price: currentPrice,
+              pnl: pnl
+            });
+
             console.log(`[Signal Tracker] Signal ${sig.id} (${sig.symbol}) closed: ${status} (PnL: ${pnl.toFixed(2)}%)`);
           }
         }
@@ -307,9 +317,12 @@ class StrategyService {
                  timestamp: new Date().toISOString()
                };
 
+               const isEntry = ['buy', 'long', 'short'].includes(signalSide.toLowerCase());
+               const initialStatus = isEntry ? 'active' : 'completed';
+
                await db.run(
                  "INSERT INTO signals (strategyId, symbol, side, price, tp, sl, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                 [signal.strategyId, signal.symbol, signal.side, signal.price, signal.tp, signal.sl, 'active']
+                 [signal.strategyId, signal.symbol, signal.side, signal.price, signal.tp, signal.sl, initialStatus]
                );
 
                // Only broadcast Entry signals to Telegram from here. 
