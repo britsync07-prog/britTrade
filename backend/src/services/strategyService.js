@@ -220,9 +220,10 @@ class StrategyService {
         try {
           let signalSide = null;
           let currentPrice = 0;
+          let data = null;
 
           if (strategy.name === 'TrendFollower') {
-            const data = await this.fetchOHLC(symbol, config.timeframe);
+            data = await this.fetchOHLC(symbol, config.timeframe);
             currentPrice = data.price;
             
             const adxInfo = ADX.calculate({ high: data.highs, low: data.lows, close: data.closes, period: 14 });
@@ -241,7 +242,7 @@ class StrategyService {
             }
           } 
           else if (strategy.name === 'GridMeanReversion') {
-            const data = await this.fetchOHLC(symbol, config.timeframe);
+            data = await this.fetchOHLC(symbol, config.timeframe);
             currentPrice = data.price;
             
             const rsi = RSI.calculate({ period: 14, values: data.closes });
@@ -259,7 +260,7 @@ class StrategyService {
             }
           }
           else if (strategy.name === 'UltimateFuturesScalper') {
-            const data = await this.fetchOHLC(symbol, config.timeframe);
+            data = await this.fetchOHLC(symbol, config.timeframe);
             currentPrice = data.price;
             
             const rsi = RSI.calculate({ period: 14, values: data.closes });
