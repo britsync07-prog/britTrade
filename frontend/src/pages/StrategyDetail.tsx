@@ -351,72 +351,107 @@ export default function StrategyDetail() {
                 </div>
                 <div className="overflow-x-auto">
                   {activeTab === 'trades' ? (
-                    <table className="w-full text-left">
-                      <thead>
-                        <tr className="text-[10px] text-slate-500 uppercase font-bold border-b border-white/5">
-                          <th className="px-6 py-4">Symbol</th>
-                          <th className="px-6 py-4">Side</th>
-                          <th className="px-6 py-4 text-center">Entry / Live</th>
-                          <th className="px-6 py-4 text-center">Qty</th>
-                          <th className="px-6 py-4 text-right">PnL (%)</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/5">
-                        {trades.length === 0 ? (
-                          <tr><td colSpan={5} className="px-6 py-16 text-center text-slate-500 text-sm italic">No operation history. Scanning markets...</td></tr>
-                        ) : (
-                          trades.slice().reverse().map(t => (
-                            <tr key={t.id} className="hover:bg-white/[0.03] transition-colors group">
-                              <td className="px-6 py-5 font-bold text-white group-hover:text-cyan-400 transition-colors uppercase tracking-tight">
-                                {t.symbol}
-                                {t.status === 'closed' && <span className="ml-2 text-[8px] opacity-40 uppercase font-black tracking-tighter">History</span>}
-                              </td>
-                              <td className="px-6 py-5">
-                                <div className="flex flex-col gap-1">
-                                  <Badge variant="outline" className={`text-[10px] w-fit border-none ${t.side === 'buy' || t.side === 'long' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
-                                    {t.side.toUpperCase()}
-                                  </Badge>
-                                  <Badge variant="outline" className={`text-[8px] w-fit border-none ${t.status === 'open' ? 'bg-cyan-500/10 text-cyan-400' : 'bg-slate-500/10 text-slate-400'}`}>
-                                    {t.status.toUpperCase()}
-                                  </Badge>
-                                </div>
-                              </td>
-                              <td className="px-6 py-5 text-center">
-                                <div className="font-mono text-xs text-slate-300">{t.price.toFixed(4)}</div>
-                                {t.status === 'open' && (
-                                  <div className="font-mono text-[10px] text-cyan-400/60 mt-0.5">${marketPrices[t.symbol]?.toFixed(4) || '---'}</div>
-                                )}
-                              </td>
-                              <td className="px-6 py-5 text-center font-mono text-xs text-slate-300">{t.amount.toFixed(4)}</td>
-                              <td className="px-6 py-5 text-right">
-                                {(() => {
-                                  if (t.status === 'closed') {
-                                    return (
-                                      <div className={`font-bold ${t.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                        <div className="text-sm font-mono">{t.pnl >= 0 ? '+' : ''}${t.pnl.toFixed(4)}</div>
-                                        <div className="text-[10px] opacity-70 font-mono">Realized</div>
+                    <div className="p-0">
+                      {/* Active Positions Section */}
+                      <div className="p-6 pb-2">
+                        <div className="flex items-center gap-2 mb-4">
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          <h4 className="text-sm font-black uppercase tracking-widest text-emerald-400/80">Active Positions</h4>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left">
+                            <thead>
+                              <tr className="text-[10px] text-slate-500 uppercase font-bold border-b border-white/5">
+                                <th className="px-6 py-4">Symbol</th>
+                                <th className="px-6 py-4">Side</th>
+                                <th className="px-6 py-4 text-center">Entry / Live</th>
+                                <th className="px-6 py-4 text-center">Qty</th>
+                                <th className="px-6 py-4 text-right">Unrealized PnL</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5">
+                              {liveTrades.length === 0 ? (
+                                <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-500 text-sm italic bg-white/[0.01]">No active positions.</td></tr>
+                              ) : (
+                                liveTrades.map(t => (
+                                  <tr key={t.id} className="hover:bg-white/[0.03] transition-colors group">
+                                    <td className="px-6 py-5 font-bold text-white group-hover:text-cyan-400 transition-colors uppercase tracking-tight">{t.symbol}</td>
+                                    <td className="px-6 py-5">
+                                      <Badge variant="outline" className={`text-[10px] border-none ${t.side === 'buy' || t.side === 'long' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                                        {t.side.toUpperCase()}
+                                      </Badge>
+                                    </td>
+                                    <td className="px-6 py-5 text-center">
+                                      <div className="font-mono text-xs text-slate-300">{t.price.toFixed(4)}</div>
+                                      <div className="font-mono text-[10px] text-cyan-400/60 mt-0.5">${marketPrices[t.symbol]?.toFixed(4) || '---'}</div>
+                                    </td>
+                                    <td className="px-6 py-5 text-center font-mono text-xs text-slate-300">{t.amount.toFixed(4)}</td>
+                                    <td className="px-6 py-5 text-right">
+                                      {(() => {
+                                        const currentPrice = marketPrices[t.symbol] || t.price;
+                                        const isLong = t.side === 'buy' || t.side === 'long';
+                                        const pnlVal = isLong ? (currentPrice - t.price) * t.amount : (t.price - currentPrice) * t.amount;
+                                        const pnlPct = ((currentPrice - t.price) / t.price) * 100 * (isLong ? 1 : -1);
+                                        return (
+                                          <div className={`font-bold ${pnlVal >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                            <div className="text-sm font-mono">{pnlVal >= 0 ? '+' : ''}${pnlVal.toFixed(4)}</div>
+                                            <div className="text-[10px] opacity-70 font-mono">{pnlVal >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%</div>
+                                          </div>
+                                        );
+                                      })()}
+                                    </td>
+                                  </tr>
+                                ))
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      {/* Closed trades section */}
+                      <div className="p-6 pt-10 border-t border-white/5 bg-black/20">
+                        <div className="flex items-center gap-2 mb-4">
+                          <Clock size={14} className="text-slate-500" />
+                          <h4 className="text-sm font-black uppercase tracking-widest text-slate-500">Operation History</h4>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left">
+                            <thead>
+                              <tr className="text-[10px] text-slate-500 uppercase font-bold border-b border-white/5">
+                                <th className="px-6 py-4">Symbol</th>
+                                <th className="px-6 py-4">Side</th>
+                                <th className="px-6 py-4 text-center">Execution Price</th>
+                                <th className="px-6 py-4 text-center">Qty</th>
+                                <th className="px-6 py-4 text-right">Realized PnL</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5">
+                              {pastTrades.length === 0 ? (
+                                <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-500 text-sm italic">No closed operations yet.</td></tr>
+                              ) : (
+                                pastTrades.slice().reverse().map(t => (
+                                  <tr key={t.id} className="hover:bg-white/[0.03] transition-colors group">
+                                    <td className="px-6 py-5 font-bold text-slate-300 uppercase tracking-tight">{t.symbol}</td>
+                                    <td className="px-6 py-5 text-center">
+                                      <Badge variant="outline" className={`text-[10px] border-none bg-slate-500/10 text-slate-400`}>
+                                        {t.side.toUpperCase()}
+                                      </Badge>
+                                    </td>
+                                    <td className="px-6 py-5 text-center font-mono text-xs text-slate-400">{t.price.toFixed(4)}</td>
+                                    <td className="px-6 py-5 text-center font-mono text-xs text-slate-400">{t.amount.toFixed(4)}</td>
+                                    <td className="px-6 py-5 text-right font-mono">
+                                      <div className={`text-sm font-bold ${t.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                        {t.pnl >= 0 ? '+' : ''}${t.pnl.toFixed(4)}
                                       </div>
-                                    );
-                                  }
-                                  
-                                  const currentPrice = marketPrices[t.symbol] || t.price;
-                                  const isLong = t.side === 'buy' || t.side === 'long';
-                                  const pnlVal = isLong ? (currentPrice - t.price) * t.amount : (t.price - currentPrice) * t.amount;
-                                  const pnlPct = ((currentPrice - t.price) / t.price) * 100 * (isLong ? 1 : -1);
-                                  
-                                  return (
-                                    <div className={`font-bold ${pnlVal >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                      <div className="text-sm font-mono">{pnlVal >= 0 ? '+' : ''}${pnlVal.toFixed(4)}</div>
-                                      <div className="text-[10px] opacity-70 font-mono">{pnlVal >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%</div>
-                                    </div>
-                                  );
-                                })()}
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
+                                    </td>
+                                  </tr>
+                                ))
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
                   ) : (
                     <div className="p-6">
                       {signalsData.locked ? (
