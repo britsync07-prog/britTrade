@@ -1,9 +1,20 @@
 const express = require('express');
 const router = express.Router();
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const authService = require('../services/authService');
 const authMiddleware = require('./authMiddleware');
 const db = require('../db');
+
+// Lazy-init Stripe to prevent crash if key is missing
+let stripe;
+const getStripe = () => {
+  if (!stripe) {
+    if (!process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY.includes('placeholder')) {
+      throw new Error('STRIPE_SECRET_KEY is missing or invalid in environment variables.');
+    }
+    stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+  }
+  return stripe;
+};
 
 // Create a Checkout Session
 router.post('/create-session', authMiddleware, express.json(), async (req, res) => {
@@ -22,7 +33,7 @@ router.post('/create-session', authMiddleware, express.json(), async (req, res) 
       return res.status(400).json({ error: 'Invalid plan selected' });
     }
 
-    const session = await stripe.checkout.sessions.create({
+    const session = await getStripe().checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: [
         {
@@ -58,7 +69,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
   let event;
 
   try {
-    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+    event = getStripe().webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
   } catch (err) {
     console.error(`Webhook Error: ${err.message}`);
     return res.status(400).send(`Webhook Error: ${err.message}`);

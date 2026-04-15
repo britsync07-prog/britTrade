@@ -15,6 +15,10 @@ const paymentRoutes = require('./routes/paymentRoutes');
 const PORT = process.env.PORT || 7286;
 const app = express();
 
+if (!process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY.includes('placeholder')) {
+  console.warn('\x1b[33m%s\x1b[0m', '[Warning] Stripe API keys are not configured. Payment features will be disabled.');
+}
+
 app.use(morgan('dev'));
 app.use((req, res, next) => {
   console.log(`[Request] ${req.method} ${req.url} | Origin: ${req.get('origin')}`);
