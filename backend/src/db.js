@@ -33,9 +33,8 @@ const initDb = () => {
         db.get("SELECT count(*) as count FROM users", (err, row) => {
           if (!err && row && row.count === 0) {
             console.log('Seeding initial admin: mehedy303@gmail.com');
-            db.run("INSERT INTO users (email, password, balance, role) VALUES (?, ?, ?, ?)", 
-              ['mehedy303@gmail.com', '$2b$10$R/mdOipHB1McLKD.FDwCr.BkVzcYpFeS7xOQScxOhRr9iLXhJnKrm', 10000.0, 'admin']);
-          } else {
+            db.run("INSERT INTO users (email, password, balance, role) VALUES (?, ?, ?, ?)",
+              ['mehedy303@gmail.com', '$2b$10$zoHU1/AyxSNY6vB2Yb.X9.HGSJ0JTb4rWBlNUFtYsq6m3Yj0ZP7rC', 10000.0, 'admin']);          } else {
             // Ensure first user is admin even if already exists
             db.run("UPDATE users SET role = 'admin' WHERE email = ?", ['mehedy303@gmail.com']);
           }
