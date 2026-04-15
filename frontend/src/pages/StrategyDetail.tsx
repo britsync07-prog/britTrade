@@ -16,6 +16,7 @@ export default function StrategyDetail() {
   const [showSubModal, setShowSubModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [signalsData, setSignalsData] = useState<any>({ signals: [] });
+  const [prices, setPrices] = useState<Record<string, number>>({});
 
   useEffect(() => {
     const fetchData = async () => {
@@ -56,7 +57,17 @@ export default function StrategyDetail() {
       }
     };
     fetchData();
-    const interval = setInterval(fetchData, 10000);
+    const fetchPrices = async () => {
+      try {
+        const res = await api.get('/strategies/prices'); // I need to check if this endpoint exists or add it
+        setPrices(res.data);
+      } catch (e) {}
+    };
+    fetchPrices();
+    const interval = setInterval(() => {
+      fetchData();
+      fetchPrices();
+    }, 10000);
     return () => clearInterval(interval);
   }, [id]);
 
@@ -110,8 +121,10 @@ export default function StrategyDetail() {
 
   const sigs = Array.isArray(signalsData) ? signalsData : (signalsData.signals || []);
   const closedSigs = sigs.filter((s:any) => s.status !== 'active');
-  const winSigs = closedSigs.filter((s:any) => s.status === 'tp_hit');
-  const lossSigs = closedSigs.filter((s:any) => s.status === 'sl_hit');
+  
+  // Refined Win/Loss logic
+  const winSigs = closedSigs.filter((s:any) => s.status === 'tp_hit' || (s.status === 'completed' && s.pnl > 0.01) || (s.status === 'closed' && s.pnl > 0));
+  const lossSigs = closedSigs.filter((s:any) => s.status === 'sl_hit' || (s.status === 'completed' && s.pnl < -0.01) || (s.status === 'closed' && s.pnl < 0));
 
   return (
     <div className="min-h-screen bg-[#020617] text-slate-200 pb-20 relative overflow-hidden">
@@ -331,7 +344,7 @@ export default function StrategyDetail() {
                            </div>
                            <div className="space-y-4">
                               {sigs.filter((s: any) => s.status === 'active').map((s: any) => (
-                                <SignalCard key={s.id} signal={s} />
+                                <SignalCard key={s.id} signal={s} currentPrice={prices[s.symbol]} />
                               ))}
                               {sigs.filter((s: any) => s.status === 'active').length === 0 && (
                                 <div className="py-8 bg-white/[0.01] border border-dashed border-white/5 rounded-2xl text-center text-slate-600 text-[10px] uppercase font-bold tracking-widest">No active signals found</div>
@@ -348,7 +361,7 @@ export default function StrategyDetail() {
                            </div>
                            <div className="space-y-4">
                               {closedSigs.map((s: any) => (
-                                <SignalCard key={s.id} signal={s} />
+                                <SignalCard key={s.id} signal={s} currentPrice={prices[s.symbol]} />
                               ))}
                               {closedSigs.length === 0 && (
                                 <div className="py-8 bg-white/[0.01] border border-dashed border-white/5 rounded-2xl text-center text-slate-600 text-[10px] uppercase font-bold tracking-widest">No closed signals yet</div>
@@ -367,7 +380,16 @@ export default function StrategyDetail() {
   );
 }
 
-function SignalCard({ signal: s }: { signal: any }) {
+function SignalCard({ signal: s, currentPrice }: { signal: any, currentPrice?: number }) {
+  let displayPnl = s.pnl;
+  if (s.status === 'active' && currentPrice) {
+    if (s.side === 'buy' || s.side === 'long') {
+      displayPnl = ((currentPrice - s.price) / s.price) * 100;
+    } else {
+      displayPnl = ((s.price - currentPrice) / s.price) * 100;
+    }
+  }
+
   return (
     <div className={`p-4 rounded-xl border transition-all ${s.status === 'active' ? 'bg-white/[0.04] border-white/10 hover:border-purple-500/50' : 'bg-black/20 border-white/5 opacity-80'}`}>
        <div className="flex justify-between items-start mb-3">
@@ -399,8 +421,8 @@ function SignalCard({ signal: s }: { signal: any }) {
           </div>
           <div className="text-center">
              <div className="text-[7px] text-slate-500 uppercase font-black mb-0.5">Signal PnL</div>
-             <div className={`text-[9px] font-mono font-bold ${s.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {s.pnl >= 0 ? '+' : ''}{s.pnl.toFixed(2)}%
+             <div className={`text-[9px] font-mono font-bold ${displayPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {displayPnl >= 0 ? '+' : ''}{displayPnl.toFixed(2)}%
              </div>
           </div>
        </div>

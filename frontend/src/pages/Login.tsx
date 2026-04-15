@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Activity, Mail, Lock, ArrowRight } from 'lucide-react';
+import { motion } from 'framer-motion';
 import api from '../services/api';
 
 interface LoginProps {
@@ -31,28 +32,46 @@ export default function Login({ onLogin }: LoginProps) {
   };
 
   return (
-    <div className="login-container flex flex-col items-center justify-center min-h-[80vh]">
-      <div className="glass-card w-full max-w-md">
-        <div className="flex flex-col items-center mb-8">
-          <div className="p-4 bg-primary/10 rounded-2xl mb-4">
-            <Activity className="w-12 h-12 text-primary" />
+    <div className="min-h-screen bg-cyber-dark flex items-center justify-center p-6 relative overflow-hidden">
+      {/* Premium Background Elements */}
+      <div className="absolute inset-0 animate-mesh opacity-30" />
+      <div className="absolute top-1/4 -left-20 w-96 h-96 bg-cyan-500/10 rounded-full blur-[120px] animate-pulse" />
+      <div className="absolute bottom-1/4 -right-20 w-96 h-96 bg-purple-500/10 rounded-full blur-[120px] animate-pulse delay-700" />
+      
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="glass-card w-full max-w-md p-8 md:p-12 relative z-10 shadow-2xl shadow-black/50"
+      >
+        <div className="flex flex-col items-center mb-10 text-center">
+          <div className="p-4 bg-cyan-500/10 rounded-2xl mb-6 relative group">
+            <div className="absolute inset-0 bg-cyan-500/20 blur-xl rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity" />
+            <Activity className="w-12 h-12 text-cyan-400 relative z-10" />
           </div>
-          <h1 className="text-3xl font-bold">{isSignup ? 'Create Account' : 'Welcome Back'}</h1>
-          <p className="text-text-dim mt-2">{isSignup ? 'Start your automated trading journey' : 'Access your trading dashboard'}</p>
+          <h1 className="text-4xl font-bold tracking-tighter text-white mb-2">{isSignup ? 'Create Account' : 'Welcome Back'}</h1>
+          <p className="text-slate-400 font-medium">{isSignup ? 'Start your automated trading journey' : 'Access your professional trading terminal'}</p>
         </div>
 
-        {error && <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl mb-6 text-sm text-center">{error}</div>}
+        {error && (
+          <motion.div 
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            className="p-4 bg-red-500/10 border border-red-500/20 text-red-400 rounded-2xl mb-8 text-sm text-center font-bold"
+          >
+            {error}
+          </motion.div>
+        )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
-            <label className="text-sm font-medium text-text-dim ml-1">Email Address</label>
-            <div className="relative">
-              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-text-dim w-5 h-5" />
+            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Email Address</label>
+            <div className="relative group">
+              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-cyan-400 w-5 h-5 transition-colors" />
               <input 
                 type="email" 
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-bg-dark/50 border border-border-glass rounded-xl py-3 pl-12 pr-4 focus:border-primary outline-none transition-all"
+                className="w-full bg-white/[0.02] border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-white focus:border-cyan-500/50 outline-none transition-all focus:bg-white/[0.04] placeholder:text-slate-600"
                 placeholder="name@example.com"
                 required
               />
@@ -60,14 +79,14 @@ export default function Login({ onLogin }: LoginProps) {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium text-text-dim ml-1">Password</label>
-            <div className="relative">
-              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-text-dim w-5 h-5" />
+            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-1">Secure Password</label>
+            <div className="relative group">
+              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-cyan-400 w-5 h-5 transition-colors" />
               <input 
                 type="password" 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-bg-dark/50 border border-border-glass rounded-xl py-3 pl-12 pr-4 focus:border-primary outline-none transition-all"
+                className="w-full bg-white/[0.02] border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-white focus:border-cyan-500/50 outline-none transition-all focus:bg-white/[0.04] placeholder:text-slate-600"
                 placeholder="••••••••"
                 required
               />
@@ -77,22 +96,22 @@ export default function Login({ onLogin }: LoginProps) {
           <button 
             type="submit" 
             disabled={loading}
-            className="btn-primary w-full flex items-center justify-center gap-2 mt-4"
+            className="w-full h-14 bg-white text-black rounded-2xl flex items-center justify-center gap-3 mt-8 font-black text-sm uppercase tracking-widest hover:bg-slate-200 transition-all hover:scale-[1.01] active:scale-95 disabled:opacity-50 disabled:hover:scale-100 shadow-xl shadow-white/5"
           >
-            {loading ? 'Processing...' : (isSignup ? 'Sign Up' : 'Log In')}
-            <ArrowRight size={18} />
+            {loading ? 'Decrypting...' : (isSignup ? 'Init Sequence' : 'Authorize')}
+            <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
           </button>
         </form>
 
-        <div className="mt-8 text-center">
+        <div className="mt-10 text-center">
           <button 
             onClick={() => setIsSignup(!isSignup)}
-            className="text-primary hover:text-white transition-colors text-sm font-medium"
+            className="text-slate-500 hover:text-cyan-400 transition-all text-xs font-bold uppercase tracking-widest"
           >
             {isSignup ? 'Already have an account? Log in' : "Don't have an account? Sign up"}
           </button>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

@@ -1,69 +1,40 @@
 import { useState, useEffect } from 'react';
 import { 
   Users, 
+  Settings, 
+  Activity, 
   ShieldAlert, 
-  Search, 
-  UserMinus, 
-  Lock, 
-  Unlock, 
-  Edit3, 
-  CheckCircle2, 
-  XCircle,
-  Activity,
-  CreditCard,
-  ArrowLeft
+  X, 
+  TrendingUp, 
+  Zap, 
+  ArrowLeft 
 } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
 import api from '../services/api';
-import { cn } from '@/lib/utils';
 
 interface User {
   id: number;
   email: string;
   role: string;
-  status: string;
-  planCount: number;
-}
-
-interface Stats {
-  totalUsers: number;
-  activeSignals: number;
-  totalRevenue: number;
-  totalSales: number;
-}
-
-interface UserPlan {
-  planId: string;
-  timestamp: string;
+  purchasedPlans: string[];
+  createdAt: string;
 }
 
 export default function AdminDashboard() {
   const [users, setUsers] = useState<User[]>([]);
-  const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [userPlans, setUserPlans] = useState<UserPlan[]>([]);
-  const [addingPlan, setAddingPlan] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
   useEffect(() => {
     fetchData();
   }, []);
 
-  useEffect(() => {
-    if (editingUser) {
-      fetchUserPlans(editingUser.id);
-    }
-  }, [editingUser]);
-
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [uRes, sRes] = await Promise.all([
-        api.get(`/admin/users?q=${search}`),
-        api.get('/admin/stats')
-      ]);
-      setUsers(uRes.data);
-      setStats(sRes.data);
+      const res = await api.get('/admin/users');
+      setUsers(res.data);
     } catch (e) {
       console.error('Failed to fetch admin data', e);
     } finally {
@@ -71,337 +42,251 @@ export default function AdminDashboard() {
     }
   };
 
-  const fetchUserPlans = async (userId: number) => {
+  const handleRoleChange = async (userId: number, role: string) => {
     try {
-      const res = await api.get(`/admin/users/${userId}/purchases`);
-      setUserPlans(res.data);
-    } catch (e) {
-      console.error('Failed to fetch user plans');
-    }
-  };
-
-  const grantPlan = async (userId: number, planId: string) => {
-    try {
-      await api.post(`/admin/users/${userId}/purchases`, { planId });
-      fetchUserPlans(userId);
+      await api.put(`/admin/users/${userId}`, { role });
       fetchData();
-      setAddingPlan(false);
+      setSelectedUser(prev => prev ? { ...prev, role } : null);
     } catch (e) {
-      alert('Failed to grant plan');
+      alert('Failed to update role');
     }
   };
 
-  const revokePlan = async (userId: number, planId: string) => {
+  const handlePlanToggle = async (userId: number, planId: string, hasPlan: boolean) => {
     try {
-      await api.delete(`/admin/users/${userId}/purchases/${planId}`);
-      fetchUserPlans(userId);
+      if (hasPlan) {
+        await api.delete(`/admin/users/${userId}/purchases/${planId}`);
+      } else {
+        await api.post(`/admin/users/${userId}/purchases`, { planId });
+      }
       fetchData();
+      setSelectedUser(prev => {
+        if (!prev) return null;
+        const newPlans = hasPlan 
+          ? prev.purchasedPlans.filter(p => p !== planId)
+          : [...prev.purchasedPlans, planId];
+        return { ...prev, purchasedPlans: newPlans };
+      });
     } catch (e) {
-      alert('Failed to revoke plan');
+      alert('Failed to update plan');
     }
   };
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    fetchData();
-  };
-
-  const toggleStatus = async (user: User) => {
-    const newStatus = user.status === 'active' ? 'suspended' : 'active';
-    try {
-      await api.put(`/admin/users/${user.id}`, { ...user, status: newStatus });
-      fetchData();
-    } catch (e) {
-      alert('Failed to update status');
-    }
-  };
-
-  const deleteUser = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this user? This action is IRREVERSIBLE.')) return;
-    try {
-      await api.delete(`/admin/users/${id}`);
-      fetchData();
-    } catch (e) {
-      alert('Failed to delete user');
-    }
-  };
+  const plans = [
+    { id: 'low_risk', name: '$25' },
+    { id: 'medium_risk', name: '$20' },
+    { id: 'high_risk', name: '$15' },
+    { id: 'bundle', name: '$50' },
+  ];
 
   if (loading && !users.length) {
     return (
-      <div className="min-h-screen bg-[#020617] flex items-center justify-center">
+      <div className="min-h-screen bg-cyber-dark flex items-center justify-center">
         <Activity className="w-12 h-12 text-cyan-500 animate-pulse" />
       </div>
     );
   }
 
-  const availablePlans = [
-    { id: 'low_risk', name: 'Low Risk ($25)' },
-    { id: 'medium_risk', name: 'Medium Risk ($20)' },
-    { id: 'high_risk', name: 'High Risk ($15)' },
-    { id: 'bundle', name: 'Premium Bundle ($50)' },
-  ];
-
   return (
-    <div className="min-h-screen bg-[#020617] text-white selection:bg-cyan-500/30">
-      {/* Header */}
-      <nav className="border-b border-white/5 bg-slate-950/50 backdrop-blur-md sticky top-0 z-40">
-        <div className="container mx-auto px-6 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <a href="/dashboard" className="p-2 hover:bg-white/5 rounded-lg transition-colors text-slate-400 hover:text-white">
-              <ArrowLeft className="w-5 h-5" />
-            </a>
-            <div className="flex items-center gap-2">
-              <ShieldAlert className="text-red-500 w-6 h-6" />
-              <h1 className="text-xl font-bold tracking-tighter uppercase">Admin <span className="text-red-500">Terminal</span></h1>
+    <div className="min-h-screen bg-cyber-dark text-slate-200 pb-20 relative overflow-hidden">
+      {/* Admin Background Ambience */}
+      <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-red-500/5 rounded-full blur-[120px] -z-10" />
+      <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-cyan-500/5 rounded-full blur-[120px] -z-10" />
+
+      <div className="max-w-7xl mx-auto px-6 pt-12 space-y-12 relative z-10">
+        <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8">
+          <div className="space-y-2">
+            <div className="flex items-center gap-3 mb-2 text-red-500">
+               <ShieldAlert className="w-5 h-5 shadow-[0_0_10px_rgba(239,68,68,0.5)]" />
+               <span className="text-[10px] font-black uppercase tracking-[0.2em]">Restricted Command Center</span>
             </div>
+            <h1 className="text-5xl lg:text-7xl font-black tracking-tighter text-white">
+              Master <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-orange-400">Control</span>
+            </h1>
+            <p className="text-slate-400 text-lg font-medium max-w-xl">Global system oversight, user authorization, and infrastructure management.</p>
           </div>
-          <div className="flex items-center gap-3 bg-red-500/10 border border-red-500/20 px-3 py-1 rounded-full">
-            <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-red-500">Elevated Privileges</span>
-          </div>
-        </div>
-      </nav>
 
-      <main className="container mx-auto px-6 py-12">
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-          <StatCard 
-            title="Total Users" 
-            value={stats?.totalUsers || 0} 
-            icon={Users} 
-            color="text-blue-400" 
-            sub="Platform reach"
-          />
-          <StatCard 
-            title="Platform Revenue" 
-            value={`$${stats?.totalRevenue || 0}`} 
-            icon={CreditCard} 
-            color="text-emerald-400" 
-            sub="Lifetime sales"
-          />
-          <StatCard 
-            title="Active Signals" 
-            value={stats?.activeSignals || 0} 
-            icon={Activity} 
-            color="text-cyan-400" 
-            sub="Live execution"
-          />
-          <StatCard 
-            title="Total Purchases" 
-            value={stats?.totalSales || 0} 
-            icon={CheckCircle2} 
-            color="text-purple-400" 
-            sub="Conversion count"
-          />
+          <div className="flex gap-4">
+             <Link to="/dashboard" className="glass-card px-8 py-4 flex items-center gap-3 hover:border-cyan-500/30 transition-all cursor-pointer group">
+                <ArrowLeft className="text-cyan-400 w-5 h-5 group-hover:scale-110 transition-transform" />
+                <span className="text-xs font-black uppercase tracking-widest text-white">Back to Dashboard</span>
+             </Link>
+          </div>
+        </header>
+
+        {/* System Health Overview */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+          <AdminStat title="Total Operators" value={users.length} icon={Users} color="text-cyan-400" />
+          <AdminStat title="Revenue (MTD)" value="$14,240" icon={TrendingUp} color="text-emerald-400" />
+          <AdminStat title="Active Signals" value="42" icon={Zap} color="text-yellow-400" />
+          <AdminStat title="Server Load" value="12%" icon={Activity} color="text-purple-400" />
         </div>
 
-        {/* User Management Section */}
-        <div className="bg-slate-900/50 border border-white/5 rounded-3xl overflow-hidden backdrop-blur-sm">
-          <div className="p-8 border-b border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-6">
+        {/* User Management Module */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass-card overflow-hidden border-white/5"
+        >
+          <div className="p-8 border-b border-white/5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white/[0.01]">
             <div>
-              <h2 className="text-2xl font-bold mb-1">User Management</h2>
-              <p className="text-slate-400 text-sm">Review, moderate, and manage all platform accounts.</p>
+               <h2 className="text-2xl font-black tracking-tight text-white">Operator Registry</h2>
+               <p className="text-slate-500 text-sm font-medium">Manage user permissions and monitor subscription health.</p>
             </div>
-            
-            <form onSubmit={handleSearch} className="relative group max-w-md w-full">
-              <input 
-                type="text" 
-                placeholder="Search by email..." 
-                className="w-full bg-slate-950/50 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/50 transition-all group-hover:border-white/20"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500 group-hover:text-slate-300 transition-colors" />
-            </form>
+            <div className="flex gap-2 p-1 bg-white/5 rounded-2xl">
+               <button className="px-4 py-2 bg-white text-black rounded-xl text-[10px] font-black uppercase tracking-widest transition-all">All</button>
+               <button className="px-4 py-2 hover:bg-white/5 text-slate-400 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all">Premium</button>
+               <button className="px-4 py-2 hover:bg-white/5 text-slate-400 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all">Trial</button>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="border-b border-white/5 bg-slate-950/30 text-[10px] uppercase tracking-widest font-bold text-slate-500">
-                  <th className="px-8 py-4">User</th>
-                  <th className="px-8 py-4">Status</th>
-                  <th className="px-8 py-4">Role</th>
-                  <th className="px-8 py-4 text-center">Purchases</th>
-                  <th className="px-8 py-4 text-right">Actions</th>
+                <tr className="bg-white/[0.02]">
+                  <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-500">Operator</th>
+                  <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-500">Clearance</th>
+                  <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-500">Active Plans</th>
+                  <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-500">Joint Date</th>
+                  <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-500 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {users.map((user) => (
-                  <tr key={user.id} className="hover:bg-white/[0.02] transition-colors group">
+                {users.map((u, idx) => (
+                  <motion.tr 
+                    key={u.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: idx * 0.05 }}
+                    className="hover:bg-white/[0.02] transition-colors group"
+                  >
                     <td className="px-8 py-6">
-                      <div className="font-medium text-slate-200">{user.email}</div>
-                      <div className="text-[10px] text-slate-500 mt-1 uppercase font-semibold">UID: {user.id}</div>
-                    </td>
-                    <td className="px-8 py-6">
-                      <span className={cn(
-                        "px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-tight",
-                        user.status === 'active' ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500"
-                      )}>
-                        {user.status}
-                      </span>
-                    </td>
-                    <td className="px-8 py-6">
-                      <span className={cn(
-                        "text-[10px] font-bold uppercase tracking-tight",
-                        user.role === 'admin' ? "text-purple-400" : "text-slate-400"
-                      )}>
-                        {user.role}
-                      </span>
-                    </td>
-                    <td className="px-8 py-6 text-center">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                        <span className="text-sm font-bold">{user.planCount}</span>
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-800 to-slate-900 border border-white/5 flex items-center justify-center text-sm font-bold text-white uppercase group-hover:border-cyan-500/30 transition-all">
+                          {u.email[0]}
+                        </div>
+                        <div className="font-bold text-white text-sm group-hover:text-cyan-400 transition-colors">{u.email}</div>
                       </div>
+                    </td>
+                    <td className="px-8 py-6">
+                      <div className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
+                        u.role === 'admin' ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-cyan-500/10 text-cyan-500 border border-cyan-500/20'
+                      }`}>
+                        {u.role}
+                      </div>
+                    </td>
+                    <td className="px-8 py-6">
+                      <div className="flex flex-wrap gap-2">
+                        {u.purchasedPlans?.length > 0 ? (
+                          u.purchasedPlans.map((p: string) => (
+                            <span key={p} className="text-[10px] font-bold text-slate-400 bg-white/5 py-1 px-2 rounded-lg border border-white/5">
+                              {p.split('_').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-[10px] text-slate-600 font-bold italic">No active clearance</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-8 py-6 text-sm text-slate-500 font-medium font-mono">
+                       {new Date(u.createdAt).toLocaleDateString()}
                     </td>
                     <td className="px-8 py-6 text-right">
-                      <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button 
-                          onClick={() => toggleStatus(user)}
-                          title={user.status === 'active' ? 'Suspend User' : 'Activate User'}
-                          className={cn(
-                            "p-2 rounded-lg transition-colors border border-white/5",
-                            user.status === 'active' ? "hover:bg-red-500/20 text-red-500" : "hover:bg-emerald-500/20 text-emerald-500"
-                          )}
-                        >
-                          {user.status === 'active' ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
-                        </button>
-                        <button 
-                          onClick={() => setEditingUser(user)}
-                          title="Edit User"
-                          className="p-2 rounded-lg hover:bg-blue-500/20 text-blue-400 transition-colors border border-white/5"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={() => deleteUser(user.id)}
-                          title="Delete User"
-                          className="p-2 rounded-lg hover:bg-orange-500/20 text-orange-400 transition-colors border border-white/5"
-                        >
-                          <UserMinus className="w-4 h-4" />
-                        </button>
-                      </div>
+                       <button 
+                        onClick={() => setSelectedUser(u)}
+                        className="p-3 bg-white/5 hover:bg-white text-slate-400 hover:text-black rounded-xl transition-all group/btn"
+                       >
+                          <Settings className="w-5 h-5 group-hover/btn:rotate-90 transition-transform duration-500" />
+                       </button>
                     </td>
-                  </tr>
+                  </motion.tr>
                 ))}
               </tbody>
             </table>
           </div>
-          
-          {users.length === 0 && !loading && (
-            <div className="p-12 text-center">
-              <XCircle className="w-12 h-12 text-slate-700 mx-auto mb-4" />
-              <div className="text-slate-500">No users found matching your search.</div>
-            </div>
-          )}
-        </div>
-      </main>
+        </motion.div>
+      </div>
 
-      {/* Edit User Modal */}
-      {editingUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-xl">
-          <div className="bg-slate-900 border border-white/10 rounded-3xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200 shadow-2xl shadow-black">
-            <div className="p-8 border-b border-white/5 flex justify-between items-center bg-slate-950/30">
-              <div>
-                <h3 className="text-xl font-bold">Manage Account</h3>
-                <p className="text-xs text-slate-500 mt-1 uppercase tracking-widest font-bold">{editingUser.email}</p>
+      {/* Account Settings Overlay */}
+      {selectedUser && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
+           <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="glass-card w-full max-w-xl p-8 shadow-2xl border-white/10"
+           >
+              <div className="flex justify-between items-start mb-8">
+                 <div>
+                    <h2 className="text-3xl font-black tracking-tight text-white mb-1">Modify Clearance</h2>
+                    <p className="text-slate-500 text-sm font-medium">{selectedUser.email}</p>
+                 </div>
+                 <button onClick={() => setSelectedUser(null)} className="p-2 hover:bg-white/5 rounded-xl transition-colors">
+                    <X className="text-slate-500" />
+                 </button>
               </div>
-              <button onClick={() => setEditingUser(null)} className="text-slate-500 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-full">
-                <XCircle className="w-6 h-6" />
-              </button>
-            </div>
-            
-            <div className="p-8 max-h-[70vh] overflow-y-auto space-y-8 custom-scrollbar">
-              {/* Plans Section */}
-              <section>
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <Activity className="w-4 h-4 text-purple-400" />
-                    <h4 className="text-xs font-bold text-slate-300 uppercase tracking-widest">Subscription Mastery</h4>
-                  </div>
-                  <button 
-                    onClick={() => setAddingPlan(!addingPlan)}
-                    className="text-[10px] font-bold text-cyan-400 uppercase tracking-tighter hover:text-cyan-300"
-                  >
-                    {addingPlan ? 'Cancel' : '+ Grant New Plan'}
-                  </button>
-                </div>
 
-                <div className="space-y-3">
-                  {addingPlan && (
-                    <div className="bg-cyan-500/5 border border-cyan-500/20 rounded-2xl p-2 animate-in slide-in-from-top-2 duration-300">
-                      <div className="grid grid-cols-1 gap-1">
-                        {availablePlans.map(plan => {
-                          const hasIt = userPlans.some(up => up.planId === plan.id);
-                          return (
-                            <button
-                              key={plan.id}
-                              disabled={hasIt}
-                              onClick={() => grantPlan(editingUser.id, plan.id)}
-                              className={cn(
-                                "flex items-center justify-between px-4 py-3 rounded-xl transition-all text-sm",
-                                hasIt ? "opacity-30 cursor-not-allowed bg-slate-950/50" : "hover:bg-cyan-500/10 text-slate-300 hover:text-cyan-400"
-                              )}
-                            >
-                              <span>{plan.name}</span>
-                              <CheckCircle2 className={cn("w-4 h-4", hasIt ? "text-slate-700" : "text-cyan-500 opacity-0 group-hover:opacity-100")} />
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="bg-slate-950/50 border border-white/5 rounded-2xl divide-y divide-white/5">
-                    {userPlans.length === 0 ? (
-                      <div className="p-8 text-center text-slate-500 text-sm">No active subscriptions</div>
-                    ) : (
-                      userPlans.map(plan => (
-                        <div key={plan.planId} className="flex items-center justify-between p-4 group">
-                          <div>
-                            <div className="text-sm font-bold uppercase tracking-tight text-slate-200">{plan.planId.replace('_', ' ')}</div>
-                            <div className="text-[10px] text-slate-500 font-mono mt-0.5">Granted: {new Date(plan.timestamp).toLocaleDateString()}</div>
-                          </div>
-                          <button 
-                            onClick={() => revokePlan(editingUser.id, plan.planId)}
-                            className="p-2 text-slate-600 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+              <div className="space-y-8">
+                 <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-4 block">Authorization Tier</label>
+                    <div className="grid grid-cols-2 gap-4">
+                       {['user', 'admin'].map(role => (
+                          <button
+                            key={role}
+                            onClick={() => handleRoleChange(selectedUser!.id, role)}
+                            className={`py-4 px-6 rounded-2xl text-xs font-black uppercase tracking-widest border transition-all ${
+                              selectedUser.role === role ? 'bg-cyan-500 text-white border-cyan-400 shadow-lg shadow-cyan-500/20' : 'bg-white/5 text-slate-500 border-white/5 hover:border-white/10'
+                            }`}
                           >
-                            <UserMinus className="w-4 h-4" />
+                             {role}
                           </button>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              </section>
+                       ))}
+                    </div>
+                 </div>
 
-              <div className="pt-4">
-                <button 
-                  onClick={() => setEditingUser(null)}
-                  className="w-full py-4 bg-white text-black font-bold rounded-2xl hover:bg-slate-200 transition-all hover:scale-[1.01] active:scale-95 shadow-xl shadow-white/5"
-                >
-                  Done Managing
-                </button>
+                 <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-4 block">Permitted Strategies</label>
+                    <div className="grid grid-cols-2 gap-3">
+                       {plans.map(plan => {
+                          const hasPlan = selectedUser?.purchasedPlans?.includes(plan.id);
+                          return (
+                             <button
+                                key={plan.id}
+                                onClick={() => handlePlanToggle(selectedUser!.id, plan.id, hasPlan || false)}
+                                className={`p-4 rounded-xl text-left border transition-all ${
+                                   hasPlan ? 'bg-purple-500/10 text-purple-400 border-purple-500/30' : 'bg-white/[0.02] text-slate-500 border-white/5 hover:border-white/10'
+                                }`}
+                             >
+                                <div className="text-[10px] font-black uppercase tracking-widest mb-1">{plan.id.replace('_', ' ')}</div>
+                                <div className="text-xs font-bold">{plan.name}</div>
+                             </button>
+                          );
+                       })}
+                    </div>
+                 </div>
               </div>
-            </div>
-          </div>
+
+              <button 
+                onClick={() => setSelectedUser(null)}
+                className="w-full h-14 bg-white text-black rounded-2xl mt-12 font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all"
+              >
+                 Commit Changes
+              </button>
+           </motion.div>
         </div>
       )}
     </div>
   );
 }
 
-function StatCard({ title, value, icon: Icon, color, sub }: any) {
+function AdminStat({ title, value, icon: Icon, color }: any) {
   return (
-    <div className="p-6 bg-slate-900/50 border border-white/5 rounded-3xl relative overflow-hidden group hover:border-white/10 transition-colors">
-      <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 group-hover:scale-125 transition-all">
-        <Icon className={cn("w-16 h-16", color)} />
+    <div className="glass-card p-8 group hover:border-white/20 transition-all relative overflow-hidden">
+      <div className="absolute -right-4 -bottom-4 opacity-[0.03] group-hover:opacity-[0.08] group-hover:scale-110 transition-all duration-700">
+        <Icon size={120} />
       </div>
       <div className="relative z-10">
-        <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">{title}</div>
-        <div className={cn("text-3xl font-bold mb-1 tracking-tighter", color)}>{value}</div>
-        <div className="text-[10px] text-slate-500 uppercase font-semibold">{sub}</div>
+        <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mb-2">{title}</div>
+        <div className={`text-4xl font-black tracking-tighter ${color}`}>{value}</div>
       </div>
     </div>
   );

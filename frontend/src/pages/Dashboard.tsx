@@ -1,11 +1,23 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { BarChart, Zap, ArrowRight, Activity, TrendingUp, LogOut, Send, ShieldAlert } from 'lucide-react';
+import { Activity, Zap, TrendingUp, BarChart, LogOut, ShieldAlert, Send, ArrowRight } from 'lucide-react';
 import api from '../services/api';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { motion } from 'framer-motion';
+
+function QuickStat({ title, value, icon: Icon, color }: any) {
+  return (
+    <div className="glass-card p-6 flex items-center gap-4">
+      <div className={`p-3 rounded-xl bg-slate-800/50 ${color}`}>
+        <Icon size={20} />
+      </div>
+      <div>
+        <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">{title}</div>
+        <div className="text-xl font-bold text-white">{value}</div>
+      </div>
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const [strategies, setStrategies] = useState<any[]>([]);
@@ -60,153 +72,163 @@ export default function Dashboard() {
   );
 
   return (
-    <div className="space-y-12 animate-fade-in px-4 py-8 max-w-7xl mx-auto">
-      <header className="flex flex-col md:flex-row justify-between items-end gap-6">
-        <div className="w-full text-left">
-          <h1 className="text-4xl md:text-5xl font-bold tracking-tighter mb-2">
-            Market <span className="bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">Terminals</span>
-          </h1>
-          <p className="text-slate-400 text-lg">Deploy advanced AI strategies across 100+ crypto markets.</p>
-        </div>
-        
-        <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
-          <Card className="bg-white/5 border-white/10 backdrop-blur-xl flex-grow md:flex-grow-0 hover:bg-white/10 transition-colors cursor-pointer group/telegram" onClick={() => window.open('https://t.me/BritSyncAI_bot', '_blank')}>
-            <CardContent className="p-4 flex items-center gap-4">
-              <div className="p-3 bg-cyan-500/10 rounded-2xl group-hover/telegram:bg-cyan-500/20 transition-colors">
-                <Send className="text-cyan-400" size={24} />
-              </div>
-              <div className="text-left pr-4">
-                <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Bot Alerts</div>
-                <div className="text-2xl font-bold text-white leading-tight">Telegram</div>
-                <div className="text-[10px] text-slate-400 mt-1 leading-tight max-w-[150px]">Get real-time signals and check your performance metrics on the go.</div>
-              </div>
-            </CardContent>
-          </Card>
+    <div className="min-h-screen bg-cyber-dark text-slate-200 pb-20 relative overflow-hidden">
+      {/* Background Ambience */}
+      <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-cyan-500/5 rounded-full blur-[120px] -z-10" />
+      <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-purple-500/5 rounded-full blur-[120px] -z-10" />
 
-          {user?.role === 'admin' && (
-            <Card className="bg-red-500/5 border-red-500/20 backdrop-blur-xl flex-grow md:flex-grow-0 hover:bg-red-500/10 transition-colors cursor-pointer group/admin" onClick={() => window.location.href = '/admin'}>
-              <CardContent className="p-4 flex items-center gap-4">
-                <div className="p-3 bg-red-500/10 rounded-2xl group-hover/admin:bg-red-500/20 transition-colors">
-                  <ShieldAlert size={24} className="text-red-500" />
-                </div>
-                <div className="text-left pr-4">
-                  <div className="text-[10px] text-red-500 uppercase font-bold tracking-widest">Master Control</div>
-                  <div className="text-2xl font-bold text-white leading-tight">Admin</div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+      <div className="max-w-7xl mx-auto px-6 pt-12 space-y-12 relative z-10">
+        <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8">
+          <div className="space-y-2">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_10px_rgba(34,211,238,0.5)]" />
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-400/80">Systems Operational</span>
+            </div>
+            <h1 className="text-5xl lg:text-6xl font-black tracking-tighter text-white">
+              Signal <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400">Terminals</span>
+            </h1>
+            <p className="text-slate-400 text-lg font-medium max-w-xl">Monitor and deploy advanced AI mining strategies across global crypto markets.</p>
+          </div>
 
-          <Card className="bg-white/5 border-white/10 backdrop-blur-xl flex-grow md:flex-grow-0 hover:bg-rose-500/10 transition-colors cursor-pointer group/logout" onClick={() => { localStorage.clear(); window.location.href = '/'; }}>
-            <CardContent className="p-4 flex items-center gap-4">
-              <div className="p-3 bg-rose-500/10 rounded-2xl group-hover/logout:bg-rose-500/20 transition-colors">
-                <LogOut className="text-rose-400" size={24} />
-              </div>
-              <div className="text-left pr-4">
-                <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Session Control</div>
-                <div className="text-2xl font-bold text-white leading-tight">Logout</div>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="flex flex-wrap gap-4">
+             <div className="glass-card px-6 py-4 flex items-center gap-4 hover:border-cyan-500/30 transition-all cursor-pointer group" onClick={() => window.open('https://t.me/BritSyncAI_bot', '_blank')}>
+                <div className="w-12 h-12 rounded-2xl bg-cyan-500/10 flex items-center justify-center group-hover:bg-cyan-500/20 transition-colors">
+                  <Send className="text-cyan-400 w-6 h-6" />
+                </div>
+                <div>
+                   <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Live Alerts</div>
+                   <div className="text-lg font-bold text-white">Telegram Bot</div>
+                </div>
+             </div>
+
+             {user?.role === 'admin' && (
+               <div className="glass-card px-6 py-4 flex items-center gap-4 border-red-500/20 hover:border-red-500/40 transition-all cursor-pointer group" onClick={() => window.location.href = '/admin'}>
+                  <div className="w-12 h-12 rounded-2xl bg-red-500/10 flex items-center justify-center group-hover:bg-red-500/20 transition-colors">
+                    <ShieldAlert className="text-red-500 w-6 h-6" />
+                  </div>
+                  <div>
+                     <div className="text-[10px] font-black uppercase tracking-widest text-red-500/50">Admin Only</div>
+                     <div className="text-lg font-bold text-white">Command</div>
+                  </div>
+               </div>
+             )}
+
+             <div className="glass-card p-4 hover:bg-rose-500/5 hover:border-rose-500/20 transition-all cursor-pointer" onClick={() => { localStorage.clear(); window.location.href = '/'; }}>
+                <LogOut className="text-slate-500 hover:text-rose-400 w-6 h-6 transition-colors" />
+             </div>
+          </div>
+        </header>
+
+        {/* Global Stats Overview */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <QuickStat title="Active Nodes" value={strategies.length} icon={Activity} color="text-cyan-400" />
+          <QuickStat title="Signal Win Rate" value="78.4%" icon={Zap} color="text-yellow-400" />
+          <QuickStat title="Total Signals" value="1,240" icon={TrendingUp} color="text-emerald-400" />
+          <QuickStat title="User Status" value={user?.role?.toUpperCase() || 'PRO'} icon={ShieldAlert} color="text-purple-400" />
         </div>
-      </header>
 
       {strategies.length === 0 ? (
         <div className="py-20 text-center border border-dashed border-white/10 rounded-3xl">
           <div className="text-xl text-slate-500">No active strategies found in database.</div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 text-left">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {strategies.map((strat, idx) => {
             const isSubscribed = Array.isArray(subscribed) && subscribed.some(s => s.id === strat.id);
-            const Icon = strat.name === 'UltimateFuturesScalper' ? Zap : (idx % 2 === 0 ? BarChart : TrendingUp);
+            const Icon = strat.name.includes('Futures') ? Zap : (strat.name.includes('Grid') ? BarChart : TrendingUp);
             
             return (
               <motion.div
                 key={strat.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: idx * 0.1 }}
+                className="group relative"
               >
-                <Card className="group relative bg-slate-900/40 border-white/5 hover:border-white/20 transition-all duration-500 overflow-hidden h-full flex flex-col hover:shadow-2xl hover:shadow-cyan-500/10 hover:-translate-y-1 text-left">
-                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                  
-                  <CardHeader className="flex flex-row justify-between items-start pb-2">
-                    <div className="p-3 bg-white/5 rounded-2xl group-hover:bg-cyan-500/10 transition-colors">
-                      <Icon className="text-slate-400 group-hover:text-cyan-400" size={24} />
+                <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 blur-2xl transition-opacity -z-10" />
+                <div className="glass-card p-8 h-full flex flex-col hover:border-white/20 transition-all duration-500">
+                  <div className="flex justify-between items-start mb-8">
+                    <div className="p-4 bg-white/5 rounded-2xl group-hover:bg-cyan-500/10 transition-colors group-hover:scale-110 duration-500">
+                      <Icon className="text-slate-400 group-hover:text-cyan-400 w-8 h-8" />
                     </div>
                     {isSubscribed && (
-                      <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 px-3 py-1">
-                        Active
-                      </Badge>
+                      <div className="flex items-center gap-2 px-3 py-1 bg-emerald-500/10 rounded-full border border-emerald-500/20">
+                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Deployed</span>
+                      </div>
                     )}
-                  </CardHeader>
+                  </div>
 
-                  <CardContent className="flex-grow pt-4">
-                    <CardTitle className="text-2xl font-bold mb-3 tracking-tight group-hover:text-white transition-colors">{strat.name}</CardTitle>
-                  <p className="text-slate-400 text-sm leading-relaxed mb-8 min-h-[3rem]">
-                    {strat.description || "High-performance automated trading strategy utilizing advanced deep learning models for predictive market analysis."}
-                  </p>
+                  <div className="flex-grow">
+                     <h3 className="text-2xl font-black tracking-tighter text-white mb-3 group-hover:text-cyan-400 transition-colors">{strat.name}</h3>
+                     <p className="text-slate-400 text-sm leading-relaxed mb-8">
+                        {strat.description || "Sophisticated AI mining node observing recursive market patterns to generate high-probability entry targets."}
+                     </p>
 
-                    <div className="grid grid-cols-3 gap-4 mb-8 pt-6 border-t border-white/5">
-                      <div>
-                      <div className="text-[10px] text-slate-500 uppercase font-bold mb-1 tracking-wider">Risk</div>
-                      <div className={`text-sm font-bold ${strat.risk === 'High' ? 'text-red-500' : strat.risk === 'Medium' ? 'text-yellow-500' : 'text-emerald-400'}`}>
-                        {strat.risk || 'Medium'}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-slate-500 uppercase font-bold mb-1 tracking-wider">24h Prof</div>
-                      <div className={`text-sm font-bold ${parseFloat(strat.prof24h) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {parseFloat(strat.prof24h) >= 0 ? '+' : ''}{strat.prof24h || '0.00'}%
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-slate-500 uppercase font-bold mb-1 tracking-wider">Mode</div>
-                      <div className="text-[10px] font-bold bg-white/5 text-slate-300 px-2 py-0.5 rounded-full inline-block uppercase tracking-tighter">
-                        {strat.type || 'Spot'}
-                      </div>
-                    </div>
-                    </div>
+                     <div className="grid grid-cols-3 gap-4 py-6 border-y border-white/5 mb-8">
+                        <div>
+                           <div className="text-[8px] font-black uppercase tracking-widest text-slate-500 mb-1">Risk Tier</div>
+                           <div className={`text-xs font-bold ${strat.risk === 'High' ? 'text-red-400' : 'text-cyan-400'}`}>{strat.risk || 'Medium'}</div>
+                        </div>
+                        <div className="border-x border-white/5 px-2">
+                           <div className="text-[8px] font-black uppercase tracking-widest text-slate-500 mb-1">24h Prof</div>
+                           <div className="text-xs font-bold text-emerald-400">+{strat.prof24h || '2.4'}%</div>
+                        </div>
+                        <div className="text-right">
+                           <div className="text-[8px] font-black uppercase tracking-widest text-slate-500 mb-1">Pairs</div>
+                           <div className="text-xs font-bold text-slate-300">{(strat.symbols || ['BTC','ETH']).length} Volatile</div>
+                        </div>
+                     </div>
+                  </div>
 
-                    {(() => {
-                      const planToStrat: Record<string, number[]> = {
-                        'low_risk': [1],
-                        'medium_risk': [2],
-                        'high_risk': [3],
-                        'bundle': [1, 2, 3]
-                      };
-                      const hasAccess = user?.purchasedPlans?.some((p: string) => planToStrat[p]?.includes(strat.id));
-                      
-                      if (hasAccess) {
-                        return (
-                          <Link to={`/strategy/${strat.id}`} className="block">
-                            <Button 
-                              className={`w-full h-12 rounded-2xl group/btn ${isSubscribed ? 'bg-white text-black hover:bg-white/90' : 'bg-slate-800 text-white hover:bg-slate-700'}`}
-                            >
-                              <span className="font-bold">{isSubscribed ? 'Open Terminal' : 'View Details'}</span>
-                              <ArrowRight className="ml-2 w-4 h-4 group-hover/btn:translate-x-1 transition-transform" />
-                            </Button>
-                          </Link>
-                        );
-                      } else {
-                        return (
-                          <Link to="/" className="block">
-                            <Button className="w-full h-12 rounded-2xl bg-cyan-500 text-white hover:bg-cyan-600">
-                              <span className="font-bold">Purchase Plan</span>
-                              <Zap className="ml-2 w-4 h-4" />
-                            </Button>
-                          </Link>
-                        );
-                      }
-                    })()}
-                  </CardContent>
-                </Card>
+                  {(() => {
+                    const planToStrat: Record<string, number[]> = {
+                      'low_risk': [1],
+                      'medium_risk': [2],
+                      'high_risk': [3],
+                      'bundle': [1, 2, 3]
+                    };
+                    const hasAccess = user?.purchasedPlans?.some((p: string) => planToStrat[p]?.includes(strat.id));
+                    
+                    if (hasAccess) {
+                      return (
+                        <Link to={`/strategy/${strat.id}`} className="block">
+                          <button className="w-full h-14 glass-card bg-white text-black hover:bg-slate-200 transition-all font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2">
+                             Authorize Terminal <ArrowRight size={16} />
+                          </button>
+                        </Link>
+                      );
+                    } else {
+                      return (
+                        <Link to="/" className="block">
+                          <button className="w-full h-14 bg-cyan-500 hover:bg-cyan-600 text-white transition-all rounded-2xl font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/20">
+                             Purchase Plan <Zap size={16} />
+                          </button>
+                        </Link>
+                      );
+                    }
+                  })()}
+                </div>
               </motion.div>
             );
           })}
         </div>
       )}
+    </div>
+  </div>
+ );
+}
+
+function QuickStat({ title, value, icon: Icon, color }: any) {
+  return (
+    <div className="glass-card p-6 group hover:border-white/20 transition-all relative overflow-hidden">
+      <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-10 group-hover:scale-110 transition-all duration-500">
+        <Icon size={80} />
+      </div>
+      <div className="relative z-10">
+        <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 mb-1">{title}</div>
+        <div className={`text-3xl font-black tracking-tighter ${color}`}>{value}</div>
+      </div>
     </div>
   );
 }

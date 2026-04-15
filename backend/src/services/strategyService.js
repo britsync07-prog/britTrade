@@ -52,6 +52,7 @@ class StrategyService {
   constructor() {
     this.runningProcesses = new Map();
     this.lastSignals = {}; 
+    this.latestPrices = {};
     this.configs = this.loadConfigs();
     this.startSignalTracker();
   }
@@ -60,16 +61,21 @@ class StrategyService {
     setInterval(async () => {
       try {
         const activeSignals = await db.query("SELECT * FROM signals WHERE status = 'active'");
-        if (activeSignals.length === 0) return;
-
-        // Group by symbol to minimize price fetches
-        const symbols = [...new Set(activeSignals.map(s => s.symbol))];
+        
+        // Build unique list of all symbols from configs + active signals
+        const configSymbols = Object.values(this.configs).flatMap(c => c.symbols);
+        const symbols = [...new Set([...configSymbols, ...activeSignals.map(s => s.symbol)])];
+        
         const prices = {};
         for (const s of symbols) {
           try {
             const data = await this.fetchOHLC(s, '1m');
             prices[s] = data.price;
-          } catch (pe) {}
+            this.latestPrices[s] = data.price;
+          } catch (pe) {
+            // Log once if a symbol fails
+            if (Math.random() < 0.05) console.error(`[Price Fetch] Failed for ${s}:`, pe.message);
+          }
         }
 
         for (const sig of activeSignals) {
@@ -318,11 +324,29 @@ class StrategyService {
                };
 
                const isEntry = ['buy', 'long', 'short'].includes(signalSide.toLowerCase());
-               const initialStatus = isEntry ? 'active' : 'completed';
+               let pnl = 0;
+               let finalStatus = isEntry ? 'active' : 'completed';
+
+               if (!isEntry) {
+                 // Try to find last active entry for this symbol/strategy
+                 const lastEntry = await db.get(
+                   "SELECT id, price, side FROM signals WHERE strategyId = ? AND symbol = ? AND status = 'active' ORDER BY timestamp DESC LIMIT 1",
+                   [id, symbol]
+                 );
+                 if (lastEntry) {
+                   if (lastEntry.side === 'buy' || lastEntry.side === 'long') {
+                     pnl = ((currentPrice - lastEntry.price) / lastEntry.price) * 100;
+                   } else {
+                     pnl = ((lastEntry.price - currentPrice) / lastEntry.price) * 100;
+                   }
+                   // Close the entry signal
+                   await db.run("UPDATE signals SET status = 'closed', pnl = ? WHERE id = ?", [pnl, lastEntry.id]);
+                 }
+               }
 
                await db.run(
-                 "INSERT INTO signals (strategyId, symbol, side, price, tp, sl, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                 [signal.strategyId, signal.symbol, signal.side, signal.price, signal.tp, signal.sl, initialStatus]
+                 "INSERT INTO signals (strategyId, symbol, side, price, tp, sl, status, pnl) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                 [signal.strategyId, signal.symbol, signal.side, signal.price, signal.tp, signal.sl, finalStatus, pnl]
                );
 
                // Only broadcast Entry signals to Telegram from here. 
@@ -398,6 +422,10 @@ class StrategyService {
       console.error('Binance API error parsing historical charts:', e);
       return [];
     }
+  }
+
+  async getPrices() {
+    return this.latestPrices;
   }
 }
 

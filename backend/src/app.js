@@ -94,6 +94,13 @@ app.post('/auth/purchase', authMiddleware, async (req, res, next) => {
 });
 
 // --- Strategy Management ---
+app.get('/strategies/prices', authMiddleware, async (req, res, next) => {
+  try {
+    const prices = await strategyService.getPrices();
+    res.json(prices);
+  } catch (e) { next(e); }
+});
+
 app.get('/strategies', authMiddleware, async (req, res, next) => {
   try {
     const strategies = await strategyService.getAll();
