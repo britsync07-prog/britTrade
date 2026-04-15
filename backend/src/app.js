@@ -22,7 +22,27 @@ app.use((req, res, next) => {
 });
 
 app.use(cors({
-  origin: true, // Allow all origins for now to fix connection issues
+  origin: (origin, callback) => {
+    // In production, strictly check the allowed origins
+    const allowedPatterns = [
+      /https:\/\/.*\.netlify\.app/,
+      /https:\/\/.*\.pages\.dev/,
+      /https:\/\/trade\.mayfairmarketing\.online/,
+      /https:\/\/brittrade\.pages\.dev/
+    ];
+    
+    if (!origin || process.env.NODE_ENV !== 'production') {
+      return callback(null, true);
+    }
+    
+    const isAllowed = allowedPatterns.some(pattern => pattern.test(origin));
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      console.warn(`[CORS Blocked] Origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
 
