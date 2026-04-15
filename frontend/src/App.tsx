@@ -7,6 +7,7 @@ import { Code, Clock, Activity, Shield, TrendingUp, Coins, Rocket, Layers } from
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import StrategyDetail from './pages/StrategyDetail';
+import AdminDashboard from './pages/AdminDashboard';
 import api from './services/api';
 
 const services: Service[] = [
@@ -246,6 +247,10 @@ function App() {
         <Route 
           path="/strategy/:id" 
           element={user ? <StrategyDetail /> : <Navigate to="/login" />} 
+        />
+        <Route 
+          path="/admin" 
+          element={user?.role === 'admin' ? <AdminDashboard /> : <Navigate to="/dashboard" />} 
         />
       </Routes>
     </Router>

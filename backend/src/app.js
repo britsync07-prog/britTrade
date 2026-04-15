@@ -11,6 +11,7 @@ const paperService = require('./services/paperService');
 const telegramService = require('./services/telegramService');
 const authMiddleware = require('./routes/authMiddleware');
 const paymentRoutes = require('./routes/paymentRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 
 const PORT = process.env.PORT || 7286;
 const app = express();
@@ -51,6 +52,7 @@ app.use(cors({
 }));
 
 app.use('/payments', paymentRoutes);
+app.use('/admin', adminRoutes);
 
 app.use(express.json());
 

@@ -19,7 +19,7 @@ module.exports = async (req, res, next) => {
 
     try {
       const decoded = jwt.verify(token, SECRET);
-      const user = await db.get("SELECT id FROM users WHERE id = ?", [decoded.id]);
+      const user = await db.get("SELECT id, role, status FROM users WHERE id = ?", [decoded.id]);
       
       if (!user) {
         console.warn(`[Auth] Ghost user ${decoded.id} - DB reset?`);
@@ -29,8 +29,13 @@ module.exports = async (req, res, next) => {
           redirect: '/auth/signup'
         });
       }
+
+      if (user.status === 'suspended') {
+        return res.status(403).json({ error: 'Your account has been suspended. Please contact support.' });
+      }
       
-      req.userId = decoded.id;
+      req.userId = user.id;
+      req.userRole = user.role;
       next();
     } catch (err) {
       return res.status(401).json({ error: 'Invalid session. Please login.' });

@@ -13,16 +13,31 @@ const initDb = () => {
         email TEXT UNIQUE NOT NULL,
         password TEXT NOT NULL,
         telegramId TEXT,
-        balance REAL DEFAULT 10000.0
+        balance REAL DEFAULT 10000.0,
+        role TEXT DEFAULT 'user',
+        status TEXT DEFAULT 'active'
       )`, (err) => {
         if (err) return reject(err);
         
+        // Migration: Ensure role/status columns exist
+        db.all("PRAGMA table_info(users)", (err, rows) => {
+          if (err) return;
+          const hasRole = rows.some(r => r.name === 'role');
+          if (!hasRole) {
+            db.run("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'");
+            db.run("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'");
+          }
+        });
+
         // Seed first user if empty
         db.get("SELECT count(*) as count FROM users", (err, row) => {
           if (!err && row && row.count === 0) {
-            console.log('Seeding initial user: mehedy303@gmail.com');
-            db.run("INSERT INTO users (email, password, balance) VALUES (?, ?, ?)", 
-              ['mehedy303@gmail.com', '$2b$10$R/mdOipHB1McLKD.FDwCr.BkVzcYpFeS7xOQScxOhRr9iLXhJnKrm', 10000.0]);
+            console.log('Seeding initial admin: mehedy303@gmail.com');
+            db.run("INSERT INTO users (email, password, balance, role) VALUES (?, ?, ?, ?)", 
+              ['mehedy303@gmail.com', '$2b$10$R/mdOipHB1McLKD.FDwCr.BkVzcYpFeS7xOQScxOhRr9iLXhJnKrm', 10000.0, 'admin']);
+          } else {
+            // Ensure first user is admin even if already exists
+            db.run("UPDATE users SET role = 'admin' WHERE email = ?", ['mehedy303@gmail.com']);
           }
         });
       });

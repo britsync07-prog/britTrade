@@ -26,12 +26,14 @@ class AuthService {
     const isValid = await bcrypt.compare(password, user.password);
     if (!isValid) throw new Error("Invalid password");
 
-    const token = jwt.sign({ id: user.id, email: user.email }, SECRET, { expiresIn: '24h' });
-    return { token, user: { id: user.id, email: user.email } };
+    if (user.status === 'suspended') throw new Error("Account suspended. Contact support.");
+
+    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, SECRET, { expiresIn: '24h' });
+    return { token, user: { id: user.id, email: user.email, role: user.role } };
   }
 
   async me(userId) {
-    const user = await db.get("SELECT id, email, telegramId, balance FROM users WHERE id = ?", [userId]);
+    const user = await db.get("SELECT id, email, telegramId, balance, role, status FROM users WHERE id = ?", [userId]);
     if (!user) return null;
     const purchases = await db.query("SELECT planId FROM purchases WHERE userId = ?", [userId]);
     user.purchasedPlans = purchases.map(p => p.planId);

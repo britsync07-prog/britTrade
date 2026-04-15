@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { BarChart, Zap, ArrowRight, Activity, TrendingUp, LogOut, Send } from 'lucide-react';
+import { BarChart, Zap, ArrowRight, Activity, TrendingUp, LogOut, Send, ShieldAlert } from 'lucide-react';
 import api from '../services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -82,6 +82,20 @@ export default function Dashboard() {
               </div>
             </CardContent>
           </Card>
+
+          {user?.role === 'admin' && (
+            <Card className="bg-red-500/5 border-red-500/20 backdrop-blur-xl flex-grow md:flex-grow-0 hover:bg-red-500/10 transition-colors cursor-pointer group/admin" onClick={() => window.location.href = '/admin'}>
+              <CardContent className="p-4 flex items-center gap-4">
+                <div className="p-3 bg-red-500/10 rounded-2xl group-hover/admin:bg-red-500/20 transition-colors">
+                  <ShieldAlert size={24} className="text-red-500" />
+                </div>
+                <div className="text-left pr-4">
+                  <div className="text-[10px] text-red-500 uppercase font-bold tracking-widest">Master Control</div>
+                  <div className="text-2xl font-bold text-white leading-tight">Admin</div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <Card className="bg-white/5 border-white/10 backdrop-blur-xl flex-grow md:flex-grow-0 hover:bg-rose-500/10 transition-colors cursor-pointer group/logout" onClick={() => { localStorage.clear(); window.location.href = '/'; }}>
             <CardContent className="p-4 flex items-center gap-4">
