@@ -5,19 +5,6 @@ import api from '../services/api';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
 
-function QuickStat({ title, value, icon: Icon, color }: any) {
-  return (
-    <div className="glass-card p-6 flex items-center gap-4">
-      <div className={`p-3 rounded-xl bg-slate-800/50 ${color}`}>
-        <Icon size={20} />
-      </div>
-      <div>
-        <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">{title}</div>
-        <div className="text-xl font-bold text-white">{value}</div>
-      </div>
-    </div>
-  );
-}
 
 export default function Dashboard() {
   const [strategies, setStrategies] = useState<any[]>([]);
