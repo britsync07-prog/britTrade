@@ -1,5 +1,3 @@
-import React from 'react';
-
 export default function TradingViewChart() {
   return (
     <div className="container mx-auto px-6 mb-20 relative z-20">
