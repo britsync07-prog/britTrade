@@ -49,19 +49,9 @@ export default function AdminDashboard() {
     try {
       setLoading(true);
       const res = await api.get('/admin/users');
-      // Ensure res.data is an array before setting
-      if (Array.isArray(res.data)) {
-        setUsers(res.data);
-      } else {
-        console.error('Invalid response format for users list', res.data);
-        setUsers([]);
-      }
-    } catch (e: any) {
+      setUsers(res.data);
+    } catch (e) {
       console.error('Failed to fetch admin data', e);
-      // Alert the user to API connection failures
-      if (e.message?.includes('Network Error')) {
-        alert('Could not connect to the backend. Please check if the server is running on http://localhost:7286');
-      }
     } finally {
       setLoading(false);
     }
@@ -70,8 +60,8 @@ export default function AdminDashboard() {
   const handleRoleChange = async (userId: number, role: string) => {
     try {
       await api.put(`/admin/users/${userId}`, { role });
-      setUsers(prev => prev.map(u => u.id === userId ? { ...u, role } : u));
-      setSelectedUser(prev => prev && prev.id === userId ? { ...prev, role } : prev);
+      fetchData();
+      setSelectedUser(prev => prev ? { ...prev, role } : null);
     } catch (e) {
       alert('Failed to update role');
     }
@@ -109,23 +99,10 @@ export default function AdminDashboard() {
       } else {
         await api.post(`/admin/users/${userId}/purchases`, { planId });
       }
-      
-      // Update both the users list and the selectedUser modal state immediately for perfect reactivity
-      const updatePlans = (currentPlans: string[] = []) => 
-        hasPlan ? currentPlans.filter(p => p !== planId) : [...currentPlans, planId];
-
-      setUsers(prev => prev.map(u => 
-        u.id === userId ? { ...u, purchasedPlans: updatePlans(u.purchasedPlans) } : u
-      ));
-
-      setSelectedUser(prev => 
-        prev && prev.id === userId ? { ...prev, purchasedPlans: updatePlans(prev.purchasedPlans) } : prev
-      );
-
+      fetchData();
       fetchStats();
     } catch (e) {
-      console.error('Plan update error:', e);
-      alert('Failed to update plan. Make sure the server is responsive.');
+      alert('Failed to update plan');
     }
   };
 

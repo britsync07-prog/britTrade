@@ -17,32 +17,20 @@ const adminMiddleware = (req, res, next) => {
 router.get('/users', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const q = req.query.q || '';
-    console.log(`[Admin API] Fetching users matching "${q}"`);
-    
     const users = await db.query(
       "SELECT id, email, balance, role, status, createdAt FROM users WHERE email LIKE ? ORDER BY id DESC",
       [`%${q}%`]
     );
 
-    console.log(`[Admin API] Found ${users.length} users`);
-
     // Enrich with actual plans
     for (let user of users) {
-      try {
-        const purchases = await db.query("SELECT planId FROM purchases WHERE userId = ?", [user.id]);
-        user.purchasedPlans = purchases.map(p => p.planId) || [];
-        user.planCount = purchases.length;
-        console.log(`[Admin API] User ${user.email} (ID: ${user.id}) has ${user.purchasedPlans.length} plans`);
-      } catch (enrichErr) {
-        console.error(`[Admin API] Enrichment failed for user ${user.id}:`, enrichErr.message);
-        user.purchasedPlans = [];
-        user.planCount = 0;
-      }
+      const purchases = await db.query("SELECT planId FROM purchases WHERE userId = ?", [user.id]);
+      user.purchasedPlans = purchases.map(p => p.planId);
+      user.planCount = purchases.length;
     }
 
     res.json(users);
   } catch (e) {
-    console.error('[Admin API] GET /users failed:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -68,18 +56,9 @@ router.post('/users', authMiddleware, adminMiddleware, async (req, res) => {
 router.put('/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const { role, status, balance } = req.body;
-    
-    // Fetch current user data to preserve existing values if they're not in the request body
-    const currentUser = await db.get("SELECT role, status, balance FROM users WHERE id = ?", [req.params.id]);
-    if (!currentUser) return res.status(404).json({ error: 'User not found' });
-
-    const finalRole = role !== undefined ? role : currentUser.role;
-    const finalStatus = status !== undefined ? status : currentUser.status;
-    const finalBalance = balance !== undefined ? balance : currentUser.balance;
-
     await db.run(
       "UPDATE users SET role = ?, status = ?, balance = ? WHERE id = ?",
-      [finalRole, finalStatus, finalBalance, req.params.id]
+      [role, status, balance, req.params.id]
     );
     res.json({ message: 'User updated' });
   } catch (e) {
