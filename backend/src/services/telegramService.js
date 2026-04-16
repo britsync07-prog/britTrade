@@ -48,6 +48,17 @@ function formatExitMessage(strategyName, signal) {
 // ─── Bot Setup ────────────────────────────────────────────────────────────────
 if (token && token !== 'your_telegram_bot_token_here') {
   bot = new TelegramBot(token, { polling: { interval: 1000, autoStart: false, params: { timeout: 10 } } });
+  
+  // Suppress and handle polling errors (e.g. 409 Conflict when multiple backends run)
+  bot.on('polling_error', (err) => {
+    if (err && err.message && err.message.includes('409')) {
+      console.log('[Telegram] Polling conflict detected (409). Another bot instance is polling. Stopping polling on this instance silently so they can coexist.');
+      bot.stopPolling();
+    } else {
+      console.log(`[Telegram] Polling Error: ${err.message}`);
+    }
+  });
+
   bot.startPolling({ restart: false, dropPendingUpdates: true });
   console.log('[Telegram] Bot initialized: @BritSyncAI_bot');
 
