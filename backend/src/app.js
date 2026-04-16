@@ -34,14 +34,19 @@ app.use(cors({
       /https:\/\/.*\.pages\.dev/,
       /https:\/\/trade\.mayfairmarketing\.online/,
       /https:\/\/brittrade\.pages\.dev/,
-      /https:\/\/brittrade\.britsync\.co\.uk/
+      /https:\/\/brittrade\.britsync\.co\.uk/,
+      /https:\/\/brittrade\.britsync\.co\.uk\/?$/
     ];
     
+    // Always allow if no origin (like mobile apps or curl) or not in production
     if (!origin || process.env.NODE_ENV !== 'production') {
       return callback(null, true);
     }
     
-    const isAllowed = allowedPatterns.some(pattern => pattern.test(origin));
+    const isAllowed = allowedPatterns.some(pattern => pattern.test(origin)) || 
+                     origin.includes('britsync.co.uk') || 
+                     origin.includes('pages.dev');
+
     if (isAllowed) {
       callback(null, true);
     } else {
