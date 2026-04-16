@@ -100,12 +100,16 @@ export default function StrategyDetail() {
     </div>
   );
 
-  const sigs = Array.isArray(signalsData) ? signalsData : (signalsData.signals || []);
-  const closedSigs = sigs.filter((s:any) => s.status !== 'active');
-  
-  // Refined Win/Loss logic
-  const winSigs = closedSigs.filter((s:any) => s.status === 'tp_hit' || (s.status === 'completed' && s.pnl > 0.01) || (s.status === 'closed' && s.pnl > 0));
-  const lossSigs = closedSigs.filter((s:any) => s.status === 'sl_hit' || (s.status === 'completed' && s.pnl < -0.01) || (s.status === 'closed' && s.pnl < 0));
+  const sigs = signalsData.signals || [];
+  const closedStatuses = ['completed', 'tp_hit', 'sl_hit'];
+  // Filter for real entries only (BUY, LONG, SHORT) that have finished. 
+  // We ignore 'cover' or 'sell' signals that don't represent a primary entry point.
+  const closedSigs = sigs.filter((s:any) => 
+    closedStatuses.includes(s.status) && 
+    ['buy', 'long', 'short'].includes(s.side.toLowerCase())
+  );
+  const winSigs = closedSigs.filter((s:any) => s.status === 'tp_hit');
+  const lossSigs = closedSigs.filter((s:any) => s.status === 'sl_hit');
 
   return (
     <div className="min-h-screen bg-[#020617] text-slate-200 pb-20 relative overflow-hidden">
@@ -298,7 +302,7 @@ export default function StrategyDetail() {
                           </div>
                         </div>
                         <div className="p-3 bg-white/[0.03] border border-white/5 rounded-xl">
-                          <div className="text-[8px] text-slate-500 uppercase font-black tracking-widest mb-1">Active Signals</div>
+                          <div className="text-[8px] text-slate-500 uppercase font-black tracking-widest mb-1">Open Trades</div>
                           <div className="text-lg font-bold text-cyan-400">{sigs.filter((s:any) => s.status === 'active').length}</div>
                         </div>
                         <div className="p-3 bg-white/[0.03] border border-white/5 rounded-xl border-emerald-500/10">
@@ -393,21 +397,32 @@ function SignalCard({ signal: s, currentPrice, strategyName }: { signal: any, cu
           </div>
        </div>
 
-       <div className="grid grid-cols-3 gap-1.5 py-2.5 border-y border-white/5 mb-2.5 bg-white/[0.01]">
-          <div className="text-center">
-             <div className="text-[7px] text-slate-500 uppercase font-black mb-0.5">Target TP</div>
-             <div className="text-[9px] font-mono text-emerald-400 font-bold">${s.tp?.toFixed(4) || '---'}</div>
-          </div>
-          <div className="text-center border-x border-white/5">
-             <div className="text-[7px] text-slate-500 uppercase font-black mb-0.5">Stop Loss</div>
-             <div className="text-[9px] font-mono text-rose-400 font-bold">${s.sl?.toFixed(4) || '---'}</div>
-          </div>
-          <div className="text-center">
-             <div className="text-[7px] text-slate-500 uppercase font-black mb-0.5">Signal PnL</div>
-             <div className={`text-[9px] font-mono font-bold ${displayPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {displayPnl >= 0 ? '+' : ''}{displayPnl.toFixed(2)}%
-             </div>
-          </div>
+       <div className="grid grid-cols-2 lg:grid-cols-3 gap-1.5 py-2.5 border-y border-white/5 mb-2.5 bg-white/[0.01]">
+          {s.status === 'active' ? (
+            <>
+              <div className="text-center">
+                 <div className="text-[7px] text-slate-500 uppercase font-black mb-0.5">Target TP</div>
+                 <div className="text-[9px] font-mono text-emerald-400 font-bold">${s.tp?.toFixed(4) || '---'}</div>
+              </div>
+              <div className="text-center border-x border-white/5">
+                 <div className="text-[7px] text-slate-500 uppercase font-black mb-0.5">Stop Loss</div>
+                 <div className="text-[9px] font-mono text-rose-400 font-bold">${s.sl?.toFixed(4) || '---'}</div>
+              </div>
+              <div className="text-center col-span-2 lg:col-span-1 border-t lg:border-t-0 border-white/5 pt-1.5 lg:pt-0 mt-1.5 lg:mt-0">
+                 <div className="text-[7px] text-slate-500 uppercase font-black mb-0.5">Live PnL</div>
+                 <div className={`text-[9px] font-mono font-bold ${displayPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {displayPnl >= 0 ? '+' : ''}{displayPnl.toFixed(2)}%
+                 </div>
+              </div>
+            </>
+          ) : (
+            <div className="col-span-2 lg:col-span-3 text-center border-white/5 py-1">
+               <div className="text-[7px] text-slate-500 uppercase font-black mb-0.5">Final PnL</div>
+               <div className={`text-lg mb-1 font-mono font-bold ${displayPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {displayPnl >= 0 ? '+' : ''}{displayPnl.toFixed(2)}%
+               </div>
+            </div>
+          )}
        </div>
        
        <div className="flex items-center justify-between">

@@ -67,7 +67,6 @@ class StrategyService {
             prices[s] = data.price;
             this.latestPrices[s] = data.price;
           } catch (pe) {
-            // Log once if a symbol fails
             if (Math.random() < 0.05) console.error(`[Price Fetch] Failed for ${s}:`, pe.message);
           }
         }
@@ -78,18 +77,57 @@ class StrategyService {
 
           let status = 'active';
           let pnl = 0;
+          let leverage = sig.strategyId === 3 ? 10 : 1;
 
-          let leverage = 1;
-          if (sig.strategyId === 3) leverage = 20;
+          // Calculate PnL
+          if (sig.side === 'buy' || sig.side === 'long') {
+            pnl = ((currentPrice - sig.price) / sig.price) * 100 * leverage;
+          } else {
+            pnl = ((sig.price - currentPrice) / sig.price) * 100 * leverage;
+          }
 
+          // --- Strategy Specific Logic ---
+          
+          // 1. GridMeanReversion DCA Logic
+          if (sig.strategyId === 1 && pnl < -5 && (sig.entryCount || 1) < 10) {
+            const newEntryCount = (sig.entryCount || 1) + 1;
+            const newAvgPrice = (sig.price + currentPrice) / 2;
+            const newTp = newAvgPrice * 1.01;
+            const newSl = newAvgPrice * 0.85; // Hard stoploss -15%
+            
+            await db.run(
+              "UPDATE signals SET price = ?, tp = ?, sl = ?, entryCount = ? WHERE id = ?",
+              [newAvgPrice, newTp, newSl, newEntryCount, sig.id]
+            );
+            console.log(`[DCA] GridMeanReversion DCA #${newEntryCount} for ${sig.symbol}. New Avg: ${newAvgPrice}`);
+            continue; // Skip exit check for this turn as we just adjusted
+          }
+
+          // 2. TrendFollower Trailing Stop Logic
+          if (sig.strategyId === 2) {
+            let highest = sig.highestPrice || sig.price;
+            if (currentPrice > highest) {
+              highest = currentPrice;
+              await db.run("UPDATE signals SET highestPrice = ? WHERE id = ?", [highest, sig.id]);
+            }
+            
+            // If offset (5%) reached, trail by 2%
+            if (highest >= sig.price * 1.05) {
+              const trailedSl = highest * 0.98;
+              if (trailedSl > sig.sl) {
+                await db.run("UPDATE signals SET sl = ? WHERE id = ?", [trailedSl, sig.id]);
+                sig.sl = trailedSl; // Update local for exit check
+              }
+            }
+          }
+
+          // --- Exit Check ---
           if (sig.side === 'buy' || sig.side === 'long') {
             if (currentPrice >= sig.tp) status = 'tp_hit';
             else if (currentPrice <= sig.sl) status = 'sl_hit';
-            pnl = ((currentPrice - sig.price) / sig.price) * 100 * leverage;
           } else {
             if (currentPrice <= sig.tp) status = 'tp_hit';
             else if (currentPrice >= sig.sl) status = 'sl_hit';
-            pnl = ((sig.price - currentPrice) / sig.price) * 100 * leverage;
           }
 
           if (status !== 'active') {
@@ -98,7 +136,6 @@ class StrategyService {
               [status, pnl, sig.id]
             );
 
-            // Notify subscribers on Telegram about the close
             await getTelegramService().broadcastClose(
               sig.strategyId,
               sig.symbol,
@@ -114,7 +151,7 @@ class StrategyService {
       } catch (e) {
         console.error('[Signal Tracker Error]', e.message);
       }
-    }, 30000); // Check every 30 seconds
+    }, 30000);
   }
 
   loadConfigs() {
@@ -227,20 +264,23 @@ class StrategyService {
     console.log(`[Engine] Starting LIVE Market Strategy Node: ${strategy.name} on ${config.symbols.length} pairs (${config.timeframe})`);
 
     const interval = setInterval(async () => {
-      if (Math.random() < 0.1) {
-         console.log(`[Engine] Heartbeat: ${strategy.name} scanning ${config.symbols.length} markets...`);
-      }
+      // Clear lastSignals periodically or based on logic to avoid signal "stickiness"
+      // However, we want to avoid spamming the same signal every 7 seconds.
+      // The issue might be that signalSide is always 'buy' or 'sell' due to logic conditions.
 
       for (const symbol of config.symbols) {
         try {
           let signalSide = null;
           let currentPrice = 0;
           let data = null;
+          let initialTp = 0;
+          let initialSl = 0;
+
+          // Fetch data for indicators
+          data = await this.fetchOHLC(symbol, config.timeframe);
+          currentPrice = data.price;
 
           if (strategy.name === 'TrendFollower') {
-            data = await this.fetchOHLC(symbol, config.timeframe);
-            currentPrice = data.price;
-            
             const adxInfo = ADX.calculate({ high: data.highs, low: data.lows, close: data.closes, period: 14 });
             const bb = BollingerBands.calculate({ period: 20, stdDev: 2, values: data.closes });
             const st = calculateSuperTrend(data.highs, data.lows, data.closes, 10, 3.0);
@@ -248,43 +288,48 @@ class StrategyService {
             if (adxInfo.length > 0 && bb.length > 0) {
               const currentAdx = adxInfo[adxInfo.length - 1].adx;
               const currentBB = bb[bb.length - 1];
+              const lastVol = data.volumes[data.volumes.length-1];
               
-              if (st.direction === 1 && currentAdx > 25 && currentPrice > currentBB.upper && data.volumes[data.volumes.length-1] > 0) {
+              if (st.direction === 1 && currentAdx > 25 && currentPrice > currentBB.upper && lastVol > 0) {
                 signalSide = 'buy';
+                initialTp = currentPrice * 2.0;
+                initialSl = currentPrice * 0.90;
               } else if (st.direction === -1) {
                 signalSide = 'sell';
               }
             }
           } 
           else if (strategy.name === 'GridMeanReversion') {
-            data = await this.fetchOHLC(symbol, config.timeframe);
-            currentPrice = data.price;
-            
             const rsi = RSI.calculate({ period: 14, values: data.closes });
             const bb = BollingerBands.calculate({ period: 20, stdDev: 2, values: data.closes });
             
             if (rsi.length > 0 && bb.length > 0) {
               const currentRsi = rsi[rsi.length - 1];
               const currentBB = bb[bb.length - 1];
+              const lastVol = data.volumes[data.volumes.length-1];
               
-              if (currentPrice < currentBB.lower && currentRsi < 20 && data.volumes[data.volumes.length-1] > 0) {
+              if (currentPrice < currentBB.lower && currentRsi < 20 && lastVol > 0) {
                 signalSide = 'buy';
+                initialTp = currentPrice * 1.01;
+                initialSl = currentPrice * 0.85;
               } else if (currentPrice > currentBB.middle) {
                 signalSide = 'sell';
               }
             }
           }
           else if (strategy.name === 'UltimateFuturesScalper') {
-            data = await this.fetchOHLC(symbol, config.timeframe);
-            currentPrice = data.price;
-            
             const rsi = RSI.calculate({ period: 14, values: data.closes });
             if (rsi.length > 0) {
               const currentRsi = rsi[rsi.length - 1];
-              if (currentRsi < 30 && data.volumes[data.volumes.length-1] > 0) {
+              const lastVol = data.volumes[data.volumes.length-1];
+              if (currentRsi < 30 && lastVol > 0) {
                 signalSide = 'buy';
-              } else if (currentRsi > 70 && data.volumes[data.volumes.length-1] > 0) {
+                initialTp = currentPrice * 1.005;
+                initialSl = currentPrice * 0.90;
+              } else if (currentRsi > 70 && lastVol > 0) {
                 signalSide = 'short'; 
+                initialTp = currentPrice * 0.995;
+                initialSl = currentPrice * 1.10;
               } else if (currentRsi > 50) {
                 signalSide = 'sell'; 
               } else if (currentRsi < 50) {
@@ -295,20 +340,37 @@ class StrategyService {
 
           if (signalSide) {
             const signalKey = `${id}_${symbol}`;
-            if (this.lastSignals[signalKey] !== signalSide) {
+            const isEntry = ['buy', 'long', 'short'].includes(signalSide.toLowerCase());
+
+            // LOGIC FIX: We only want to trigger a NEW signal if:
+            // 1. There is no active signal for this symbol/strategy.
+            // 2. OR the signalSide has changed (e.g. from Buy to Sell).
+            
+            const activeSignal = await db.get(
+              "SELECT id, side FROM signals WHERE strategyId = ? AND symbol = ? AND status = 'active' LIMIT 1",
+              [id, symbol]
+            );
+
+            let shouldTrigger = false;
+            if (isEntry) {
+              // Only trigger entry if no active signal exists
+              if (!activeSignal) {
+                shouldTrigger = true;
+              }
+            } else {
+              // Only trigger exit (sell/cover) if an active signal exists
+              if (activeSignal) {
+                // Ensure we are closing the correct side (e.g. 'sell' closes 'buy')
+                const activeSide = activeSignal.side.toLowerCase();
+                if ((signalSide === 'sell' && (activeSide === 'buy' || activeSide === 'long')) ||
+                    (signalSide === 'cover' && activeSide === 'short')) {
+                  shouldTrigger = true;
+                }
+              }
+            }
+
+            if (shouldTrigger && this.lastSignals[signalKey] !== signalSide) {
                this.lastSignals[signalKey] = signalSide;
-
-               const atr = data.atr || (currentPrice * 0.02); // Fallback to 2% if ATR fails
-               let tp = 0;
-               let sl = 0;
-
-               if (signalSide === 'buy' || signalSide === 'long') {
-                 tp = currentPrice + (atr * 3); // 3:1 Reward/Risk approx
-                 sl = currentPrice - (atr * 1.5);
-               } else if (signalSide === 'sell' || signalSide === 'short') {
-                 tp = currentPrice - (atr * 3);
-                 sl = currentPrice + (atr * 1.5);
-               }
 
                const signal = {
                  strategyId: id,
@@ -316,47 +378,44 @@ class StrategyService {
                  symbol: symbol,
                  side: signalSide,
                  price: currentPrice,
-                 tp: tp,
-                 sl: sl,
+                 tp: initialTp,
+                 sl: initialSl,
                  stakeAmount: config.stakeAmount,
                  timestamp: new Date().toISOString()
                };
 
-               const isEntry = ['buy', 'long', 'short'].includes(signalSide.toLowerCase());
                let pnl = 0;
                let finalStatus = isEntry ? 'active' : 'completed';
 
-               if (!isEntry) {
-                 // Try to find last active entry for this symbol/strategy
-                 const lastEntry = await db.get(
-                   "SELECT id, price, side FROM signals WHERE strategyId = ? AND symbol = ? AND status = 'active' ORDER BY timestamp DESC LIMIT 1",
-                   [id, symbol]
-                 );
-                 if (lastEntry) {
-                   if (lastEntry.side === 'buy' || lastEntry.side === 'long') {
-                     pnl = ((currentPrice - lastEntry.price) / lastEntry.price) * 100;
-                   } else {
-                     pnl = ((lastEntry.price - currentPrice) / lastEntry.price) * 100;
-                   }
-                   // Close the entry signal
-                   await db.run("UPDATE signals SET status = 'closed', pnl = ? WHERE id = ?", [pnl, lastEntry.id]);
+               if (!isEntry && activeSignal) {
+                 if (activeSignal.side === 'buy' || activeSignal.side === 'long') {
+                   pnl = ((currentPrice - activeSignal.price || currentPrice) / (activeSignal.price || currentPrice)) * 100;
+                 } else {
+                   pnl = ((activeSignal.price || currentPrice) - currentPrice) / (activeSignal.price || currentPrice) * 100;
                  }
+                 await db.run("UPDATE signals SET status = 'closed', pnl = ? WHERE id = ?", [pnl, activeSignal.id]);
                }
 
                await db.run(
-                 "INSERT INTO signals (strategyId, symbol, side, price, tp, sl, status, pnl) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                 [signal.strategyId, signal.symbol, signal.side, signal.price, signal.tp, signal.sl, finalStatus, pnl]
+                 "INSERT INTO signals (strategyId, symbol, side, price, tp, sl, status, pnl, highestPrice, entryCount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                 [signal.strategyId, signal.symbol, signal.side, signal.price, signal.tp, signal.sl, finalStatus, pnl, currentPrice, 1]
                );
 
-               // Broadcast ALL entry signals (buy/sell/long/short) to Telegram
                if (isEntry) {
+                  console.log(`[Engine] >>> BROADCASTING ENTRY: ${strategy.name} ${signalSide} ${symbol} @ ${currentPrice}`);
                   await getTelegramService().broadcastSignal(signal);
+               } else {
+                  console.log(`[Engine] >>> EXIT SIGNAL: ${strategy.name} ${signalSide} ${symbol} @ ${currentPrice}`);
                }
-
             }
+          } else {
+            // If no signal side detected by indicators, clear the lastSignals cache for this symbol
+            // to allow it to trigger again if conditions met in the next scan.
+            const signalKey = `${id}_${symbol}`;
+            delete this.lastSignals[signalKey];
           }
         } catch (e) {
-           console.error(`[Engine] Real price fetch failed for ${symbol}, using fallback handling. ${e}`);
+           console.error(`[Engine] Error scanning ${symbol}: ${e.message}`);
         }
       }
     }, 7000);

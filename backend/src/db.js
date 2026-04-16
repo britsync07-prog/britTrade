@@ -80,6 +80,12 @@ const initDb = async () => {
     try { await run("ALTER TABLE signals ADD COLUMN pnl REAL DEFAULT 0"); } catch(e){}
     try { await run("ALTER TABLE signals ADD COLUMN status TEXT DEFAULT 'active'"); } catch(e){}
   }
+  if (!sigRows.some(r => r.name === 'entryCount')) {
+    try { await run("ALTER TABLE signals ADD COLUMN entryCount INTEGER DEFAULT 1"); } catch(e){}
+  }
+  if (!sigRows.some(r => r.name === 'highestPrice')) {
+    try { await run("ALTER TABLE signals ADD COLUMN highestPrice REAL"); } catch(e){}
+  }
 
   await run(`CREATE TABLE IF NOT EXISTS paper_trades (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
