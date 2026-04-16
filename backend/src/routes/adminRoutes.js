@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const authMiddleware = require('./authMiddleware');
-const authService = require('../services/authService');
 
 // Admin Check Middleware
 const adminMiddleware = (req, res, next) => {
@@ -99,6 +98,7 @@ router.post('/users/:id/purchases', authMiddleware, adminMiddleware, async (req,
     const normalizedPlanId = planId ? planId.replace('-', '_') : planId;
     
     // Delegate to authService which handles both purchase recording AND strategy auto-subscription
+    const authService = require('../services/authService');
     await authService.purchasePlan(req.params.id, normalizedPlanId);
     
     res.json({ message: 'Plan granted and strategies subscribed' });
