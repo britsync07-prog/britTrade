@@ -1,5 +1,6 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
+const fs = require('fs');
 
 const dbPath = path.resolve(__dirname, '../platform.db');
 const db = new sqlite3.Database(dbPath);
@@ -147,6 +148,29 @@ const initDb = async () => {
   console.log('Database initialized successfully.');
 };
 
+const safeInitDb = async () => {
+  try {
+    await initDb();
+  } catch (err) {
+    if (err.message.includes('SQLITE_CORRUPT') || err.message.includes('malformed')) {
+      console.error('\x1b[31m%s\x1b[0m', '!!! CRITICAL: Database corruption detected (SQLITE_CORRUPT) !!!');
+      console.log('Auto-healing: Renaming corrupted database and exiting to trigger PM2 restart...');
+      
+      const corruptPath = dbPath + '.corrupt_' + Date.now();
+      if (fs.existsSync(dbPath)) {
+        fs.renameSync(dbPath, corruptPath);
+      }
+      if (fs.existsSync(dbPath + '-journal')) {
+        fs.unlinkSync(dbPath + '-journal');
+      }
+      
+      console.log(`Corrupted DB moved to: ${corruptPath}`);
+      process.exit(1); // Force exit. PM2 will restart us fresh.
+    }
+    throw err;
+  }
+};
+
 const query = (sql, params = []) => {
   return new Promise((resolve, reject) => {
     db.all(sql, params, (err, rows) => {
@@ -174,4 +198,4 @@ const run = (sql, params = []) => {
   });
 };
 
-module.exports = { initDb, query, get, run };
+module.exports = { initDb: safeInitDb, query, get, run };
