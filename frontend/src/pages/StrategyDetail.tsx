@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, TrendingUp, Target, Activity, Zap, Send } from 'lucide-react';
 import api from '../services/api';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,8 @@ export default function StrategyDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hasAccess, setHasAccess] = useState(false);
+  const [searchParams] = useSearchParams();
+  const isHistoryView = searchParams.get('tab') === 'history' || searchParams.get('preview') === 'true' || !hasAccess;
 
   const [signalsData, setSignalsData] = useState<any>({ signals: [] });
   const [prices, setPrices] = useState<Record<string, number>>({});
@@ -310,31 +312,25 @@ export default function StrategyDetail() {
                      </div>
 
                      {/* Signal List Split View */}
-                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                     <div className={`grid grid-cols-1 ${isHistoryView ? '' : 'lg:grid-cols-2'} gap-8`}>
                         {/* Active Trades Column */}
-                        <div className={`transition-all duration-500 ${!hasAccess ? 'filter blur-[4px] pointer-events-none opacity-40 select-none' : ''}`}>
-                           <div className="flex items-center gap-2 mb-4">
-                              <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-                              <h3 className="text-sm font-black text-white uppercase tracking-wider">Active Signals</h3>
-                              <Badge className="bg-white/5 text-slate-400 border-none ml-auto">{sigs.filter((s:any) => s.status === 'active').length}</Badge>
-                           </div>
-                           <div className="space-y-4 max-h-[480px] overflow-y-auto pr-1 relative">
-                              {!hasAccess && (
-                                <div className="absolute inset-0 flex items-center justify-center z-10">
-                                  <div className="bg-black/60 px-6 py-3 rounded-2xl font-bold border border-white/20 whitespace-normal text-center">
-                                    <Target className="w-8 h-8 text-cyan-400 mx-auto mb-2" />
-                                    SUBSCRIBE TO UNLOCK LIVE TERMINAL
-                                  </div>
-                                </div>
-                              )}
-                              {sigs.filter((s: any) => s.status === 'active').map((s: any) => (
-                                <SignalCard key={s.id} signal={s} currentPrice={prices[s.symbol]} strategyName={strategy.name} />
-                              ))}
-                              {sigs.filter((s: any) => s.status === 'active').length === 0 && (
-                                <div className="py-8 bg-white/[0.01] border border-dashed border-white/5 rounded-2xl text-center text-slate-600 text-[10px] uppercase font-bold tracking-widest">No active signals found</div>
-                              )}
-                           </div>
-                        </div>
+                        {!isHistoryView && (
+                          <div>
+                             <div className="flex items-center gap-2 mb-4">
+                                <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                                <h3 className="text-sm font-black text-white uppercase tracking-wider">Active Signals</h3>
+                                <Badge className="bg-white/5 text-slate-400 border-none ml-auto">{sigs.filter((s:any) => s.status === 'active').length}</Badge>
+                             </div>
+                             <div className="space-y-4 max-h-[480px] overflow-y-auto pr-1 relative">
+                                {sigs.filter((s: any) => s.status === 'active').map((s: any) => (
+                                  <SignalCard key={s.id} signal={s} currentPrice={prices[s.symbol]} strategyName={strategy.name} />
+                                ))}
+                                {sigs.filter((s: any) => s.status === 'active').length === 0 && (
+                                  <div className="py-8 bg-white/[0.01] border border-dashed border-white/5 rounded-2xl text-center text-slate-600 text-[10px] uppercase font-bold tracking-widest">No active signals found</div>
+                                )}
+                             </div>
+                          </div>
+                        )}
 
                         {/* Closed Trades Column */}
                         <div>
