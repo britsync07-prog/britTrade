@@ -100,7 +100,7 @@ export default function StrategyDetail() {
     </div>
   );
 
-  const sigs = signalsData.signals || [];
+  const sigs = Array.isArray(signalsData) ? signalsData : (signalsData.signals || []);
   const closedStatuses = ['completed', 'tp_hit', 'sl_hit', 'closed'];
   
   // Filter for real closed trades. 

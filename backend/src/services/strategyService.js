@@ -454,8 +454,8 @@ class StrategyService {
          }
        }
     }
-    // Maintain old API expected structure: { signals: [] } since some parts of the frontend might expect array directly, wrap if needed but we just return the array here as before.
-    return signals;
+    // Standardizing API structure: always return an object with a signals key
+    return { signals };
   }
 
   async getChartHistory(symbol, timeframe = '1h') {
