@@ -80,7 +80,7 @@ class StrategyService {
           let pnl = 0;
 
           let leverage = 1;
-          if (strategy.name === 'UltimateFuturesScalper') leverage = 20;
+          if (sig.strategyId === 3) leverage = 20;
 
           if (sig.side === 'buy' || sig.side === 'long') {
             if (currentPrice >= sig.tp) status = 'tp_hit';
