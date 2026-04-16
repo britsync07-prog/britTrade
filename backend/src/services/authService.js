@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const db = require('../db');
 
 const SECRET = process.env.JWT_SECRET || 'your_super_secret_key';
+const strategyService = require('./strategyService');
 
 class AuthService {
   async signup(email, password) {
@@ -59,7 +60,6 @@ class AuthService {
     await db.run("INSERT INTO purchases (userId, planId) VALUES (?, ?)", [userId, planId]);
     
     // Automatic subscription logic
-    const strategyService = require('./strategyService');
     const planToStrat = {
       'low_risk': [1],
       'medium_risk': [2],

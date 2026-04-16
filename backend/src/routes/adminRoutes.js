@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const authMiddleware = require('./authMiddleware');
+const authService = require('../services/authService');
 
 // Admin Check Middleware
 const adminMiddleware = (req, res, next) => {
@@ -94,14 +95,15 @@ router.get('/users/:id/purchases', authMiddleware, adminMiddleware, async (req, 
 router.post('/users/:id/purchases', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const { planId } = req.body;
-    await db.run("INSERT OR IGNORE INTO purchases (userId, planId) VALUES (?, ?)", [req.params.id, planId]);
-
-    // Trigger auto-subscription
-    const authService = require('../services/authService');
-    await authService.purchasePlan(req.params.id, planId); // Re-uses existing logic for strategy subscription
-
-    res.json({ message: 'Plan granted' });
+    // Standardize to underscored plan IDs
+    const normalizedPlanId = planId ? planId.replace('-', '_') : planId;
+    
+    // Delegate to authService which handles both purchase recording AND strategy auto-subscription
+    await authService.purchasePlan(req.params.id, normalizedPlanId);
+    
+    res.json({ message: 'Plan granted and strategies subscribed' });
   } catch (e) {
+    console.error('[Admin API Error] POST /purchases:', e);
     res.status(500).json({ error: e.message });
   }
 });
