@@ -178,8 +178,10 @@ const safeInitDb = async () => {
 const query = (sql, params = []) => {
   return new Promise((resolve, reject) => {
     db.all(sql, params, (err, rows) => {
-      if (err) reject(err);
-      else resolve(rows);
+      if (err) {
+        console.error(`[DB Query Error] SQL: ${sql} | Params: ${JSON.stringify(params)} | Error:`, err);
+        reject(err);
+      } else resolve(rows);
     });
   });
 };
@@ -187,8 +189,10 @@ const query = (sql, params = []) => {
 const get = (sql, params = []) => {
   return new Promise((resolve, reject) => {
     db.get(sql, params, (err, row) => {
-      if (err) reject(err);
-      else resolve(row);
+      if (err) {
+        console.error(`[DB Get Error] SQL: ${sql} | Params: ${JSON.stringify(params)} | Error:`, err);
+        reject(err);
+      } else resolve(row);
     });
   });
 };
@@ -196,8 +200,10 @@ const get = (sql, params = []) => {
 const run = (sql, params = []) => {
   return new Promise((resolve, reject) => {
     db.run(sql, params, function(err) {
-      if (err) reject(err);
-      else resolve({ id: this.lastID, changes: this.changes });
+      if (err) {
+        console.error(`[DB Run Error] SQL: ${sql} | Params: ${JSON.stringify(params)} | Error:`, err);
+        reject(err);
+      } else resolve({ id: this.lastID, changes: this.changes });
     });
   });
 };

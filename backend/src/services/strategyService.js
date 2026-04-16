@@ -219,7 +219,13 @@ class StrategyService {
   }
 
   async subscribe(userId, strategyId, useSignal = true, useVirtualBalance = true, allocatedBalance = 0) {
-    return await db.run("INSERT OR REPLACE INTO subscriptions (userId, strategyId, useSignal, useVirtualBalance, allocatedBalance, initialAllocation) VALUES (?, ?, ?, ?, ?, ?)", [userId, strategyId, useSignal, useVirtualBalance, allocatedBalance, allocatedBalance]);
+    try {
+      console.log(`[StrategyService] Subscribing user ${userId} to strategy ${strategyId}`);
+      return await db.run("INSERT OR REPLACE INTO subscriptions (userId, strategyId, useSignal, useVirtualBalance, allocatedBalance, initialAllocation) VALUES (?, ?, ?, ?, ?, ?)", [userId, strategyId, useSignal, useVirtualBalance, allocatedBalance, allocatedBalance]);
+    } catch (error) {
+      console.error(`[StrategyService] subscribe failed for user ${userId}, strategy ${strategyId}:`, error);
+      throw error;
+    }
   }
 
   async unsubscribe(userId, strategyId) {

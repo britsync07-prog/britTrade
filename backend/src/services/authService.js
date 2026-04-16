@@ -50,29 +50,34 @@ class AuthService {
   }
 
   async purchasePlan(userId, planId) {
-    if (!planId) throw new Error('Plan ID is required');
-    
-    // Check if already purchased
-    const existing = await db.get("SELECT id FROM purchases WHERE userId = ? AND planId = ?", [userId, planId]);
-    if (existing) return { status: 'Already purchased' };
+    try {
+      if (!planId) throw new Error('Plan ID is required');
+      
+      // Check if already purchased
+      const existing = await db.get("SELECT id FROM purchases WHERE userId = ? AND planId = ?", [userId, planId]);
+      if (existing) return { status: 'Already purchased' };
 
-    await db.run("INSERT INTO purchases (userId, planId) VALUES (?, ?)", [userId, planId]);
-    
-    // Automatic subscription logic
-    const strategyService = require('./strategyService');
-    const planToStrat = {
-      'low_risk': [1],
-      'medium_risk': [2],
-      'high_risk': [3],
-      'bundle': [1, 2, 3]
-    };
+      await db.run("INSERT INTO purchases (userId, planId) VALUES (?, ?)", [userId, planId]);
+      
+      // Automatic subscription logic
+      const strategyService = require('./strategyService');
+      const planToStrat = {
+        'low_risk': [1],
+        'medium_risk': [2],
+        'high_risk': [3],
+        'bundle': [1, 2, 3]
+      };
 
-    const stratIds = planToStrat[planId] || [];
-    for (const sid of stratIds) {
-      await strategyService.subscribe(userId, sid, true, true, 1000); // Auto-subscribe with $1000 balance
+      const stratIds = planToStrat[planId] || [];
+      for (const sid of stratIds) {
+        await strategyService.subscribe(userId, sid, true, true, 1000); // Auto-subscribe with $1000 balance
+      }
+
+      return { status: 'Success', planId };
+    } catch (error) {
+      console.error(`[AuthService] purchasePlan failed for user ${userId}, plan ${planId}:`, error);
+      throw error;
     }
-
-    return { status: 'Success', planId };
   }
 
   async updateBalance(userId, newBalance) {

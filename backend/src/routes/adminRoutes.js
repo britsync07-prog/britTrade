@@ -94,17 +94,20 @@ router.get('/users/:id/purchases', authMiddleware, adminMiddleware, async (req, 
 router.post('/users/:id/purchases', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const { planId } = req.body;
+    const userId = req.params.id;
+    console.log(`[Admin API] Granting plan ${planId} to user ${userId}`);
+
     // Standardize to underscored plan IDs
-    const normalizedPlanId = planId ? planId.replace('-', '_') : planId;
+    const normalizedPlanId = planId ? planId.toString().replace('-', '_') : planId;
     
     // Delegate to authService which handles both purchase recording AND strategy auto-subscription
     const authService = require('../services/authService');
-    await authService.purchasePlan(req.params.id, normalizedPlanId);
+    await authService.purchasePlan(userId, normalizedPlanId);
     
     res.json({ message: 'Plan granted and strategies subscribed' });
   } catch (e) {
-    console.error('[Admin API Error] POST /purchases:', e);
-    res.status(500).json({ error: e.message });
+    console.error(`[Admin API Error] POST /users/${req.params.id}/purchases:`, e);
+    res.status(500).json({ error: e.message || 'Failed to update plan' });
   }
 });
 
