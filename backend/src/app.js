@@ -26,26 +26,20 @@ app.use((req, res, next) => {
   next();
 });
 
+const allowedOrigins = [
+  'https://brittrade.pages.dev',
+  'https://brittrade.britsync.co.uk',
+  'https://trade.mayfairmarketing.online'
+];
+
 app.use(cors({
   origin: (origin, callback) => {
-    // In production, strictly check the allowed origins
-    const allowedPatterns = [
-      /https:\/\/.*\.netlify\.app/,
-      /https:\/\/.*\.pages\.dev/,
-      /https:\/\/trade\.mayfairmarketing\.online/,
-      /https:\/\/brittrade\.pages\.dev/,
-      /https:\/\/brittrade\.britsync\.co\.uk/,
-      /https:\/\/brittrade\.britsync\.co\.uk\/?$/
-    ];
+    if (!origin || process.env.NODE_ENV !== 'production') return callback(null, true);
     
-    // Always allow if no origin (like mobile apps or curl) or not in production
-    if (!origin || process.env.NODE_ENV !== 'production') {
-      return callback(null, true);
-    }
-    
-    const isAllowed = allowedPatterns.some(pattern => pattern.test(origin)) || 
-                     origin.includes('britsync.co.uk') || 
-                     origin.includes('pages.dev');
+    const isAllowed = allowedOrigins.includes(origin) || 
+                     origin.endsWith('.pages.dev') || 
+                     origin.endsWith('.netlify.app') ||
+                     origin.includes('britsync.co.uk');
 
     if (isAllowed) {
       callback(null, true);
@@ -278,6 +272,15 @@ app.use((err, req, res, next) => {
     error: err.message || 'Internal server error',
     redirect: status === 401 ? '/auth/signup' : undefined
   });
+});
+
+// --- Error Handling ---
+app.use((err, req, res, next) => {
+  if (err.message === 'Not allowed by CORS') {
+    return res.status(403).json({ error: 'CORS Blocked' });
+  }
+  console.error('[Unhandled Error]', err);
+  res.status(500).json({ error: 'Internal Server Error' });
 });
 
 // --- Startup ---
