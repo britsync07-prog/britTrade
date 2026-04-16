@@ -3,12 +3,6 @@ const db = require('../db');
 const SECRET = process.env.JWT_SECRET || 'your_super_secret_key';
 
 module.exports = async (req, res, next) => {
-  // Explicitly set CORS headers for error responses
-  res.header('Access-Control-Allow-Origin', 'https://brittrade.pages.dev');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-
   try {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
