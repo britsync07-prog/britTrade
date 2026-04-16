@@ -25,10 +25,25 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [stats, setStats] = useState({ totalUsers: 0, totalSales: 0, totalRevenue: 0, activeSignals: 0 });
+  const [filter, setFilter] = useState<'all' | 'premium' | 'trial'>('all');
 
   useEffect(() => {
     fetchData();
+    fetchStats();
   }, []);
+
+  const fetchStats = async () => {
+    try {
+      const res = await api.get('/admin/stats');
+      setStats(res.data);
+    } catch (e) {
+      console.error('Failed to fetch stats', e);
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -52,6 +67,31 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.post('/admin/users', { email: newEmail, password: newPassword });
+      setNewEmail('');
+      setNewPassword('');
+      setIsCreateModalOpen(false);
+      fetchData();
+      fetchStats();
+    } catch (e: any) {
+      alert(e.response?.data?.error || 'Failed to create user');
+    }
+  };
+
+  const handleDeleteUser = async (userId: number) => {
+    if (!confirm('Are you sure you want to PERMANENTLY delete this operator? All their data will be lost.')) return;
+    try {
+      await api.delete(`/admin/users/${userId}`);
+      fetchData();
+      fetchStats();
+    } catch (e) {
+      alert('Failed to delete user');
+    }
+  };
+
   const handlePlanToggle = async (userId: number, planId: string, hasPlan: boolean) => {
     try {
       if (hasPlan) {
@@ -60,13 +100,7 @@ export default function AdminDashboard() {
         await api.post(`/admin/users/${userId}/purchases`, { planId });
       }
       fetchData();
-      setSelectedUser(prev => {
-        if (!prev) return null;
-        const newPlans = hasPlan 
-          ? prev.purchasedPlans.filter(p => p !== planId)
-          : [...prev.purchasedPlans, planId];
-        return { ...prev, purchasedPlans: newPlans };
-      });
+      fetchStats();
     } catch (e) {
       alert('Failed to update plan');
     }
@@ -107,6 +141,13 @@ export default function AdminDashboard() {
           </div>
 
           <div className="flex gap-4">
+             <button 
+               onClick={() => setIsCreateModalOpen(true)}
+               className="glass-card px-8 py-4 bg-white text-black flex items-center gap-3 hover:bg-slate-200 transition-all cursor-pointer group border-none"
+             >
+                <Users className="w-5 h-5" />
+                <span className="text-xs font-black uppercase tracking-widest">Create Operator</span>
+             </button>
              <Link to="/dashboard" className="glass-card px-8 py-4 flex items-center gap-3 hover:border-cyan-500/30 transition-all cursor-pointer group">
                 <ArrowLeft className="text-cyan-400 w-5 h-5 group-hover:scale-110 transition-transform" />
                 <span className="text-xs font-black uppercase tracking-widest text-white">Back to Dashboard</span>
@@ -116,10 +157,10 @@ export default function AdminDashboard() {
 
         {/* System Health Overview */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-          <AdminStat title="Total Operators" value={users.length} icon={Users} color="text-cyan-400" />
-          <AdminStat title="Revenue (MTD)" value="$14,240" icon={TrendingUp} color="text-emerald-400" />
-          <AdminStat title="Active Signals" value="42" icon={Zap} color="text-yellow-400" />
-          <AdminStat title="Server Load" value="12%" icon={Activity} color="text-purple-400" />
+          <AdminStat title="Total Operators" value={stats.totalUsers} icon={Users} color="text-cyan-400" />
+          <AdminStat title="Total Revenue" value={`$${stats.totalRevenue.toLocaleString()}`} icon={TrendingUp} color="text-emerald-400" />
+          <AdminStat title="Active Signals" value={stats.activeSignals} icon={Zap} color="text-yellow-400" />
+          <AdminStat title="Total Sales" value={stats.totalSales} icon={Activity} color="text-purple-400" />
         </div>
 
         {/* User Management Module */}
@@ -134,9 +175,24 @@ export default function AdminDashboard() {
                <p className="text-slate-500 text-sm font-medium">Manage user permissions and monitor subscription health.</p>
             </div>
             <div className="flex gap-2 p-1 bg-white/5 rounded-2xl">
-               <button className="px-4 py-2 bg-white text-black rounded-xl text-[10px] font-black uppercase tracking-widest transition-all">All</button>
-               <button className="px-4 py-2 hover:bg-white/5 text-slate-400 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all">Premium</button>
-               <button className="px-4 py-2 hover:bg-white/5 text-slate-400 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all">Trial</button>
+               <button 
+                onClick={() => setFilter('all')}
+                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filter === 'all' ? 'bg-white text-black' : 'hover:bg-white/5 text-slate-400'}`}
+               >
+                 All
+               </button>
+               <button 
+                onClick={() => setFilter('premium')}
+                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filter === 'premium' ? 'bg-white text-black' : 'hover:bg-white/5 text-slate-400'}`}
+               >
+                 Premium
+               </button>
+               <button 
+                onClick={() => setFilter('trial')}
+                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filter === 'trial' ? 'bg-white text-black' : 'hover:bg-white/5 text-slate-400'}`}
+               >
+                 Trial
+               </button>
             </div>
           </div>
 
@@ -152,7 +208,11 @@ export default function AdminDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {users.map((u, idx) => (
+                {users.filter(u => {
+                  if (filter === 'premium') return u.purchasedPlans?.length > 0;
+                  if (filter === 'trial') return !u.purchasedPlans || u.purchasedPlans.length === 0;
+                  return true;
+                }).map((u, idx) => (
                   <motion.tr 
                     key={u.id}
                     initial={{ opacity: 0 }}
@@ -191,14 +251,22 @@ export default function AdminDashboard() {
                     <td className="px-8 py-6 text-sm text-slate-500 font-medium font-mono">
                        {new Date(u.createdAt).toLocaleDateString()}
                     </td>
-                    <td className="px-8 py-6 text-right">
-                       <button 
-                        onClick={() => setSelectedUser(u)}
-                        className="p-3 bg-white/5 hover:bg-white text-slate-400 hover:text-black rounded-xl transition-all group/btn"
-                       >
-                          <Settings className="w-5 h-5 group-hover/btn:rotate-90 transition-transform duration-500" />
-                       </button>
-                    </td>
+                     <td className="px-8 py-6 text-right">
+                       <div className="flex justify-end gap-2">
+                         <button 
+                          onClick={() => setSelectedUser(u)}
+                          className="p-3 bg-white/5 hover:bg-white text-slate-400 hover:text-black rounded-xl transition-all group/btn"
+                         >
+                            <Settings className="w-5 h-5 group-hover/btn:rotate-90 transition-transform duration-500" />
+                         </button>
+                         <button 
+                          onClick={() => handleDeleteUser(u.id)}
+                          className="p-3 bg-red-500/5 hover:bg-red-500 text-red-500 hover:text-white rounded-xl transition-all"
+                         >
+                            <X className="w-5 h-5" />
+                         </button>
+                       </div>
+                     </td>
                   </motion.tr>
                 ))}
               </tbody>
@@ -206,6 +274,58 @@ export default function AdminDashboard() {
           </div>
         </motion.div>
       </div>
+
+      {/* Create Account Overlay */}
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
+           <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="glass-card w-full max-w-md p-8 shadow-2xl border-white/10"
+           >
+              <div className="flex justify-between items-start mb-8">
+                 <div>
+                    <h2 className="text-3xl font-black tracking-tight text-white mb-1">New Operator</h2>
+                    <p className="text-slate-500 text-sm font-medium">Provision a new tactical interface account.</p>
+                 </div>
+                 <button onClick={() => setIsCreateModalOpen(false)} className="p-2 hover:bg-white/5 rounded-xl transition-colors">
+                    <X className="text-slate-500" />
+                 </button>
+              </div>
+
+              <form onSubmit={handleCreateUser} className="space-y-6">
+                 <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Satellite Email</label>
+                    <input 
+                      type="email" 
+                      required
+                      value={newEmail}
+                      onChange={(e) => setNewEmail(e.target.value)}
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white placeholder:text-slate-600 focus:border-cyan-500/50 outline-none transition-all"
+                      placeholder="operator@britsync.co"
+                    />
+                 </div>
+                 <div>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2 block">Secure Encryption Key</label>
+                    <input 
+                      type="password" 
+                      required
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-white placeholder:text-slate-600 focus:border-cyan-500/50 outline-none transition-all"
+                      placeholder="••••••••"
+                    />
+                 </div>
+                 <button 
+                  type="submit"
+                  className="w-full h-14 bg-cyan-500 text-white rounded-2xl mt-8 font-black text-xs uppercase tracking-widest hover:bg-cyan-400 transition-all shadow-lg shadow-cyan-500/20"
+                >
+                   Deploy Account
+                </button>
+              </form>
+           </motion.div>
+        </div>
+      )}
 
       {/* Account Settings Overlay */}
       {selectedUser && (

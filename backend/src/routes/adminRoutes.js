@@ -18,17 +18,35 @@ router.get('/users', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const q = req.query.q || '';
     const users = await db.query(
-      "SELECT id, email, balance, role, status FROM users WHERE email LIKE ? ORDER BY id DESC",
+      "SELECT id, email, balance, role, status, createdAt FROM users WHERE email LIKE ? ORDER BY id DESC",
       [`%${q}%`]
     );
 
-    // Enrich with purchase count
+    // Enrich with actual plans
     for (let user of users) {
-      const p = await db.get("SELECT count(*) as count FROM purchases WHERE userId = ?", [user.id]);
-      user.planCount = p.count;
+      const purchases = await db.query("SELECT planId FROM purchases WHERE userId = ?", [user.id]);
+      user.purchasedPlans = purchases.map(p => p.planId);
+      user.planCount = purchases.length;
     }
 
     res.json(users);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Create user manually (Admin only)
+router.post('/users', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { email, password, role = 'user' } = req.body;
+    const authService = require('../services/authService');
+    const user = await authService.signup(email, password);
+    
+    if (role === 'admin') {
+      await db.run("UPDATE users SET role = 'admin' WHERE id = ?", [user.id]);
+    }
+
+    res.status(201).json({ message: 'User created', user });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
