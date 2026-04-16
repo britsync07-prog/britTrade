@@ -250,7 +250,6 @@ class StrategyService {
     const id = parseInt(strategyId, 10);
     if (isNaN(id)) throw new Error('Invalid strategyId');
 
-    // Prevent duplicate intervals for the same strategy
     await this.stopStrategy(id);
 
     const strategy = await db.get("SELECT * FROM strategies WHERE id = ?", [id]);
@@ -258,15 +257,17 @@ class StrategyService {
 
     const config = this.configs[strategy.name] || {
       symbols: ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'ADA/USDT', 'XRP/USDT'],
-      timeframe: '5m'
+      timeframe: '5m',
+      stakeAmount: 100
     };
 
-    console.log(`[Engine] Starting LIVE Market Strategy Node: ${strategy.name} on ${config.symbols.length} pairs (${config.timeframe})`);
+    console.log(`[Engine] >>> BOOTING CONTINUOUS SCAN: ${strategy.name} on ${config.symbols.length} markets (${config.timeframe})`);
 
-    const interval = setInterval(async () => {
-      // Clear lastSignals periodically or based on logic to avoid signal "stickiness"
-      // However, we want to avoid spamming the same signal every 7 seconds.
-      // The issue might be that signalSide is always 'buy' or 'sell' due to logic conditions.
+    // Define the core scanning logic
+    const scanFunction = async () => {
+      if (Math.random() < 0.1) {
+         console.log(`[Engine] ${strategy.name} Heartbeat: Scanning ${config.symbols.length} pairs...`);
+      }
 
       for (const symbol of config.symbols) {
         try {
@@ -276,10 +277,11 @@ class StrategyService {
           let initialTp = 0;
           let initialSl = 0;
 
-          // Fetch data for indicators
+          // Fetch market data
           data = await this.fetchOHLC(symbol, config.timeframe);
           currentPrice = data.price;
 
+          // 1. TrendFollower Logic
           if (strategy.name === 'TrendFollower') {
             const adxInfo = ADX.calculate({ high: data.highs, low: data.lows, close: data.closes, period: 14 });
             const bb = BollingerBands.calculate({ period: 20, stdDev: 2, values: data.closes });
@@ -292,13 +294,14 @@ class StrategyService {
               
               if (st.direction === 1 && currentAdx > 25 && currentPrice > currentBB.upper && lastVol > 0) {
                 signalSide = 'buy';
-                initialTp = currentPrice * 2.0;
-                initialSl = currentPrice * 0.90;
+                initialTp = currentPrice * 2.0; 
+                initialSl = currentPrice * 0.90; 
               } else if (st.direction === -1) {
                 signalSide = 'sell';
               }
             }
           } 
+          // 2. GridMeanReversion Logic
           else if (strategy.name === 'GridMeanReversion') {
             const rsi = RSI.calculate({ period: 14, values: data.closes });
             const bb = BollingerBands.calculate({ period: 20, stdDev: 2, values: data.closes });
@@ -311,12 +314,13 @@ class StrategyService {
               if (currentPrice < currentBB.lower && currentRsi < 20 && lastVol > 0) {
                 signalSide = 'buy';
                 initialTp = currentPrice * 1.01;
-                initialSl = currentPrice * 0.85;
+                initialSl = currentPrice * 0.85; 
               } else if (currentPrice > currentBB.middle) {
                 signalSide = 'sell';
               }
             }
           }
+          // 3. UltimateFuturesScalper Logic
           else if (strategy.name === 'UltimateFuturesScalper') {
             const rsi = RSI.calculate({ period: 14, values: data.closes });
             if (rsi.length > 0) {
@@ -342,25 +346,16 @@ class StrategyService {
             const signalKey = `${id}_${symbol}`;
             const isEntry = ['buy', 'long', 'short'].includes(signalSide.toLowerCase());
 
-            // LOGIC FIX: We only want to trigger a NEW signal if:
-            // 1. There is no active signal for this symbol/strategy.
-            // 2. OR the signalSide has changed (e.g. from Buy to Sell).
-            
             const activeSignal = await db.get(
-              "SELECT id, side FROM signals WHERE strategyId = ? AND symbol = ? AND status = 'active' LIMIT 1",
+              "SELECT id, side, price FROM signals WHERE strategyId = ? AND symbol = ? AND status = 'active' LIMIT 1",
               [id, symbol]
             );
 
             let shouldTrigger = false;
             if (isEntry) {
-              // Only trigger entry if no active signal exists
-              if (!activeSignal) {
-                shouldTrigger = true;
-              }
+              if (!activeSignal) shouldTrigger = true;
             } else {
-              // Only trigger exit (sell/cover) if an active signal exists
               if (activeSignal) {
-                // Ensure we are closing the correct side (e.g. 'sell' closes 'buy')
                 const activeSide = activeSignal.side.toLowerCase();
                 if ((signalSide === 'sell' && (activeSide === 'buy' || activeSide === 'long')) ||
                     (signalSide === 'cover' && activeSide === 'short')) {
@@ -372,60 +367,62 @@ class StrategyService {
             if (shouldTrigger && this.lastSignals[signalKey] !== signalSide) {
                this.lastSignals[signalKey] = signalSide;
 
-               const signal = {
-                 strategyId: id,
-                 strategyName: strategy.name,
-                 symbol: symbol,
-                 side: signalSide,
-                 price: currentPrice,
-                 tp: initialTp,
-                 sl: initialSl,
-                 stakeAmount: config.stakeAmount,
-                 timestamp: new Date().toISOString()
-               };
-
                let pnl = 0;
                let finalStatus = isEntry ? 'active' : 'completed';
 
                if (!isEntry && activeSignal) {
+                 const entryPrice = activeSignal.price || currentPrice;
                  if (activeSignal.side === 'buy' || activeSignal.side === 'long') {
-                   pnl = ((currentPrice - activeSignal.price || currentPrice) / (activeSignal.price || currentPrice)) * 100;
+                   pnl = ((currentPrice - entryPrice) / entryPrice) * 100;
                  } else {
-                   pnl = ((activeSignal.price || currentPrice) - currentPrice) / (activeSignal.price || currentPrice) * 100;
+                   pnl = ((entryPrice - currentPrice) / entryPrice) * 100;
                  }
                  await db.run("UPDATE signals SET status = 'closed', pnl = ? WHERE id = ?", [pnl, activeSignal.id]);
                }
 
                await db.run(
                  "INSERT INTO signals (strategyId, symbol, side, price, tp, sl, status, pnl, highestPrice, entryCount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                 [signal.strategyId, signal.symbol, signal.side, signal.price, signal.tp, signal.sl, finalStatus, pnl, currentPrice, 1]
+                 [id, symbol, signalSide, currentPrice, initialTp, initialSl, finalStatus, pnl, currentPrice, 1]
                );
 
                if (isEntry) {
                   console.log(`[Engine] >>> BROADCASTING ENTRY: ${strategy.name} ${signalSide} ${symbol} @ ${currentPrice}`);
-                  await getTelegramService().broadcastSignal(signal);
+                  await getTelegramService().broadcastSignal({
+                    strategyId: id,
+                    strategyName: strategy.name,
+                    symbol: symbol,
+                    side: signalSide,
+                    price: currentPrice,
+                    tp: initialTp,
+                    sl: initialSl,
+                    stakeAmount: config.stakeAmount
+                  });
                } else {
                   console.log(`[Engine] >>> EXIT SIGNAL: ${strategy.name} ${signalSide} ${symbol} @ ${currentPrice}`);
                }
             }
           } else {
-            // If no signal side detected by indicators, clear the lastSignals cache for this symbol
-            // to allow it to trigger again if conditions met in the next scan.
             const signalKey = `${id}_${symbol}`;
             delete this.lastSignals[signalKey];
           }
         } catch (e) {
-           console.error(`[Engine] Error scanning ${symbol}: ${e.message}`);
+           // Silently handle per-symbol errors to prevent killing the whole interval
+           if (Math.random() < 0.05) console.error(`[Engine Error] ${symbol}: ${e.message}`);
         }
       }
-    }, 7000);
+    };
+
+    // Run once immediately
+    scanFunction().catch(e => console.error(`[Engine Error] Initial scan failed for ${strategy.name}:`, e.message));
+
+    // Then run every 7 seconds
+    const interval = setInterval(scanFunction, 7000);
 
     this.runningProcesses.set(id, interval);
     return {
       status: 'Started (Live API Mode)',
       strategy: strategy.name,
-      mode: strategy.type,
-      file: `${strategy.name}.js`
+      mode: strategy.type
     };
   }
 

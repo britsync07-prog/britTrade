@@ -101,15 +101,23 @@ export default function StrategyDetail() {
   );
 
   const sigs = signalsData.signals || [];
-  const closedStatuses = ['completed', 'tp_hit', 'sl_hit'];
-  // Filter for real entries only (BUY, LONG, SHORT) that have finished. 
-  // We ignore 'cover' or 'sell' signals that don't represent a primary entry point.
+  const closedStatuses = ['completed', 'tp_hit', 'sl_hit', 'closed'];
+  
+  // Filter for real closed trades. 
+  // 1. Must be in a closed status.
+  // 2. Either be a primary entry side (BUY/LONG/SHORT)
+  // 3. OR be an exit side (SELL/COVER) but with an actual PnL result (not just a noise broadcast)
   const closedSigs = sigs.filter((s:any) => 
     closedStatuses.includes(s.status) && 
-    ['buy', 'long', 'short'].includes(s.side.toLowerCase())
+    (
+      ['buy', 'long', 'short'].includes(s.side.toLowerCase()) || 
+      Math.abs(s.pnl || 0) > 0.001
+    )
   );
-  const winSigs = closedSigs.filter((s:any) => s.status === 'tp_hit');
-  const lossSigs = closedSigs.filter((s:any) => s.status === 'sl_hit');
+
+  // Win/Loss logic based on PnL or Status
+  const winSigs = closedSigs.filter((s:any) => s.status === 'tp_hit' || (s.pnl || 0) > 0.01);
+  const lossSigs = closedSigs.filter((s:any) => s.status === 'sl_hit' || (s.pnl || 0) < -0.01);
 
   return (
     <div className="min-h-screen bg-[#020617] text-slate-200 pb-20 relative overflow-hidden">
