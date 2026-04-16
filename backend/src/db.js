@@ -14,7 +14,8 @@ const initDb = async () => {
     telegramId TEXT,
     balance REAL DEFAULT 10000.0,
     role TEXT DEFAULT 'user',
-    status TEXT DEFAULT 'active'
+    status TEXT DEFAULT 'active',
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
   
   const userRows = await query("PRAGMA table_info(users)");
@@ -23,6 +24,9 @@ const initDb = async () => {
   }
   if (!userRows.some(r => r.name === 'status')) {
     await run("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'");
+  }
+  if (!userRows.some(r => r.name === 'createdAt')) {
+    await run("ALTER TABLE users ADD COLUMN createdAt DATETIME DEFAULT '2026-01-01 00:00:00'");
   }
 
   const userCount = await get("SELECT count(*) as count FROM users");
