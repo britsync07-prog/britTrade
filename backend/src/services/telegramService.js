@@ -47,7 +47,8 @@ function formatExitMessage(strategyName, signal) {
 
 // ─── Bot Setup ────────────────────────────────────────────────────────────────
 if (token && token !== 'your_telegram_bot_token_here') {
-  bot = new TelegramBot(token, { polling: true });
+  bot = new TelegramBot(token, { polling: { interval: 1000, autoStart: false, params: { timeout: 10 } } });
+  bot.startPolling({ restart: false, dropPendingUpdates: true });
   console.log('[Telegram] Bot initialized: @BritSyncAI_bot');
 
   const sessions = {}; // tracks per-chat registration state
