@@ -26,7 +26,7 @@ function Hero() {
   return (
     <div className="w-full">
       <div className="container mx-auto">
-        <div className="flex gap-8 py-20 lg:py-40 items-center justify-center flex-col">
+        <div className="flex gap-8 pt-20 lg:pt-40 pb-12 items-center justify-center flex-col relative">
           <div className="flex gap-4 flex-col">
             <h1 className="text-5xl md:text-7xl lg:text-8xl max-w-3xl tracking-tighter text-center font-extrabold drop-shadow-xl z-10">
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-400 via-rose-500 to-red-600 animate-pulse">

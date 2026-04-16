@@ -8,6 +8,7 @@ import { SignalBroadcast } from './components/ui/SignalBroadcast';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import StrategyDetail from './pages/StrategyDetail';
+import TradingViewChart from './components/ui/TradingViewChart';
 import AdminDashboard from './pages/AdminDashboard';
 import api from './services/api';
 
@@ -152,6 +153,7 @@ function LandingPage() {
       <main className="pt-[72px]">
         <SignalBroadcast />
         <Hero />
+        <TradingViewChart />
 
         <section id="pricing" className="py-24 bg-slate-950/20">
           <div className="container mx-auto px-6 text-center mb-16">
