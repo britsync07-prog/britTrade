@@ -55,10 +55,10 @@ app.use(cors({
   credentials: true
 }));
 
+app.use(express.json());
+
 app.use('/payments', paymentRoutes);
 app.use('/admin', adminRoutes);
-
-app.use(express.json());
 
 // --- Authentication ---
 app.post('/auth/signup', async (req, res) => {
