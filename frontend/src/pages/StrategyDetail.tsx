@@ -13,6 +13,7 @@ export default function StrategyDetail() {
   const [subInfo, setSubInfo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [hasAccess, setHasAccess] = useState(false);
 
   const [signalsData, setSignalsData] = useState<any>({ signals: [] });
   const [prices, setPrices] = useState<Record<string, number>>({});
@@ -42,11 +43,8 @@ export default function StrategyDetail() {
           'high_risk': [3],
           'bundle': [1, 2, 3]
         };
-        const hasAccess = userRes.data?.purchasedPlans?.some((p: string) => planToStrat[p]?.includes(Number(id)));
-        if (!hasAccess) {
-          window.location.href = '/dashboard';
-          return;
-        }
+        const accessAllowed = userRes.data?.purchasedPlans?.some((p: string) => planToStrat[p]?.includes(Number(id)));
+        setHasAccess(!!accessAllowed);
 
         setError(null);
       } catch (e: any) {
@@ -137,7 +135,13 @@ export default function StrategyDetail() {
           </div>
 
           <div className="flex flex-wrap gap-3 w-full lg:w-auto">
-            {!subInfo ? (
+            {!hasAccess ? (
+              <div className="flex items-center gap-3 px-5 h-12 rounded-2xl border border-red-500/20 bg-red-500/5 backdrop-blur-sm">
+                <span className="w-2 h-2 rounded-full bg-red-400" />
+                <span className="text-sm font-bold text-red-400">Preview Mode Only</span>
+                <span className="text-[10px] text-slate-500 font-medium">— Live Signals Locked</span>
+              </div>
+            ) : !subInfo ? (
               <div className="flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-3 px-5 h-12 rounded-2xl border border-cyan-500/20 bg-cyan-500/5 backdrop-blur-sm">
                   <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
@@ -308,13 +312,21 @@ export default function StrategyDetail() {
                      {/* Signal List Split View */}
                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                         {/* Active Trades Column */}
-                        <div>
+                        <div className={`transition-all duration-500 ${!hasAccess ? 'filter blur-[4px] pointer-events-none opacity-40 select-none' : ''}`}>
                            <div className="flex items-center gap-2 mb-4">
                               <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
                               <h3 className="text-sm font-black text-white uppercase tracking-wider">Active Signals</h3>
                               <Badge className="bg-white/5 text-slate-400 border-none ml-auto">{sigs.filter((s:any) => s.status === 'active').length}</Badge>
                            </div>
-                           <div className="space-y-4 max-h-[480px] overflow-y-auto pr-1">
+                           <div className="space-y-4 max-h-[480px] overflow-y-auto pr-1 relative">
+                              {!hasAccess && (
+                                <div className="absolute inset-0 flex items-center justify-center z-10">
+                                  <div className="bg-black/60 px-6 py-3 rounded-2xl font-bold border border-white/20 whitespace-normal text-center">
+                                    <Target className="w-8 h-8 text-cyan-400 mx-auto mb-2" />
+                                    SUBSCRIBE TO UNLOCK LIVE TERMINAL
+                                  </div>
+                                </div>
+                              )}
                               {sigs.filter((s: any) => s.status === 'active').map((s: any) => (
                                 <SignalCard key={s.id} signal={s} currentPrice={prices[s.symbol]} strategyName={strategy.name} />
                               ))}

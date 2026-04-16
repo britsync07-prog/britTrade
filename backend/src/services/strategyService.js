@@ -381,6 +381,7 @@ class StrategyService {
   }
 
   async getSignals(strategyId, userId = null, isAdmin = false) {
+    let signals = await db.query("SELECT * FROM signals WHERE strategyId = ? ORDER BY timestamp DESC LIMIT 50", [strategyId]);
     if (userId && !isAdmin) {
        // Check if user has purchased the plan for this strategy
        const planToStrat = { 1: 'low_risk', 2: 'medium_risk', 3: 'high_risk' };
@@ -392,11 +393,13 @@ class StrategyService {
            [userId, targetPlan]
          );
          if (!hasPurchase) {
-           return { locked: true, message: 'Subscribe to view detailed signals' };
+           // Free users can only see closed/historical signals, live trades are hidden from the payload
+           signals = signals.filter(s => s.status !== 'active');
          }
        }
     }
-    return await db.query("SELECT * FROM signals WHERE strategyId = ? ORDER BY timestamp DESC LIMIT 50", [strategyId]);
+    // Maintain old API expected structure: { signals: [] } since some parts of the frontend might expect array directly, wrap if needed but we just return the array here as before.
+    return signals;
   }
 
   async getChartHistory(symbol, timeframe = '1h') {

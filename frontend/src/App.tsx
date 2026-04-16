@@ -142,6 +142,7 @@ function LandingPage() {
             <span className="text-xl font-bold tracking-tighter text-white">BRIT<span className="text-cyan-400">TRADE</span></span>
           </div>
           <div className="flex items-center gap-6">
+            <a href="#pricing" className="text-sm font-bold text-cyan-400 hover:text-cyan-300 transition-colors uppercase tracking-widest">Pricing</a>
             <a href="/login" className="text-sm font-medium text-slate-300 hover:text-white transition-colors">Log In</a>
             <a href="/login?signup=true" className="px-4 py-2 bg-white text-black rounded-lg text-sm font-bold hover:bg-slate-200 transition-colors">Get Started</a>
           </div>
@@ -152,7 +153,7 @@ function LandingPage() {
         <SignalBroadcast />
         <Hero />
 
-        <section className="py-24 bg-slate-950/20">
+        <section id="pricing" className="py-24 bg-slate-950/20">
           <div className="container mx-auto px-6 text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold mb-4 tracking-tighter">
               Choose Your <span className="text-cyan-400">Strategy</span>

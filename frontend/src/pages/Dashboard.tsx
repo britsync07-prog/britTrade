@@ -179,19 +179,33 @@ export default function Dashboard() {
                     
                     if (hasAccess) {
                       return (
-                        <Link to={`/strategy/${strat.id}`} className="block">
-                          <button className="w-full h-14 glass-card bg-white text-black hover:bg-slate-200 transition-all font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2">
-                             Authorize Terminal <ArrowRight size={16} />
-                          </button>
-                        </Link>
+                        <div className="flex gap-2">
+                          <Link to={`/strategy/${strat.id}`} className="block flex-1">
+                            <button className="w-full h-14 glass-card bg-white text-black hover:bg-slate-200 transition-all font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2">
+                               Terminal <ArrowRight size={16} />
+                            </button>
+                          </Link>
+                          <Link to={`/strategy/${strat.id}?tab=history`} className="block flex-1">
+                            <button className="w-full h-14 glass-card hover:bg-white/5 transition-all text-slate-300 font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2 rounded-xl">
+                               History
+                            </button>
+                          </Link>
+                        </div>
                       );
                     } else {
                       return (
-                        <Link to="/" className="block">
-                          <button className="w-full h-14 bg-cyan-500 hover:bg-cyan-600 text-white transition-all rounded-2xl font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/20">
-                             Purchase Plan <Zap size={16} />
-                          </button>
-                        </Link>
+                        <div className="flex gap-2">
+                          <Link to="/#pricing" className="block flex-1">
+                            <button className="w-full h-14 bg-cyan-500 hover:bg-cyan-600 text-white transition-all rounded-xl font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/20">
+                               Purchase <Zap size={16} />
+                            </button>
+                          </Link>
+                          <Link to={`/strategy/${strat.id}?preview=true`} className="block flex-1">
+                            <button className="w-full h-14 glass-card hover:bg-white/5 transition-all text-slate-300 font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2 rounded-xl border-white/10">
+                               History
+                            </button>
+                          </Link>
+                        </div>
                       );
                     }
                   })()}
