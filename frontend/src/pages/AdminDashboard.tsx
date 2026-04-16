@@ -49,9 +49,19 @@ export default function AdminDashboard() {
     try {
       setLoading(true);
       const res = await api.get('/admin/users');
-      setUsers(res.data);
-    } catch (e) {
+      // Ensure res.data is an array before setting
+      if (Array.isArray(res.data)) {
+        setUsers(res.data);
+      } else {
+        console.error('Invalid response format for users list', res.data);
+        setUsers([]);
+      }
+    } catch (e: any) {
       console.error('Failed to fetch admin data', e);
+      // Alert the user to API connection failures
+      if (e.message?.includes('Network Error')) {
+        alert('Could not connect to the backend. Please check if the server is running on http://localhost:7286');
+      }
     } finally {
       setLoading(false);
     }

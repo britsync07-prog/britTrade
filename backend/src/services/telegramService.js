@@ -238,7 +238,8 @@ class TelegramService {
 
     if (users.length === 0) return;
 
-    const message = formatExitMessage(strategy.name, signal);
+    const signalObj = { symbol, side, price, pnl, status };
+    const message = formatExitMessage(strategy.name, signalObj);
 
     for (const user of users) {
       bot.sendMessage(user.telegramId, message, { parse_mode: 'Markdown' }).catch(console.error);

@@ -56,9 +56,18 @@ router.post('/users', authMiddleware, adminMiddleware, async (req, res) => {
 router.put('/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const { role, status, balance } = req.body;
+    
+    // Fetch current user data to preserve existing values if they're not in the request body
+    const currentUser = await db.get("SELECT role, status, balance FROM users WHERE id = ?", [req.params.id]);
+    if (!currentUser) return res.status(404).json({ error: 'User not found' });
+
+    const finalRole = role !== undefined ? role : currentUser.role;
+    const finalStatus = status !== undefined ? status : currentUser.status;
+    const finalBalance = balance !== undefined ? balance : currentUser.balance;
+
     await db.run(
       "UPDATE users SET role = ?, status = ?, balance = ? WHERE id = ?",
-      [role, status, balance, req.params.id]
+      [finalRole, finalStatus, finalBalance, req.params.id]
     );
     res.json({ message: 'User updated' });
   } catch (e) {
