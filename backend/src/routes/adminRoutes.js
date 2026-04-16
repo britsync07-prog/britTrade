@@ -17,20 +17,32 @@ const adminMiddleware = (req, res, next) => {
 router.get('/users', authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const q = req.query.q || '';
+    console.log(`[Admin API] Fetching users matching "${q}"`);
+    
     const users = await db.query(
       "SELECT id, email, balance, role, status, createdAt FROM users WHERE email LIKE ? ORDER BY id DESC",
       [`%${q}%`]
     );
 
+    console.log(`[Admin API] Found ${users.length} users`);
+
     // Enrich with actual plans
     for (let user of users) {
-      const purchases = await db.query("SELECT planId FROM purchases WHERE userId = ?", [user.id]);
-      user.purchasedPlans = purchases.map(p => p.planId);
-      user.planCount = purchases.length;
+      try {
+        const purchases = await db.query("SELECT planId FROM purchases WHERE userId = ?", [user.id]);
+        user.purchasedPlans = purchases.map(p => p.planId) || [];
+        user.planCount = purchases.length;
+        console.log(`[Admin API] User ${user.email} (ID: ${user.id}) has ${user.purchasedPlans.length} plans`);
+      } catch (enrichErr) {
+        console.error(`[Admin API] Enrichment failed for user ${user.id}:`, enrichErr.message);
+        user.purchasedPlans = [];
+        user.planCount = 0;
+      }
     }
 
     res.json(users);
   } catch (e) {
+    console.error('[Admin API] GET /users failed:', e.message);
     res.status(500).json({ error: e.message });
   }
 });

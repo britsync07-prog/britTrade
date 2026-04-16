@@ -31,19 +31,24 @@ const allowedOrigins = [
   'https://brittrade.britsync.co.uk',
   'https://trade.mayfairmarketing.online',
   'http://localhost:3000',
-  'http://localhost:5173'
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:5174'
 ];
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Direct server hits or non-browser agents
     if (!origin) return callback(null, true);
     
-    // Check if origin is in whitelist or ends with allowed domains
-    const isAllowed = allowedOrigins.includes(origin) || 
-                     origin.endsWith('.pages.dev') || 
-                     origin.endsWith('.netlify.app') ||
-                     origin.includes('britsync.co.uk');
+    const lowerOrigin = origin.toLowerCase();
+    const isAllowed = allowedOrigins.some(ao => lowerOrigin === ao.toLowerCase()) || 
+                     lowerOrigin.endsWith('.pages.dev') || 
+                     lowerOrigin.endsWith('.netlify.app') ||
+                     lowerOrigin.includes('britsync.co.uk') ||
+                     lowerOrigin.includes('localhost:') ||
+                     lowerOrigin.includes('127.0.0.1:');
 
     if (isAllowed || process.env.NODE_ENV !== 'production') {
       callback(null, true);
