@@ -29,19 +29,23 @@ app.use((req, res, next) => {
 const allowedOrigins = [
   'https://brittrade.pages.dev',
   'https://brittrade.britsync.co.uk',
-  'https://trade.mayfairmarketing.online'
+  'https://trade.mayfairmarketing.online',
+  'http://localhost:3000',
+  'http://localhost:5173'
 ];
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || process.env.NODE_ENV !== 'production') return callback(null, true);
+    // Direct server hits or non-browser agents
+    if (!origin) return callback(null, true);
     
+    // Check if origin is in whitelist or ends with allowed domains
     const isAllowed = allowedOrigins.includes(origin) || 
                      origin.endsWith('.pages.dev') || 
                      origin.endsWith('.netlify.app') ||
                      origin.includes('britsync.co.uk');
 
-    if (isAllowed) {
+    if (isAllowed || process.env.NODE_ENV !== 'production') {
       callback(null, true);
     } else {
       console.warn(`[CORS Blocked] Origin: ${origin}`);
