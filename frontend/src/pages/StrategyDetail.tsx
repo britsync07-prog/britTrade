@@ -316,7 +316,7 @@ export default function StrategyDetail() {
                            </div>
                            <div className="space-y-4 max-h-[480px] overflow-y-auto pr-1">
                               {sigs.filter((s: any) => s.status === 'active').map((s: any) => (
-                                <SignalCard key={s.id} signal={s} currentPrice={prices[s.symbol]} />
+                                <SignalCard key={s.id} signal={s} currentPrice={prices[s.symbol]} strategyName={strategy.name} />
                               ))}
                               {sigs.filter((s: any) => s.status === 'active').length === 0 && (
                                 <div className="py-8 bg-white/[0.01] border border-dashed border-white/5 rounded-2xl text-center text-slate-600 text-[10px] uppercase font-bold tracking-widest">No active signals found</div>
@@ -333,7 +333,7 @@ export default function StrategyDetail() {
                            </div>
                            <div className="space-y-4 max-h-[480px] overflow-y-auto pr-1">
                               {closedSigs.map((s: any) => (
-                                <SignalCard key={s.id} signal={s} currentPrice={prices[s.symbol]} />
+                                <SignalCard key={s.id} signal={s} currentPrice={prices[s.symbol]} strategyName={strategy.name} />
                               ))}
                               {closedSigs.length === 0 && (
                                 <div className="py-8 bg-white/[0.01] border border-dashed border-white/5 rounded-2xl text-center text-slate-600 text-[10px] uppercase font-bold tracking-widest">No closed signals yet</div>
@@ -352,13 +352,16 @@ export default function StrategyDetail() {
   );
 }
 
-function SignalCard({ signal: s, currentPrice }: { signal: any, currentPrice?: number }) {
+function SignalCard({ signal: s, currentPrice, strategyName }: { signal: any, currentPrice?: number, strategyName?: string }) {
   let displayPnl = s.pnl;
   if (s.status === 'active' && currentPrice) {
+    let leverage = 1;
+    if (strategyName === 'UltimateFuturesScalper') leverage = 20;
+
     if (s.side === 'buy' || s.side === 'long') {
-      displayPnl = ((currentPrice - s.price) / s.price) * 100;
+      displayPnl = ((currentPrice - s.price) / s.price) * 100 * leverage;
     } else {
-      displayPnl = ((s.price - currentPrice) / s.price) * 100;
+      displayPnl = ((s.price - currentPrice) / s.price) * 100 * leverage;
     }
   }
 

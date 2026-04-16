@@ -79,14 +79,17 @@ class StrategyService {
           let status = 'active';
           let pnl = 0;
 
+          let leverage = 1;
+          if (strategy.name === 'UltimateFuturesScalper') leverage = 20;
+
           if (sig.side === 'buy' || sig.side === 'long') {
             if (currentPrice >= sig.tp) status = 'tp_hit';
             else if (currentPrice <= sig.sl) status = 'sl_hit';
-            pnl = ((currentPrice - sig.price) / sig.price) * 100;
+            pnl = ((currentPrice - sig.price) / sig.price) * 100 * leverage;
           } else {
             if (currentPrice <= sig.tp) status = 'tp_hit';
             else if (currentPrice >= sig.sl) status = 'sl_hit';
-            pnl = ((sig.price - currentPrice) / sig.price) * 100;
+            pnl = ((sig.price - currentPrice) / sig.price) * 100 * leverage;
           }
 
           if (status !== 'active') {
@@ -161,9 +164,10 @@ class StrategyService {
       const closed = trades.filter(t => t.status === 'closed');
       let prof24h = 0;
       if (closed.length > 0) {
+        // Since t.pnl is already a % (ROE), we can just average the ROE per trade.
+        // Or strictly sum it for a cumulative absolute return of the day.
         const totalPnl = closed.reduce((acc, t) => acc + (t.pnl || 0), 0);
-        const totalStake = closed.length * 100; // Assuming default $100 stake
-        prof24h = (totalPnl / totalStake) * 100;
+        prof24h = totalPnl; // Show the total stacked ROE percentage gained today
       }
       s.prof24h = prof24h.toFixed(2);
     }
