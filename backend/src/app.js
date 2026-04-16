@@ -159,6 +159,16 @@ app.get('/strategies/:id/signals', authMiddleware, async (req, res, next) => {
 });
 
 
+// --- Public API for Landing Page ---
+app.get('/public/signals/broadcast', async (req, res, next) => {
+  try {
+    const signals = await db.query(
+      "SELECT s.symbol, s.side, s.pnl, s.status, s.timestamp, st.name as strategyName FROM signals s JOIN strategies st ON s.strategyId = st.id WHERE s.status != 'active' AND s.pnl IS NOT NULL ORDER BY s.timestamp DESC LIMIT 15"
+    );
+    res.json(signals);
+  } catch (e) { next(e); }
+});
+
 // --- REAL CHART DATA API ---
 // decodeURIComponent handles BTC%2FUSDT -> BTC/USDT correctly
 app.get('/charts/:symbol', authMiddleware, async (req, res, next) => {

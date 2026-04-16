@@ -4,6 +4,7 @@ import { Hero } from './components/ui/animated-hero';
 import RadialOrbitalTimeline from './components/ui/radial-orbital-timeline';
 import { ServiceCarousel, type Service } from './components/ui/services-card';
 import { Clock, Activity, Shield, TrendingUp, Coins, Rocket, Layers } from "lucide-react";
+import { SignalBroadcast } from './components/ui/SignalBroadcast';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import StrategyDetail from './pages/StrategyDetail';
@@ -147,7 +148,8 @@ function LandingPage() {
         </div>
       </nav>
 
-      <main className="pt-20">
+      <main className="pt-[72px]">
+        <SignalBroadcast />
         <Hero />
 
         <section className="py-24 bg-slate-950/20">
