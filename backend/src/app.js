@@ -33,7 +33,8 @@ app.use(cors({
       /https:\/\/.*\.netlify\.app/,
       /https:\/\/.*\.pages\.dev/,
       /https:\/\/trade\.mayfairmarketing\.online/,
-      /https:\/\/brittrade\.pages\.dev/
+      /https:\/\/brittrade\.pages\.dev/,
+      /https:\/\/brittrade\.britsync\.co\.uk/
     ];
     
     if (!origin || process.env.NODE_ENV !== 'production') {
