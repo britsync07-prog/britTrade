@@ -29,7 +29,7 @@ function Hero() {
         <div className="flex gap-8 py-20 lg:py-40 items-center justify-center flex-col">
           <div className="flex gap-4 flex-col">
             <h1 className="text-5xl md:text-7xl lg:text-8xl max-w-3xl tracking-tighter text-center font-extrabold drop-shadow-xl z-10">
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-500 animate-pulse">
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 via-teal-400 to-cyan-500 animate-pulse">
                 Trading crypto is now
               </span>
               <span className="relative flex w-full justify-center overflow-hidden text-center md:pb-4 md:pt-4 text-white drop-shadow-[0_0_20px_rgba(255,255,255,0.3)]">
@@ -75,8 +75,8 @@ function Hero() {
           </div>
           
           {/* Decorative glowing orbs behind the text */}
-          <div className="absolute top-1/3 left-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-[100px] -z-10 pointer-events-none" />
-          <div className="absolute top-1/2 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-[100px] -z-10 pointer-events-none" />
+          <div className="absolute top-1/3 left-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-[100px] -z-10 pointer-events-none" />
+          <div className="absolute top-1/2 right-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-[100px] -z-10 pointer-events-none" />
         </div>
       </div>
     </div>
