@@ -171,7 +171,6 @@ if (token && token !== 'your_telegram_bot_token_here') {
 
 // ─── TelegramService class ────────────────────────────────────────────────────
 class TelegramService {
-
   async connect(userId, telegramId) {
     if (!telegramId) throw new Error('telegramId is required');
     return await db.run("UPDATE users SET telegramId = ? WHERE id = ?", [telegramId.toString(), userId]);
@@ -214,8 +213,6 @@ class TelegramService {
       ? formatEntryMessage(strategy.name, signal)
       : formatExitMessage(strategy.name, signal);
 
-    console.log(`[Telegram] Broadcasting signal to ${users.length} user(s) for strategy ${strategy.name} (${side})`);
-
     for (const user of users) {
       bot.sendMessage(user.telegramId, message, { parse_mode: 'Markdown' }).catch(console.error);
     }
@@ -241,10 +238,7 @@ class TelegramService {
 
     if (users.length === 0) return;
 
-    const signal = { symbol, side, price, pnl, status };
     const message = formatExitMessage(strategy.name, signal);
-
-    console.log(`[Telegram] Broadcasting close to ${users.length} user(s): ${symbol} ${status} PnL=${pnl?.toFixed(2)}%`);
 
     for (const user of users) {
       bot.sendMessage(user.telegramId, message, { parse_mode: 'Markdown' }).catch(console.error);
