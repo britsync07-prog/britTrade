@@ -70,8 +70,8 @@ export default function AdminDashboard() {
   const handleRoleChange = async (userId: number, role: string) => {
     try {
       await api.put(`/admin/users/${userId}`, { role });
-      fetchData();
-      setSelectedUser(prev => prev ? { ...prev, role } : null);
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, role } : u));
+      setSelectedUser(prev => prev && prev.id === userId ? { ...prev, role } : prev);
     } catch (e) {
       alert('Failed to update role');
     }
@@ -109,10 +109,23 @@ export default function AdminDashboard() {
       } else {
         await api.post(`/admin/users/${userId}/purchases`, { planId });
       }
-      fetchData();
+      
+      // Update both the users list and the selectedUser modal state immediately for perfect reactivity
+      const updatePlans = (currentPlans: string[] = []) => 
+        hasPlan ? currentPlans.filter(p => p !== planId) : [...currentPlans, planId];
+
+      setUsers(prev => prev.map(u => 
+        u.id === userId ? { ...u, purchasedPlans: updatePlans(u.purchasedPlans) } : u
+      ));
+
+      setSelectedUser(prev => 
+        prev && prev.id === userId ? { ...prev, purchasedPlans: updatePlans(prev.purchasedPlans) } : prev
+      );
+
       fetchStats();
     } catch (e) {
-      alert('Failed to update plan');
+      console.error('Plan update error:', e);
+      alert('Failed to update plan. Make sure the server is responsive.');
     }
   };
 
