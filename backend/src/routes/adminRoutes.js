@@ -41,7 +41,7 @@ router.post('/users', authMiddleware, adminMiddleware, async (req, res) => {
     const { email, password, role = 'user' } = req.body;
     const authService = require('../services/authService');
     const user = await authService.signup(email, password);
-    
+
     if (role === 'admin') {
       await db.run("UPDATE users SET role = 'admin' WHERE id = ?", [user.id]);
     }
@@ -95,14 +95,13 @@ router.post('/users/:id/purchases', authMiddleware, adminMiddleware, async (req,
   try {
     const { planId } = req.body;
     await db.run("INSERT OR IGNORE INTO purchases (userId, planId) VALUES (?, ?)", [req.params.id, planId]);
-    
+
     // Trigger auto-subscription
     const authService = require('../services/authService');
     await authService.purchasePlan(req.params.id, planId); // Re-uses existing logic for strategy subscription
-    
+
     res.json({ message: 'Plan granted' });
   } catch (e) {
-    console.error('[Admin API Error] POST /purchases:', e);
     res.status(500).json({ error: e.message });
   }
 });
@@ -123,7 +122,7 @@ router.get('/stats', authMiddleware, adminMiddleware, async (req, res) => {
     const userCount = await db.get("SELECT count(*) as count FROM users");
     const activeSignals = await db.get("SELECT count(*) as count FROM signals WHERE status = 'active'");
     const totalPurchases = await db.get("SELECT count(*) as count FROM purchases");
-    
+
     // Revenue estimation (Static based on known plan prices)
     const purchases = await db.query("SELECT planId FROM purchases");
     const prices = { 'low_risk': 25, 'medium_risk': 20, 'high_risk': 15, 'bundle': 50 };
