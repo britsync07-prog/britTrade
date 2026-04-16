@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ChevronLeft, TrendingUp, Target, Activity, Zap } from 'lucide-react';
+import { ChevronLeft, TrendingUp, Target, Activity, Zap, Send } from 'lucide-react';
 import api from '../services/api';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -13,10 +13,10 @@ export default function StrategyDetail() {
   const [subInfo, setSubInfo] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showSubModal, setShowSubModal] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+
   const [signalsData, setSignalsData] = useState<any>({ signals: [] });
   const [prices, setPrices] = useState<Record<string, number>>({});
+  const TG_URL = 'https://t.me/BritSyncAI_bot';
 
   useEffect(() => {
     const fetchData = async () => {
@@ -71,25 +71,6 @@ export default function StrategyDetail() {
     return () => clearInterval(interval);
   }, [id]);
 
-  const handleSubscribe = async () => {
-    setSubmitting(true);
-    try {
-      await api.post('/strategies/subscribe', {
-        strategyId: Number(id),
-        useSignal: true,
-        useVirtualBalance: false,
-        allocatedBalance: 0
-      });
-      setShowSubModal(false);
-      window.location.reload(); 
-    } catch (e) {
-      console.error('Subscription failed', e);
-      alert('Subscription failed. Please try again.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   const handleUnsubscribe = async () => {
     if (!confirm('Are you sure you want to stop receiving signals from this terminal?')) return;
     try {
@@ -128,36 +109,7 @@ export default function StrategyDetail() {
 
   return (
     <div className="min-h-screen bg-[#020617] text-slate-200 pb-20 relative overflow-hidden">
-      {/* Interactive Subscription Modal */}
-      {showSubModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="glass-card w-full max-w-md p-8 relative overflow-hidden shadow-2xl border-white/10">
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-500 to-purple-500" />
-            <h2 className="text-2xl font-bold mb-2 text-white">Enable Signals</h2>
-            <p className="text-slate-400 text-sm mb-6">Start receiving premium real-time signals for {strategy.name}.</p>
-            
-            <div className="space-y-4 mb-8">
-              <div className="w-full p-4 rounded-xl border border-cyan-500 bg-cyan-500/10 text-cyan-400 shadow-lg shadow-cyan-500/5">
-                <div className="font-bold flex items-center gap-2">
-                  <Zap size={16} /> Premium Signals
-                </div>
-                <div className="text-xs opacity-60 mt-1">Receive entry, take-profit, and stop-loss alerts via Telegram and this dashboard.</div>
-              </div>
-            </div>
 
-            <div className="flex gap-3">
-              <Button variant="outline" className="flex-1 rounded-xl h-11" onClick={() => setShowSubModal(false)}>Cancel</Button>
-              <Button 
-                onClick={handleSubscribe} 
-                disabled={submitting}
-                className="flex-1 bg-white text-black hover:bg-white/90 rounded-xl h-11 font-bold"
-              >
-                {submitting ? 'Connecting...' : 'Deploy Now'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <div className="max-w-7xl mx-auto px-4 md:px-8 pt-12 space-y-8 relative z-10">
         <Link to="/dashboard" className="inline-flex items-center gap-2 text-slate-500 hover:text-white transition-colors group mb-4">
@@ -184,15 +136,24 @@ export default function StrategyDetail() {
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-4 w-full lg:w-auto">
+          <div className="flex flex-wrap gap-3 w-full lg:w-auto">
             {!subInfo ? (
-              <Button 
-                onClick={() => setShowSubModal(true)}
-                className="bg-white text-black hover:bg-white/90 rounded-2xl px-8 h-12 font-bold group/btn flex-grow lg:flex-grow-0 shadow-lg shadow-white/5"
-              >
-                Initialize Signal Node
-                <Zap className="ml-2 w-4 h-4 fill-current group-hover/btn:scale-110 transition-transform" />
-              </Button>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-3 px-5 h-12 rounded-2xl border border-cyan-500/20 bg-cyan-500/5 backdrop-blur-sm">
+                  <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                  <span className="text-sm font-bold text-cyan-400">Signal Node Active</span>
+                  <span className="text-[10px] text-slate-500 font-medium">— auto-subscribed with your plan</span>
+                </div>
+                <a
+                  href={TG_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-5 h-12 rounded-2xl font-bold text-sm bg-[#229ED9]/10 border border-[#229ED9]/30 text-[#229ED9] hover:bg-[#229ED9]/20 hover:border-[#229ED9]/60 transition-all shadow-lg shadow-[#229ED9]/5"
+                >
+                  <Send size={15} className="-rotate-45" />
+                  Join Telegram Alerts
+                </a>
+              </div>
             ) : (
               <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto">
                 <div className="grid grid-cols-2 gap-3 flex-grow lg:flex-grow-0">
@@ -207,13 +168,24 @@ export default function StrategyDetail() {
                     <div className="text-[9px] text-slate-500 font-bold uppercase tracking-tighter">Loss</div>
                   </div>
                 </div>
-                <Button 
-                  variant="outline" 
-                  onClick={handleUnsubscribe}
-                  className="border-white/10 hover:bg-rose-500/10 hover:text-rose-400 hover:border-rose-500/20 rounded-2xl h-14 px-6 transition-all"
-                >
-                  Disconnect Node
-                </Button>
+                <div className="flex flex-col gap-2">
+                  <a
+                    href={TG_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-5 h-11 rounded-2xl font-bold text-sm bg-[#229ED9]/10 border border-[#229ED9]/30 text-[#229ED9] hover:bg-[#229ED9]/20 hover:border-[#229ED9]/60 transition-all shadow-lg shadow-[#229ED9]/5"
+                  >
+                    <Send size={15} className="-rotate-45" />
+                    Join Telegram Alerts
+                  </a>
+                  <Button 
+                    variant="outline" 
+                    onClick={handleUnsubscribe}
+                    className="border-white/10 hover:bg-rose-500/10 hover:text-rose-400 hover:border-rose-500/20 rounded-2xl h-11 px-6 transition-all text-sm"
+                  >
+                    Disconnect Node
+                  </Button>
+                </div>
               </div>
             )}
           </div>
@@ -342,7 +314,7 @@ export default function StrategyDetail() {
                               <h3 className="text-sm font-black text-white uppercase tracking-wider">Active Signals</h3>
                               <Badge className="bg-white/5 text-slate-400 border-none ml-auto">{sigs.filter((s:any) => s.status === 'active').length}</Badge>
                            </div>
-                           <div className="space-y-4">
+                           <div className="space-y-4 max-h-[480px] overflow-y-auto pr-1">
                               {sigs.filter((s: any) => s.status === 'active').map((s: any) => (
                                 <SignalCard key={s.id} signal={s} currentPrice={prices[s.symbol]} />
                               ))}
@@ -359,7 +331,7 @@ export default function StrategyDetail() {
                               <h3 className="text-sm font-black text-white uppercase tracking-wider">Closed Signals</h3>
                               <Badge className="bg-white/5 text-slate-400 border-none ml-auto">{closedSigs.length}</Badge>
                            </div>
-                           <div className="space-y-4">
+                           <div className="space-y-4 max-h-[480px] overflow-y-auto pr-1">
                               {closedSigs.map((s: any) => (
                                 <SignalCard key={s.id} signal={s} currentPrice={prices[s.symbol]} />
                               ))}

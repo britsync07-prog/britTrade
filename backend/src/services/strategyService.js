@@ -3,13 +3,7 @@ const axios = require('axios');
 const { RSI, BollingerBands, ADX, ATR } = require('technicalindicators');
 
 // Lazy-loaded to avoid circular require issues
-let paperService = null;
 let telegramService = null;
-
-function getPaperService() {
-  if (!paperService) paperService = require('./paperService');
-  return paperService;
-}
 
 function getTelegramService() {
   if (!telegramService) telegramService = require('./telegramService');
@@ -101,14 +95,15 @@ class StrategyService {
               [status, pnl, sig.id]
             );
 
-            // Notify PaperService to close associated trades
-            const exitSide = (sig.side === 'buy' || sig.side === 'long') ? 'sell' : 'cover';
-            await getPaperService().handleSignal({
-              ...sig,
-              side: exitSide,
-              price: currentPrice,
-              pnl: pnl
-            });
+            // Notify subscribers on Telegram about the close
+            await getTelegramService().broadcastClose(
+              sig.strategyId,
+              sig.symbol,
+              sig.side === 'buy' || sig.side === 'long' ? 'sell' : 'buy',
+              currentPrice,
+              pnl,
+              status
+            );
 
             console.log(`[Signal Tracker] Signal ${sig.id} (${sig.symbol}) closed: ${status} (PnL: ${pnl.toFixed(2)}%)`);
           }
@@ -349,13 +344,11 @@ class StrategyService {
                  [signal.strategyId, signal.symbol, signal.side, signal.price, signal.tp, signal.sl, finalStatus, pnl]
                );
 
-               // Only broadcast Entry signals to Telegram from here. 
-               // Exit signals will be broadcasted from PaperService ONLY if a trade was actually closed.
-               if (signal.side === 'buy' || signal.side === 'short') {
+               // Broadcast ALL entry signals (buy/sell/long/short) to Telegram
+               if (isEntry) {
                   await getTelegramService().broadcastSignal(signal);
                }
 
-               await getPaperService().handleSignal(signal);
             }
           }
         } catch (e) {

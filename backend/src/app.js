@@ -7,7 +7,7 @@ const db = require('./db');
 
 const authService = require('./services/authService');
 const strategyService = require('./services/strategyService');
-const paperService = require('./services/paperService');
+
 const telegramService = require('./services/telegramService');
 const authMiddleware = require('./routes/authMiddleware');
 const paymentRoutes = require('./routes/paymentRoutes');
@@ -158,34 +158,6 @@ app.get('/strategies/:id/signals', authMiddleware, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// --- Paper Trading ---
-app.post('/paper/start', authMiddleware, async (req, res, next) => {
-  try {
-    const result = await paperService.start(req.userId);
-    res.json(result);
-  } catch (e) { next(e); }
-});
-
-app.post('/paper/stop', authMiddleware, async (req, res, next) => {
-  try {
-    const result = await paperService.stop(req.userId);
-    res.json(result);
-  } catch (e) { next(e); }
-});
-
-app.get('/paper/trades', authMiddleware, async (req, res, next) => {
-  try {
-    const trades = await paperService.getTrades(req.userId);
-    res.json(trades);
-  } catch (e) { next(e); }
-});
-
-app.get('/paper/performance', authMiddleware, async (req, res, next) => {
-  try {
-    const perf = await paperService.getPerformance(req.userId);
-    res.json(perf);
-  } catch (e) { next(e); }
-});
 
 // --- REAL CHART DATA API ---
 // decodeURIComponent handles BTC%2FUSDT -> BTC/USDT correctly
@@ -258,7 +230,7 @@ app.get('/market/summary', authMiddleware, async (req, res) => {
 
 app.get('/portfolio/history', authMiddleware, async (req, res, next) => {
   try {
-    const trades = await paperService.getHistory(req.userId);
+    const trades = await db.query("SELECT * FROM trades WHERE userId = ? ORDER BY timestamp DESC", [req.userId]);
     res.json(trades);
   } catch (e) { next(e); }
 });
