@@ -102,6 +102,7 @@ router.post('/users/:id/purchases', authMiddleware, adminMiddleware, async (req,
     
     res.json({ message: 'Plan granted' });
   } catch (e) {
+    console.error('[Admin API Error] POST /purchases:', e);
     res.status(500).json({ error: e.message });
   }
 });
