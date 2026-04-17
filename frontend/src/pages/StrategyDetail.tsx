@@ -373,6 +373,16 @@ export default function StrategyDetail() {
 }
 
 function SignalCard({ signal: s, currentPrice, strategyName }: { signal: any, currentPrice?: number, strategyName?: string }) {
+  const formatPrice = (value: any) => {
+    const price = Number(value);
+    if (!Number.isFinite(price)) return '---';
+    if (price === 0) return '0.00';
+    if (Math.abs(price) >= 1) return price.toFixed(4);
+    if (Math.abs(price) >= 0.01) return price.toFixed(6);
+    if (Math.abs(price) >= 0.0001) return price.toFixed(8);
+    return price.toFixed(10);
+  };
+
   let displayPnl = s.pnl;
   if (s.status === 'active' && currentPrice) {
     let leverage = 1;
@@ -401,7 +411,7 @@ function SignalCard({ signal: s, currentPrice, strategyName }: { signal: any, cu
              <div className={`text-[8px] font-black uppercase tracking-widest mb-0.5 ${s.status === 'tp_hit' ? 'text-emerald-400' : s.status === 'sl_hit' ? 'text-rose-400' : 'text-cyan-400 animate-pulse'}`}>
                 {s.status.replace('_', ' ')}
              </div>
-             <div className="text-[10px] font-mono font-bold text-white">${s.price.toFixed(4)}</div>
+             <div className="text-[10px] font-mono font-bold text-white">${formatPrice(s.price)}</div>
           </div>
        </div>
 
@@ -410,11 +420,11 @@ function SignalCard({ signal: s, currentPrice, strategyName }: { signal: any, cu
             <>
               <div className="text-center">
                  <div className="text-[7px] text-slate-500 uppercase font-black mb-0.5">Target TP</div>
-                 <div className="text-[9px] font-mono text-emerald-400 font-bold">${s.tp?.toFixed(4) || '---'}</div>
+                 <div className="text-[9px] font-mono text-emerald-400 font-bold">${formatPrice(s.tp)}</div>
               </div>
               <div className="text-center border-x border-white/5">
                  <div className="text-[7px] text-slate-500 uppercase font-black mb-0.5">Stop Loss</div>
-                 <div className="text-[9px] font-mono text-rose-400 font-bold">${s.sl?.toFixed(4) || '---'}</div>
+                 <div className="text-[9px] font-mono text-rose-400 font-bold">${formatPrice(s.sl)}</div>
               </div>
               <div className="text-center col-span-2 lg:col-span-1 border-t lg:border-t-0 border-white/5 pt-1.5 lg:pt-0 mt-1.5 lg:mt-0">
                  <div className="text-[7px] text-slate-500 uppercase font-black mb-0.5">Live PnL</div>
