@@ -4,6 +4,52 @@ const fs = require('fs');
 
 const dbPath = path.resolve(__dirname, '../platform.db');
 const db = new sqlite3.Database(dbPath);
+let corruptionShutdownStarted = false;
+
+function isCorruptionError(err) {
+  return err && (
+    err.code === 'SQLITE_CORRUPT' ||
+    (err.message && (err.message.includes('SQLITE_CORRUPT') || err.message.includes('malformed')))
+  );
+}
+
+function moveIfExists(sourcePath, suffix) {
+  if (!fs.existsSync(sourcePath)) return;
+
+  const targetPath = `${dbPath}.corrupt_${suffix}${sourcePath.slice(dbPath.length)}`;
+  fs.renameSync(sourcePath, targetPath);
+  console.log(`Corrupted DB file moved: ${sourcePath} -> ${targetPath}`);
+}
+
+function handleCorruptDatabase(context, err) {
+  if (!isCorruptionError(err) || corruptionShutdownStarted) return false;
+
+  corruptionShutdownStarted = true;
+  console.error('\x1b[31m%s\x1b[0m', `!!! CRITICAL: Runtime database corruption detected during ${context} !!!`);
+  console.error(err);
+  console.log('Auto-healing: closing SQLite, moving corrupted database files aside, and exiting for PM2 restart...');
+
+  const suffix = Date.now();
+  db.close((closeErr) => {
+    if (closeErr) {
+      console.error('[DB Close Error during corruption handling]', closeErr);
+    }
+
+    try {
+      moveIfExists(dbPath, suffix);
+      moveIfExists(`${dbPath}-journal`, suffix);
+      moveIfExists(`${dbPath}-wal`, suffix);
+      moveIfExists(`${dbPath}-shm`, suffix);
+    } catch (moveErr) {
+      console.error('[DB Move Error during corruption handling]', moveErr);
+    }
+
+    process.exit(1);
+  });
+
+  setTimeout(() => process.exit(1), 3000).unref();
+  return true;
+}
 
 const initDb = async () => {
   // Wait to ensure tables are created
@@ -124,20 +170,8 @@ const safeInitDb = async () => {
   try {
     await initDb();
   } catch (err) {
-    if (err.message.includes('SQLITE_CORRUPT') || err.message.includes('malformed')) {
-      console.error('\x1b[31m%s\x1b[0m', '!!! CRITICAL: Database corruption detected (SQLITE_CORRUPT) !!!');
-      console.log('Auto-healing: Renaming corrupted database and exiting to trigger PM2 restart...');
-      
-      const corruptPath = dbPath + '.corrupt_' + Date.now();
-      if (fs.existsSync(dbPath)) {
-        fs.renameSync(dbPath, corruptPath);
-      }
-      if (fs.existsSync(dbPath + '-journal')) {
-        fs.unlinkSync(dbPath + '-journal');
-      }
-      
-      console.log(`Corrupted DB moved to: ${corruptPath}`);
-      process.exit(1); // Force exit. PM2 will restart us fresh.
+    if (handleCorruptDatabase('startup', err)) {
+      return;
     }
     throw err;
   }
@@ -148,6 +182,7 @@ const query = (sql, params = []) => {
     db.all(sql, params, (err, rows) => {
       if (err) {
         console.error(`[DB Query Error] SQL: ${sql} | Params: ${JSON.stringify(params)} | Error:`, err);
+        handleCorruptDatabase('query', err);
         reject(err);
       } else resolve(rows);
     });
@@ -159,6 +194,7 @@ const get = (sql, params = []) => {
     db.get(sql, params, (err, row) => {
       if (err) {
         console.error(`[DB Get Error] SQL: ${sql} | Params: ${JSON.stringify(params)} | Error:`, err);
+        handleCorruptDatabase('get', err);
         reject(err);
       } else resolve(row);
     });
@@ -170,6 +206,7 @@ const run = (sql, params = []) => {
     db.run(sql, params, function(err) {
       if (err) {
         console.error(`[DB Run Error] SQL: ${sql} | Params: ${JSON.stringify(params)} | Error:`, err);
+        handleCorruptDatabase('run', err);
         reject(err);
       } else resolve({ id: this.lastID, changes: this.changes });
     });
