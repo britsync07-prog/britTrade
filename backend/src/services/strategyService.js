@@ -195,19 +195,26 @@ class StrategyService {
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     
     for (const s of strategies) {
-      const signals = await db.query(
-        "SELECT pnl, status FROM signals WHERE strategyId = ? AND timestamp > ? AND status != 'active'",
+      const allSignals = await db.query("SELECT pnl, status FROM signals WHERE strategyId = ?", [s.id]);
+      const signals24h = await db.query(
+        "SELECT pnl, status FROM signals WHERE strategyId = ? AND timestamp > ?",
         [s.id, yesterday]
       );
-      const closed = signals.filter(t => ['closed', 'completed', 'tp_hit', 'sl_hit'].includes(t.status));
-      let prof24h = 0;
-      if (closed.length > 0) {
-        // Since t.pnl is already a % (ROE), we can just average the ROE per trade.
-        // Or strictly sum it for a cumulative absolute return of the day.
-        const totalPnl = closed.reduce((acc, t) => acc + (t.pnl || 0), 0);
-        prof24h = totalPnl; // Show the total stacked ROE percentage gained today
-      }
-      s.prof24h = prof24h.toFixed(2);
+
+      const isClosed = (signal) => ['closed', 'completed', 'tp_hit', 'sl_hit'].includes(signal.status);
+      const closed = allSignals.filter(isClosed);
+      const closed24h = signals24h.filter(isClosed);
+      const wins = closed.filter(signal => signal.status === 'tp_hit' || (signal.pnl || 0) > 0);
+      const pnl24h = closed24h.reduce((acc, signal) => acc + (signal.pnl || 0), 0);
+      const config = this.configs[s.name];
+
+      s.prof24h = pnl24h.toFixed(2);
+      s.signalCount = allSignals.length;
+      s.activeSignalCount = allSignals.filter(signal => signal.status === 'active').length;
+      s.closedSignalCount = closed.length;
+      s.winRate = closed.length > 0 ? ((wins.length / closed.length) * 100).toFixed(1) : '0.0';
+      s.pairCount = config?.symbols?.length || 0;
+      s.symbols = config?.symbols || [];
     }
     return strategies;
   }

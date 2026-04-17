@@ -58,6 +58,15 @@ export default function Dashboard() {
     </div>
   );
 
+  const totalSignals = strategies.reduce((sum, strat) => sum + Number(strat.signalCount || 0), 0);
+  const totalClosedSignals = strategies.reduce((sum, strat) => sum + Number(strat.closedSignalCount || 0), 0);
+  const weightedWins = strategies.reduce((sum, strat) => {
+    const closed = Number(strat.closedSignalCount || 0);
+    const winRate = Number(strat.winRate || 0);
+    return sum + ((winRate / 100) * closed);
+  }, 0);
+  const dashboardWinRate = totalClosedSignals > 0 ? `${((weightedWins / totalClosedSignals) * 100).toFixed(1)}%` : '0.0%';
+
   return (
     <div className="min-h-screen bg-cyber-dark text-slate-200 pb-20 relative overflow-hidden">
       {/* Background Ambience */}
@@ -109,8 +118,8 @@ export default function Dashboard() {
         {/* Global Stats Overview */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <QuickStat title="Active Nodes" value={strategies.length} icon={Activity} color="text-cyan-400" />
-          <QuickStat title="Signal Win Rate" value="78.4%" icon={Zap} color="text-yellow-400" />
-          <QuickStat title="Total Signals" value="1,240" icon={TrendingUp} color="text-emerald-400" />
+          <QuickStat title="Signal Win Rate" value={dashboardWinRate} icon={Zap} color="text-yellow-400" />
+          <QuickStat title="Total Signals" value={totalSignals.toLocaleString()} icon={TrendingUp} color="text-emerald-400" />
           <QuickStat title="User Status" value={user?.role?.toUpperCase() || 'PRO'} icon={ShieldAlert} color="text-purple-400" />
         </div>
 
@@ -159,11 +168,13 @@ export default function Dashboard() {
                         </div>
                         <div className="border-x border-white/5 px-2">
                            <div className="text-[8px] font-black uppercase tracking-widest text-slate-500 mb-1">24h Prof</div>
-                           <div className="text-xs font-bold text-emerald-400">+{strat.prof24h || '2.4'}%</div>
+                           <div className={`text-xs font-bold ${Number(strat.prof24h || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                              {Number(strat.prof24h || 0) >= 0 ? '+' : ''}{Number(strat.prof24h || 0).toFixed(2)}%
+                           </div>
                         </div>
                         <div className="text-right">
                            <div className="text-[8px] font-black uppercase tracking-widest text-slate-500 mb-1">Pairs</div>
-                           <div className="text-xs font-bold text-slate-300">{(strat.symbols || ['BTC','ETH']).length} Volatile</div>
+                           <div className="text-xs font-bold text-slate-300">{Number(strat.pairCount || 0)} Scanned</div>
                         </div>
                      </div>
                   </div>
