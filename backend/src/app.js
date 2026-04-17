@@ -249,7 +249,13 @@ app.get('/portfolio/history', authMiddleware, async (req, res, next) => {
        FROM signals sig
        JOIN strategies st ON sig.strategyId = st.id
        JOIN subscriptions sub ON sub.strategyId = sig.strategyId
+       JOIN purchases p ON p.userId = sub.userId
        WHERE sub.userId = ?
+         AND (p.planId = CASE sig.strategyId
+              WHEN 1 THEN 'low_risk'
+              WHEN 2 THEN 'medium_risk'
+              WHEN 3 THEN 'high_risk'
+            END OR p.planId = 'bundle')
        ORDER BY sig.timestamp DESC
        LIMIT 100`,
       [req.userId]

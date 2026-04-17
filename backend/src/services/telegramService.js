@@ -208,7 +208,15 @@ class TelegramService {
       `SELECT DISTINCT u.telegramId
        FROM users u
        JOIN subscriptions s ON u.id = s.userId
-       WHERE s.strategyId = ? AND s.useSignal = 1 AND u.telegramId IS NOT NULL`,
+       JOIN purchases p ON p.userId = u.id
+       WHERE s.strategyId = ?
+         AND s.useSignal = 1
+         AND u.telegramId IS NOT NULL
+         AND (p.planId = CASE s.strategyId
+              WHEN 1 THEN 'low_risk'
+              WHEN 2 THEN 'medium_risk'
+              WHEN 3 THEN 'high_risk'
+            END OR p.planId = 'bundle')`,
       [strategyId]
     );
 
@@ -237,7 +245,15 @@ class TelegramService {
       `SELECT DISTINCT u.telegramId
        FROM users u
        JOIN subscriptions s ON u.id = s.userId
-       WHERE s.strategyId = ? AND s.useSignal = 1 AND u.telegramId IS NOT NULL`,
+       JOIN purchases p ON p.userId = u.id
+       WHERE s.strategyId = ?
+         AND s.useSignal = 1
+         AND u.telegramId IS NOT NULL
+         AND (p.planId = CASE s.strategyId
+              WHEN 1 THEN 'low_risk'
+              WHEN 2 THEN 'medium_risk'
+              WHEN 3 THEN 'high_risk'
+            END OR p.planId = 'bundle')`,
       [strategyId]
     );
 

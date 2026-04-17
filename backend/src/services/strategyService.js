@@ -461,7 +461,7 @@ class StrategyService {
     if (userId && !isAdmin) {
        // Check if user has purchased the plan for this strategy
        const planToStrat = { 1: 'low_risk', 2: 'medium_risk', 3: 'high_risk' };
-       const targetPlan = planToStrat[strategyId];
+       const targetPlan = planToStrat[Number(strategyId)];
        
        if (targetPlan) {
          const hasPurchase = await db.get(
@@ -469,7 +469,6 @@ class StrategyService {
            [userId, targetPlan]
          );
          if (!hasPurchase) {
-           // Free users can only see closed/historical signals; live signals are hidden from the payload
            signals = signals.filter(s => s.status !== 'active');
          }
        }
