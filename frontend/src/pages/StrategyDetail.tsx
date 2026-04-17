@@ -118,6 +118,7 @@ export default function StrategyDetail() {
   // Win/Loss logic based on PnL or Status
   const winSigs = closedSigs.filter((s:any) => s.status === 'tp_hit' || (s.pnl || 0) > 0.01);
   const lossSigs = closedSigs.filter((s:any) => s.status === 'sl_hit' || (s.pnl || 0) < -0.01);
+  const chartSymbol = sigs.find((s: any) => s.status === 'active')?.symbol || sigs[0]?.symbol || 'BTC/USDT';
 
   return (
     <div className="min-h-screen bg-[#020617] text-slate-200 pb-20 relative overflow-hidden">
@@ -223,14 +224,7 @@ export default function StrategyDetail() {
                </div>
             </div>
             <div className="h-[400px] p-0 relative">
-               <div className="absolute inset-0 flex items-center justify-center bg-slate-900/40 backdrop-blur-[2px] z-10">
-                  <div className="text-center group">
-                    <div className="p-4 bg-cyan-500/10 rounded-full mb-4 group-hover:scale-110 transition-transform inline-block">
-                      <Zap className="text-cyan-400 animate-pulse" size={32} />
-                    </div>
-                    <p className="text-slate-400 text-sm font-medium">Synchronizing market signals...</p>
-                  </div>
-               </div>
+               <StrategyTradingViewChart symbol={chartSymbol} strategyName={strategy.name} />
             </div>
           </Card>
 
@@ -369,6 +363,50 @@ export default function StrategyDetail() {
         </div>
       </div>
     </div>
+  );
+}
+
+function StrategyTradingViewChart({ symbol, strategyName }: { symbol: string, strategyName?: string }) {
+  const exchangeSymbol = `BINANCE:${String(symbol || 'BTC/USDT').replace('/', '').replace(':USDT', '')}`;
+  const interval = strategyName === 'TrendFollower' ? '60' : '5';
+  const chartUrl = new URL('https://s.tradingview.com/widgetembed/');
+
+  chartUrl.search = new URLSearchParams({
+    frameElementId: `tradingview_${exchangeSymbol.replace(/[^a-zA-Z0-9]/g, '_')}`,
+    symbol: exchangeSymbol,
+    interval,
+    theme: 'dark',
+    style: '1',
+    timezone: 'Etc/UTC',
+    locale: 'en',
+    studies: '[]',
+    studies_overrides: '{}',
+    overrides: '{}',
+    enabled_features: '[]',
+    disabled_features: '[]',
+    hidetoptoolbar: '0',
+    hidesidetoolbar: '0',
+    hide_side_toolbar: '0',
+    hide_top_toolbar: '0',
+    hidelegend: '0',
+    hidevolume: '0',
+    withdateranges: '1',
+    symboledit: '1',
+    saveimage: '1',
+    toolbarbg: '#0f172a',
+    autosize: '1',
+    utm_source: 'brittrade.pages.dev',
+    utm_medium: 'widget',
+    utm_campaign: 'strategy_chart',
+    utm_term: exchangeSymbol,
+  }).toString();
+
+  return (
+    <iframe
+      src={chartUrl.toString()}
+      style={{ width: '100%', height: '100%', border: 'none' }}
+      title={`${symbol} Strategy Chart`}
+    />
   );
 }
 
