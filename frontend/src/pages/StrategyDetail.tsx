@@ -103,7 +103,7 @@ export default function StrategyDetail() {
   const sigs = Array.isArray(signalsData) ? signalsData : (signalsData.signals || []);
   const closedStatuses = ['completed', 'tp_hit', 'sl_hit', 'closed'];
   
-  // Filter for real closed trades. 
+  // Filter for real closed signals. 
   // 1. Must be in a closed status.
   // 2. Either be a primary entry side (BUY/LONG/SHORT)
   // 3. OR be an exit side (SELL/COVER) but with an actual PnL result (not just a noise broadcast)

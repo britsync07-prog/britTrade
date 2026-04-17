@@ -92,41 +92,14 @@ const initDb = async () => {
     try { await run("ALTER TABLE signals ADD COLUMN highestPrice REAL"); } catch(e){}
   }
 
-  await run(`CREATE TABLE IF NOT EXISTS paper_trades (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    userId INTEGER,
-    strategyId INTEGER,
-    symbol TEXT,
-    entryPrice REAL,
-    exitPrice REAL,
-    amount REAL,
-    pnl REAL,
-    side TEXT,
-    status TEXT,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
+  await run("DROP TABLE IF EXISTS paper_trades");
+  await run("DROP TABLE IF EXISTS trades");
 
   await run(`CREATE TABLE IF NOT EXISTS subscriptions (
     userId INTEGER,
     strategyId INTEGER,
     useSignal BOOLEAN DEFAULT 1,
-    useVirtualBalance BOOLEAN DEFAULT 1,
-    allocatedBalance REAL DEFAULT 0,
-    initialAllocation REAL DEFAULT 0,
     PRIMARY KEY (userId, strategyId)
-  )`);
-
-  await run(`CREATE TABLE IF NOT EXISTS trades (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    userId INTEGER,
-    strategyId INTEGER,
-    symbol TEXT,
-    side TEXT,
-    price REAL,
-    amount REAL,
-    status TEXT,
-    pnl REAL,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
   await run(`CREATE TABLE IF NOT EXISTS purchases (
@@ -143,11 +116,6 @@ const initDb = async () => {
     content TEXT,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
-
-  const subRows = await query("PRAGMA table_info(subscriptions)");
-  if (!subRows.some(r => r.name === 'initialAllocation')) {
-    try { await run("ALTER TABLE subscriptions ADD COLUMN initialAllocation REAL DEFAULT 0"); } catch(e){}
-  }
 
   console.log('Database initialized successfully.');
 };

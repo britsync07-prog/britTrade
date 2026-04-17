@@ -76,25 +76,6 @@ Protected routes require the header: `Authorization: Bearer <token>`
 
 ---
 
-## 💰 Paper Trading (Simulation)
-
-### 1. Toggle Paper Trading
-`POST /paper/start` | `POST /paper/stop`
-- Enables or disables automatic trade execution for signals.
-
-### 2. Get Trade History
-`GET /paper/trades`
-- Returns list of open and closed trades.
-
-### 3. Get Performance Stats
-`GET /paper/performance`
-- **Success Response:**
-  ```json
-  { "totalPnL": 150.25, "winRate": 95.3, "tradeCount": 120 }
-  ```
-
----
-
 ## 🤖 Telegram Integration
 
 ### 1. Connect Bot

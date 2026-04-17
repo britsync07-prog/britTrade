@@ -185,6 +185,12 @@ class TelegramService {
     bot.sendMessage(telegramId, message, { parse_mode: 'Markdown' }).catch(console.error);
   }
 
+  async notifySignalOpened(telegramId, strategyName, signal) {
+    if (!bot || !telegramId) return;
+    const message = formatEntryMessage(strategyName, signal);
+    bot.sendMessage(telegramId, message, { parse_mode: 'Markdown' }).catch(console.error);
+  }
+
   /**
    * Broadcast an ENTRY signal (buy/sell/long/short) to all users subscribed to this strategy.
    * Filters strictly: only users who have a subscription row for this strategyId receive it.
@@ -202,13 +208,13 @@ class TelegramService {
       `SELECT DISTINCT u.telegramId
        FROM users u
        JOIN subscriptions s ON u.id = s.userId
-       WHERE s.strategyId = ? AND u.telegramId IS NOT NULL`,
+       WHERE s.strategyId = ? AND s.useSignal = 1 AND u.telegramId IS NOT NULL`,
       [strategyId]
     );
 
     if (users.length === 0) return;
 
-    const isEntry = ['buy', 'long', 'sell', 'short'].includes((side || '').toLowerCase());
+    const isEntry = ['buy', 'long', 'short'].includes((side || '').toLowerCase());
     const message = isEntry
       ? formatEntryMessage(strategy.name, signal)
       : formatExitMessage(strategy.name, signal);
@@ -219,8 +225,7 @@ class TelegramService {
   }
 
   /**
-   * Broadcast a CLOSE/EXIT signal when a trade is closed (TP hit / SL hit / manual close).
-   * Called from strategyService signal tracker or paperService.
+   * Broadcast a CLOSE/EXIT signal when a generated signal is closed.
    */
   async broadcastClose(strategyId, symbol, side, price, pnl, status) {
     if (!bot) return;
@@ -232,7 +237,7 @@ class TelegramService {
       `SELECT DISTINCT u.telegramId
        FROM users u
        JOIN subscriptions s ON u.id = s.userId
-       WHERE s.strategyId = ? AND u.telegramId IS NOT NULL`,
+       WHERE s.strategyId = ? AND s.useSignal = 1 AND u.telegramId IS NOT NULL`,
       [strategyId]
     );
 
@@ -245,10 +250,9 @@ class TelegramService {
     }
   }
 
-  // Legacy compat — kept for paperService calls
-  async notifyTradeClosed(telegramId, strategyName, symbol, side, price, pnl) {
+  async notifySignalClosed(telegramId, strategyName, symbol, side, price, pnl, status = 'closed') {
     if (!bot || !telegramId) return;
-    const signal = { symbol, side, price, pnl, status: 'closed' };
+    const signal = { symbol, side, price, pnl, status };
     const message = formatExitMessage(strategyName, signal);
     bot.sendMessage(telegramId, message, { parse_mode: 'Markdown' }).catch(console.error);
   }

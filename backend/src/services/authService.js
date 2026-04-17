@@ -70,7 +70,7 @@ class AuthService {
 
       const stratIds = planToStrat[planId] || [];
       for (const sid of stratIds) {
-        await strategyService.subscribe(userId, sid, true, true, 1000); // Auto-subscribe with $1000 balance
+        await strategyService.subscribe(userId, sid, true);
       }
 
       return { status: 'Success', planId };

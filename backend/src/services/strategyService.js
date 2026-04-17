@@ -89,9 +89,10 @@ class StrategyService {
           // --- Strategy Specific Logic ---
           
           // 1. GridMeanReversion DCA Logic
-          if (sig.strategyId === 1 && pnl < -5 && (sig.entryCount || 1) < 10) {
-            const newEntryCount = (sig.entryCount || 1) + 1;
-            const newAvgPrice = (sig.price + currentPrice) / 2;
+          if (sig.strategyId === 1 && pnl < -5 && (sig.entryCount || 1) <= 10) {
+            const currentEntryCount = sig.entryCount || 1;
+            const newEntryCount = currentEntryCount + 1;
+            const newAvgPrice = ((sig.price * currentEntryCount) + currentPrice) / newEntryCount;
             const newTp = newAvgPrice * 1.01;
             const newSl = newAvgPrice * 0.85; // Hard stoploss -15%
             
@@ -139,7 +140,7 @@ class StrategyService {
             await getTelegramService().broadcastClose(
               sig.strategyId,
               sig.symbol,
-              sig.side === 'buy' || sig.side === 'long' ? 'sell' : 'buy',
+              sig.side === 'buy' || sig.side === 'long' ? 'sell' : 'cover',
               currentPrice,
               pnl,
               status
@@ -194,11 +195,11 @@ class StrategyService {
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     
     for (const s of strategies) {
-      const trades = await db.query(
-        "SELECT pnl, status FROM trades WHERE strategyId = ? AND timestamp > ?",
+      const signals = await db.query(
+        "SELECT pnl, status FROM signals WHERE strategyId = ? AND timestamp > ? AND status != 'active'",
         [s.id, yesterday]
       );
-      const closed = trades.filter(t => t.status === 'closed');
+      const closed = signals.filter(t => ['closed', 'completed', 'tp_hit', 'sl_hit'].includes(t.status));
       let prof24h = 0;
       if (closed.length > 0) {
         // Since t.pnl is already a % (ROE), we can just average the ROE per trade.
@@ -213,15 +214,15 @@ class StrategyService {
 
   async getSubscribed(userId) {
     return await db.query(
-      "SELECT s.*, sub.useSignal, sub.useVirtualBalance, sub.allocatedBalance, sub.initialAllocation FROM strategies s JOIN subscriptions sub ON s.id = sub.strategyId WHERE sub.userId = ?",
+      "SELECT s.*, sub.useSignal FROM strategies s JOIN subscriptions sub ON s.id = sub.strategyId WHERE sub.userId = ?",
       [userId]
     );
   }
 
-  async subscribe(userId, strategyId, useSignal = true, useVirtualBalance = true, allocatedBalance = 0) {
+  async subscribe(userId, strategyId, useSignal = true) {
     try {
       console.log(`[StrategyService] Subscribing user ${userId} to strategy ${strategyId}`);
-      return await db.run("INSERT OR REPLACE INTO subscriptions (userId, strategyId, useSignal, useVirtualBalance, allocatedBalance, initialAllocation) VALUES (?, ?, ?, ?, ?, ?)", [userId, strategyId, useSignal, useVirtualBalance, allocatedBalance, allocatedBalance]);
+      return await db.run("INSERT OR REPLACE INTO subscriptions (userId, strategyId, useSignal) VALUES (?, ?, ?)", [userId, strategyId, useSignal]);
     } catch (error) {
       console.error(`[StrategyService] subscribe failed for user ${userId}, strategy ${strategyId}:`, error);
       throw error;
@@ -300,7 +301,7 @@ class StrategyService {
               
               if (st.direction === 1 && currentAdx > 25 && currentPrice > currentBB.upper && lastVol > 0) {
                 signalSide = 'buy';
-                initialTp = currentPrice * 2.0; 
+                initialTp = currentPrice * 101.0; 
                 initialSl = currentPrice * 0.90; 
               } else if (st.direction === -1) {
                 signalSide = 'sell';
@@ -332,18 +333,24 @@ class StrategyService {
             if (rsi.length > 0) {
               const currentRsi = rsi[rsi.length - 1];
               const lastVol = data.volumes[data.volumes.length-1];
-              if (currentRsi < 30 && lastVol > 0) {
+              const activeSignal = await db.get(
+                "SELECT side FROM signals WHERE strategyId = ? AND symbol = ? AND status = 'active' LIMIT 1",
+                [id, symbol]
+              );
+              const activeSide = (activeSignal?.side || '').toLowerCase();
+
+              if ((activeSide === 'buy' || activeSide === 'long') && currentRsi > 50) {
+                signalSide = 'sell'; 
+              } else if (activeSide === 'short' && currentRsi < 50) {
+                signalSide = 'cover'; 
+              } else if (!activeSignal && currentRsi < 30 && lastVol > 0) {
                 signalSide = 'buy';
                 initialTp = currentPrice * 1.005;
                 initialSl = currentPrice * 0.90;
-              } else if (currentRsi > 70 && lastVol > 0) {
+              } else if (!activeSignal && currentRsi > 70 && lastVol > 0) {
                 signalSide = 'short'; 
                 initialTp = currentPrice * 0.995;
                 initialSl = currentPrice * 1.10;
-              } else if (currentRsi > 50) {
-                signalSide = 'sell'; 
-              } else if (currentRsi < 50) {
-                signalSide = 'cover'; 
               }
             }
           }
@@ -363,8 +370,14 @@ class StrategyService {
             } else {
               if (activeSignal) {
                 const activeSide = activeSignal.side.toLowerCase();
-                if ((signalSide === 'sell' && (activeSide === 'buy' || activeSide === 'long')) ||
-                    (signalSide === 'cover' && activeSide === 'short')) {
+                const signalPnl = activeSignal.side === 'buy' || activeSignal.side === 'long'
+                  ? ((currentPrice - activeSignal.price) / activeSignal.price) * 100
+                  : ((activeSignal.price - currentPrice) / activeSignal.price) * 100;
+                const respectsExitProfitOnly = ![1, 3].includes(id) || signalPnl > 0;
+
+                if (respectsExitProfitOnly &&
+                    ((signalSide === 'sell' && (activeSide === 'buy' || activeSide === 'long')) ||
+                    (signalSide === 'cover' && activeSide === 'short'))) {
                   shouldTrigger = true;
                 }
               }
@@ -405,6 +418,7 @@ class StrategyService {
                   });
                } else {
                   console.log(`[Engine] >>> EXIT SIGNAL: ${strategy.name} ${signalSide} ${symbol} @ ${currentPrice}`);
+                  await getTelegramService().broadcastClose(id, symbol, signalSide, currentPrice, pnl, finalStatus);
                }
             }
           } else {
@@ -455,7 +469,7 @@ class StrategyService {
            [userId, targetPlan]
          );
          if (!hasPurchase) {
-           // Free users can only see closed/historical signals, live trades are hidden from the payload
+           // Free users can only see closed/historical signals; live signals are hidden from the payload
            signals = signals.filter(s => s.status !== 'active');
          }
        }

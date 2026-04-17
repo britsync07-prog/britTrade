@@ -121,7 +121,7 @@ app.get('/strategies/subscribed', authMiddleware, async (req, res, next) => {
 
 app.post('/strategies/subscribe', authMiddleware, async (req, res, next) => {
   try {
-    const { strategyId, useSignal = true, useVirtualBalance = true, allocatedBalance = 0 } = req.body;
+    const { strategyId, useSignal = true } = req.body;
     
     // Gate access by purchase
     const user = await authService.me(req.userId);
@@ -141,7 +141,7 @@ app.post('/strategies/subscribe', authMiddleware, async (req, res, next) => {
       return res.status(403).json({ error: 'Purchase required for this strategy' });
     }
 
-    await strategyService.subscribe(req.userId, strategyId, useSignal, useVirtualBalance, allocatedBalance);
+    await strategyService.subscribe(req.userId, strategyId, useSignal);
     res.json({ status: 'Subscribed' });
   } catch (e) { next(e); }
 });
@@ -201,9 +201,9 @@ app.get('/market/summary', authMiddleware, async (req, res) => {
     // 1. Get default symbols
     const defaultSymbols = ["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","ADAUSDT","DOTUSDT","XRPUSDT","LINKUSDT","AVAXUSDT","MATICUSDT"];
     
-    // 2. Get active trade symbols from database
-    const activeTrades = await db.query("SELECT DISTINCT symbol FROM trades WHERE status = 'open'");
-    const activeSymbols = activeTrades.map(t => t.symbol.replace('/', ''));
+    // 2. Get active signal symbols from database
+    const activeSignals = await db.query("SELECT DISTINCT symbol FROM signals WHERE status = 'active'");
+    const activeSymbols = activeSignals.map(t => t.symbol.replace('/', ''));
     
     // 3. Merge and deduplicate
     const allSymbols = Array.from(new Set([...defaultSymbols, ...activeSymbols]));
@@ -244,8 +244,17 @@ app.get('/market/summary', authMiddleware, async (req, res) => {
 
 app.get('/portfolio/history', authMiddleware, async (req, res, next) => {
   try {
-    const trades = await db.query("SELECT * FROM trades WHERE userId = ? ORDER BY timestamp DESC", [req.userId]);
-    res.json(trades);
+    const signals = await db.query(
+      `SELECT sig.*, st.name as strategyName
+       FROM signals sig
+       JOIN strategies st ON sig.strategyId = st.id
+       JOIN subscriptions sub ON sub.strategyId = sig.strategyId
+       WHERE sub.userId = ?
+       ORDER BY sig.timestamp DESC
+       LIMIT 100`,
+      [req.userId]
+    );
+    res.json(signals);
   } catch (e) { next(e); }
 });
 
