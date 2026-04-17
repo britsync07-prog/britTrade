@@ -88,18 +88,37 @@ if (token && token !== 'your_telegram_bot_token_here') {
     );
   });
 
+  async function getTelegramStrategiesForUser(user) {
+    if (user.role === 'admin') {
+      return await db.query("SELECT name, type FROM strategies ORDER BY id");
+    }
+
+    return await db.query(
+      `SELECT DISTINCT st.name, st.type
+       FROM strategies st
+       JOIN subscriptions sub ON st.id = sub.strategyId
+       JOIN purchases p ON p.userId = sub.userId
+       WHERE sub.userId = ?
+         AND sub.useSignal = 1
+         AND (p.planId = CASE st.id
+              WHEN 1 THEN 'low_risk'
+              WHEN 2 THEN 'medium_risk'
+              WHEN 3 THEN 'high_risk'
+            END OR p.planId = 'bundle')
+       ORDER BY st.id`,
+      [user.id]
+    );
+  }
+
   // /mystrats — show which strategies user is subscribed to
   bot.onText(/\/mystrats/, async (msg) => {
     const chatId = msg.chat.id;
-    const user = await db.get("SELECT id, email FROM users WHERE telegramId = ?", [chatId.toString()]);
+    const user = await db.get("SELECT id, email, role FROM users WHERE telegramId = ?", [chatId.toString()]);
     if (!user) {
       return bot.sendMessage(chatId, '❌ You are not linked. Send /start to connect your account.');
     }
 
-    const subs = await db.query(
-      "SELECT s.name, s.type FROM strategies s JOIN subscriptions sub ON s.id = sub.strategyId WHERE sub.userId = ?",
-      [user.id]
-    );
+    const subs = await getTelegramStrategiesForUser(user);
 
     if (subs.length === 0) {
       return bot.sendMessage(chatId,
@@ -140,10 +159,7 @@ if (token && token !== 'your_telegram_bot_token_here') {
         await db.run("UPDATE users SET telegramId = ? WHERE id = ?", [chatId.toString(), user.id]);
 
         // Fetch their subscriptions to confirm
-        const subs = await db.query(
-          "SELECT s.name FROM strategies s JOIN subscriptions sub ON s.id = sub.strategyId WHERE sub.userId = ?",
-          [user.id]
-        );
+        const subs = await getTelegramStrategiesForUser(user);
 
         const stratList = subs.length > 0
           ? subs.map(s => `• *${s.name}*`).join('\n')
@@ -207,17 +223,21 @@ class TelegramService {
     const users = await db.query(
       `SELECT DISTINCT u.telegramId
        FROM users u
-       JOIN subscriptions s ON u.id = s.userId
-       JOIN purchases p ON p.userId = u.id
-       WHERE s.strategyId = ?
-         AND s.useSignal = 1
-         AND u.telegramId IS NOT NULL
-         AND (p.planId = CASE s.strategyId
+       LEFT JOIN subscriptions s ON u.id = s.userId AND s.strategyId = ? AND s.useSignal = 1
+       LEFT JOIN purchases p ON p.userId = u.id
+       WHERE u.telegramId IS NOT NULL
+         AND (
+           u.role = 'admin'
+           OR (
+             s.userId IS NOT NULL
+             AND (p.planId = CASE ?
               WHEN 1 THEN 'low_risk'
               WHEN 2 THEN 'medium_risk'
               WHEN 3 THEN 'high_risk'
-            END OR p.planId = 'bundle')`,
-      [strategyId]
+            END OR p.planId = 'bundle')
+           )
+         )`,
+      [strategyId, strategyId]
     );
 
     if (users.length === 0) return;
@@ -244,17 +264,21 @@ class TelegramService {
     const users = await db.query(
       `SELECT DISTINCT u.telegramId
        FROM users u
-       JOIN subscriptions s ON u.id = s.userId
-       JOIN purchases p ON p.userId = u.id
-       WHERE s.strategyId = ?
-         AND s.useSignal = 1
-         AND u.telegramId IS NOT NULL
-         AND (p.planId = CASE s.strategyId
+       LEFT JOIN subscriptions s ON u.id = s.userId AND s.strategyId = ? AND s.useSignal = 1
+       LEFT JOIN purchases p ON p.userId = u.id
+       WHERE u.telegramId IS NOT NULL
+         AND (
+           u.role = 'admin'
+           OR (
+             s.userId IS NOT NULL
+             AND (p.planId = CASE ?
               WHEN 1 THEN 'low_risk'
               WHEN 2 THEN 'medium_risk'
               WHEN 3 THEN 'high_risk'
-            END OR p.planId = 'bundle')`,
-      [strategyId]
+            END OR p.planId = 'bundle')
+           )
+         )`,
+      [strategyId, strategyId]
     );
 
     if (users.length === 0) return;
