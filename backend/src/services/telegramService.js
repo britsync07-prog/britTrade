@@ -57,20 +57,71 @@ function formatExitMessage(strategyName, signal) {
 
 // ─── Bot Setup ────────────────────────────────────────────────────────────────
 if (token && token !== 'your_telegram_bot_token_here') {
-  bot = new TelegramBot(token, { polling: { interval: 1000, autoStart: false, params: { timeout: 10 } } });
+  // Use robust polling options
+  bot = new TelegramBot(token, { 
+    polling: { 
+      interval: 2000, 
+      autoStart: false, 
+      params: { timeout: 30 }, // Increased timeout for more stable long-polling
+      retryAfter: 5000         // Automatically retry after 5 seconds on network failure
+    } 
+  });
   
-  // Suppress and handle polling errors (e.g. 409 Conflict when multiple backends run)
+  /**
+   * Resilience Handler: Handles polling errors and ensures the bot doesn't stay dead.
+   * Specifically handles 409 Conflict (multiple instances) by retrying after a delay.
+   */
+  const ensurePolling = async (reason = 'unknown') => {
+    if (!bot) return;
+    if (bot.isPolling()) return;
+
+    try {
+      console.log(`[Telegram] Attempting to restart polling (Reason: ${reason})...`);
+      await bot.startPolling({ restart: true, dropPendingUpdates: true });
+      console.log('[Telegram] Polling resumed successfully.');
+    } catch (err) {
+      if (err.message && err.message.includes('409')) {
+        // Still conflicting, will be handled by the next polling_error or watchdog
+      } else {
+        console.error(`[Telegram] Failed to restart polling: ${err.message}`);
+      }
+    }
+  };
+
   bot.on('polling_error', (err) => {
     if (err && err.message && err.message.includes('409')) {
-      console.log('[Telegram] Polling conflict detected (409). Another bot instance is polling. Stopping polling on this instance silently so they can coexist.');
+      console.log('[Telegram] Polling conflict (409) detected. Another instance is active. Retrying in 60s...');
+      // Instead of stopping forever, we stop and let the watchdog or a delayed retry pick it up.
+      // This allows this instance to take over automatically if the other one goes down.
       bot.stopPolling();
+      setTimeout(() => ensurePolling('recovery from 409'), 60000);
     } else {
-      console.log(`[Telegram] Polling Error: ${err.message}`);
+      console.error(`[Telegram] Polling Error: ${err.message || err}`);
     }
   });
 
-  bot.startPolling({ restart: false, dropPendingUpdates: true });
-  console.log('[Telegram] Bot initialized: @BritSyncAI_bot');
+  // Handle fatal bot errors or socket hangs
+  bot.on('error', (err) => {
+    console.error(`[Telegram] General Error: ${err.message || err}`);
+    setTimeout(() => ensurePolling('recovery from error'), 10000);
+  });
+
+  // Initial Start
+  bot.startPolling({ restart: true, dropPendingUpdates: true })
+    .then(() => console.log('[Telegram] Bot initialized: @BritSyncAI_bot'))
+    .catch(err => {
+      console.error('[Telegram] Initial polling start failed:', err.message);
+      setTimeout(() => ensurePolling('initial failure retry'), 10000);
+    });
+
+  // Watchdog: Every 10 minutes, verify the bot is still polling.
+  // This handles silent hangs where no error was explicitly emitted.
+  setInterval(() => {
+    if (bot && !bot.isPolling()) {
+      console.log('[Telegram] Watchdog: Polling is inactive. Triggering restart...');
+      ensurePolling('watchdog');
+    }
+  }, 10 * 60 * 1000);
 
   const sessions = {}; // tracks per-chat registration state
 
