@@ -168,8 +168,8 @@ export default function Dashboard() {
                         </div>
                         <div className="border-x border-white/5 px-2">
                            <div className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">24H RETURN</div>
-                           <div className={`text-xs font-bold ${Number(strat.prof24h || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                              {Number(strat.prof24h || 0) >= 0 ? '+' : ''}{Number(strat.prof24h || 0).toFixed(2)}%
+                           <div className={`text-xs font-bold ${Number(strat.pnl24h || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                              {Number(strat.pnl24h || 0) >= 0 ? '+' : ''}{Number(strat.pnl24h || 0).toFixed(2)}%
                            </div>
                         </div>
                         <div className="text-right">

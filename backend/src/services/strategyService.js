@@ -81,6 +81,8 @@ class StrategyService {
       const balance24h = budget.currentBalance + openPnlAndMargin;
       const profit24hUsd = balance24h - 100.0; // Subtract initial $100 budget
 
+      const sumSignals24h = signals24h.reduce((acc, sig) => acc + (Number(sig.pnl) || 0), 0);
+      s.pnl24h = sumSignals24h.toFixed(2); // Sum of % pnl from signals over 24h
       s.prof24h = profit24hUsd.toFixed(2); // Set it to USD profit directly for 24h
       s.signalCount = allSignals.length;
       s.activeSignalCount = allSignals.filter(sig => sig.status === 'active').length;
