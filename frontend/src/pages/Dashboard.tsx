@@ -167,9 +167,9 @@ export default function Dashboard() {
                            <div className={`text-xs font-bold ${strat.risk === 'High' ? 'text-red-400' : 'text-cyan-400'}`}>{strat.risk || 'Medium'}</div>
                         </div>
                         <div className="border-x border-white/5 px-2">
-                           <div className="text-[8px] font-black uppercase tracking-widest text-slate-500 mb-1">24h Prof</div>
+                           <div className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">24H RETURN</div>
                            <div className={`text-xs font-bold ${Number(strat.prof24h || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                              {Number(strat.prof24h || 0) >= 0 ? '+' : ''}{Number(strat.prof24h || 0).toFixed(2)}%
+                              {Number(strat.prof24h || 0) >= 0 ? '+$' : '-$'}{Math.abs(Number(strat.prof24h || 0)).toFixed(2)}
                            </div>
                         </div>
                         <div className="text-right">

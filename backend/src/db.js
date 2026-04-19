@@ -138,7 +138,29 @@ const initDb = async () => {
     try { await run("ALTER TABLE signals ADD COLUMN highestPrice REAL"); } catch(e){}
   }
 
-  await run("DROP TABLE IF EXISTS paper_trades");
+  await run(`CREATE TABLE IF NOT EXISTS paper_trades (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    strategyId INTEGER,
+    signalId INTEGER,
+    symbol TEXT,
+    margin REAL DEFAULT 10.0,
+    leverage INTEGER DEFAULT 1,
+    side TEXT,
+    entryPrice REAL,
+    exitPrice REAL,
+    pnlUsd REAL DEFAULT 0,
+    feeUsd REAL DEFAULT 0,
+    status TEXT DEFAULT 'open',
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    closedAt DATETIME
+  )`);
+
+  await run(`CREATE TABLE IF NOT EXISTS strategy_daily_budgets (
+    strategyId INTEGER PRIMARY KEY,
+    currentBalance REAL DEFAULT 100.0,
+    lastReset DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
   await run("DROP TABLE IF EXISTS trades");
 
   await run(`CREATE TABLE IF NOT EXISTS subscriptions (

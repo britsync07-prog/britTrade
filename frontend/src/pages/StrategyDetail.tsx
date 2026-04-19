@@ -143,6 +143,11 @@ export default function StrategyDetail() {
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 Live Signal Mining Enabled
               </div>
+              {strategy.name === 'UltimateFuturesScalper' && (
+                <Badge variant="outline" className="bg-purple-500/10 text-purple-400 border-purple-500/20 px-2 py-0 rounded text-[9px] font-bold">
+                  5X LEVERAGE
+                </Badge>
+              )}
             </div>
             <p className="text-slate-400 max-w-2xl mt-6 leading-relaxed text-sm">
               {strategy?.description || "High-performance automated trading strategy utilizing advanced deep learning models for predictive market analysis."}
@@ -411,82 +416,149 @@ function StrategyTradingViewChart({ symbol, strategyName }: { symbol: string, st
 }
 
 function SignalCard({ signal: s, currentPrice, strategyName }: { signal: any, currentPrice?: number, strategyName?: string }) {
+  const isFutures = strategyName === 'UltimateFuturesScalper';
+  const LEVERAGE = isFutures ? 5 : 1;
+  const margin = s.stakeAmount || 10;         // Capital at risk (initial margin)
+  const positionSize = margin * LEVERAGE;       // Total position value controlled
+  const entryPrice = Number(s.price);
+  const isLong = s.side === 'buy' || s.side === 'long';
+
   const formatPrice = (value: any) => {
     const price = Number(value);
     if (!Number.isFinite(price)) return '---';
     if (price === 0) return '0.00';
     if (Math.abs(price) >= 1) return price.toFixed(4);
     if (Math.abs(price) >= 0.01) return price.toFixed(6);
-    if (Math.abs(price) >= 0.0001) return price.toFixed(8);
-    return price.toFixed(10);
+    return price.toFixed(8);
   };
 
-  let displayPnl = s.pnl;
-  if (s.status === 'active' && currentPrice) {
-    let leverage = 1;
-    if (strategyName === 'UltimateFuturesScalper') leverage = 20;
+  // --- LIQUIDATION PRICE ---
+  // At 5x leverage you lose 100% of margin on a 20% adverse price move.
+  // LONG  liq = entryPrice × (1 - 1/leverage) = entry × 0.80
+  // SHORT liq = entryPrice × (1 + 1/leverage) = entry × 1.20
+  const liqPrice = isFutures
+    ? (isLong ? entryPrice * (1 - 1 / LEVERAGE) : entryPrice * (1 + 1 / LEVERAGE))
+    : null;
 
-    if (s.side === 'buy' || s.side === 'long') {
-      displayPnl = ((currentPrice - s.price) / s.price) * 100 * leverage;
-    } else {
-      displayPnl = ((s.price - currentPrice) / s.price) * 100 * leverage;
-    }
+  // --- PNL CALCULATION ---
+  let pnlPct = Number(s.pnl) || 0;
+  if (s.status === 'active' && currentPrice) {
+    const rawMove = isLong
+      ? (currentPrice - entryPrice) / entryPrice
+      : (entryPrice - currentPrice) / entryPrice;
+    pnlPct = rawMove * 100 * LEVERAGE;
+    if (pnlPct <= -100) pnlPct = -100; // Liquidation cap
   }
 
-  return (
-    <div className={`p-4 rounded-xl border transition-all ${s.status === 'active' ? 'bg-white/[0.04] border-white/10 hover:border-purple-500/50' : 'bg-black/20 border-white/5 opacity-80'}`}>
-       <div className="flex justify-between items-start mb-3">
-          <div>
-             <div className="text-[8px] font-mono text-slate-500 mb-0.5">{new Date(s.timestamp).toLocaleString()}</div>
-             <div className="flex items-center gap-2">
-                <span className="text-sm font-black text-white">{s.symbol}</span>
-                <Badge className={`text-[8px] px-1 py-0 h-4 leading-none ${s.side === 'buy' || s.side === 'long' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
-                  {s.side.toUpperCase()}
-                </Badge>
-             </div>
-          </div>
-          <div className="text-right">
-             <div className={`text-[8px] font-black uppercase tracking-widest mb-0.5 ${s.status === 'tp_hit' ? 'text-emerald-400' : s.status === 'sl_hit' ? 'text-rose-400' : 'text-cyan-400 animate-pulse'}`}>
-                {s.status.replace('_', ' ')}
-             </div>
-             <div className="text-[10px] font-mono font-bold text-white">${formatPrice(s.price)}</div>
-          </div>
-       </div>
+  // Dollar P&L = Margin × (pnlPct / 100)
+  const pnlUsd = margin * (pnlPct / 100);
+  const isLiquidated = isFutures && pnlPct <= -100;
 
-       <div className="grid grid-cols-2 lg:grid-cols-3 gap-1.5 py-2.5 border-y border-white/5 mb-2.5 bg-white/[0.01]">
-          {s.status === 'active' ? (
-            <>
-              <div className="text-center">
-                 <div className="text-[7px] text-slate-500 uppercase font-black mb-0.5">Target TP</div>
-                 <div className="text-[9px] font-mono text-emerald-400 font-bold">${formatPrice(s.tp)}</div>
-              </div>
-              <div className="text-center border-x border-white/5">
-                 <div className="text-[7px] text-slate-500 uppercase font-black mb-0.5">Stop Loss</div>
-                 <div className="text-[9px] font-mono text-rose-400 font-bold">${formatPrice(s.sl)}</div>
-              </div>
-              <div className="text-center col-span-2 lg:col-span-1 border-t lg:border-t-0 border-white/5 pt-1.5 lg:pt-0 mt-1.5 lg:mt-0">
-                 <div className="text-[7px] text-slate-500 uppercase font-black mb-0.5">Live PnL</div>
-                 <div className={`text-[9px] font-mono font-bold ${displayPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {displayPnl >= 0 ? '+' : ''}{displayPnl.toFixed(2)}%
-                 </div>
-              </div>
-            </>
-          ) : (
-            <div className="col-span-2 lg:col-span-3 text-center border-white/5 py-1">
-               <div className="text-[7px] text-slate-500 uppercase font-black mb-0.5">Final PnL</div>
-               <div className={`text-lg mb-1 font-mono font-bold ${displayPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {displayPnl >= 0 ? '+' : ''}{displayPnl.toFixed(2)}%
-               </div>
+  const statusLabel = isLiquidated
+    ? 'LIQUIDATED'
+    : s.status.replace('_', ' ').toUpperCase();
+
+  const statusColor = s.status === 'tp_hit'
+    ? 'text-emerald-400'
+    : (s.status === 'sl_hit' || isLiquidated)
+    ? 'text-rose-400'
+    : 'text-cyan-400 animate-pulse';
+
+  return (
+    <div className={`rounded-xl border transition-all overflow-hidden ${s.status === 'active' ? 'bg-white/[0.04] border-white/10 hover:border-purple-500/50' : 'bg-black/20 border-white/5 opacity-80'}`}>
+
+      {/* ── Header ── */}
+      <div className="flex justify-between items-center px-4 pt-4 pb-3">
+        <div>
+          <div className="text-[8px] font-mono text-slate-500 mb-0.5">{new Date(s.timestamp).toLocaleString()}</div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-black text-white">{s.symbol}</span>
+            <Badge className={`text-[8px] px-1.5 py-0 h-4 leading-none font-bold ${isLong ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
+              {isLong ? 'LONG' : 'SHORT'}
+            </Badge>
+            {isFutures && (
+              <span className="text-[8px] font-bold text-purple-400 tracking-widest bg-purple-400/5 px-1.5 py-0.5 rounded border border-purple-400/20">5X</span>
+            )}
+          </div>
+        </div>
+        <div className="text-right">
+          <div className={`text-[8px] font-black uppercase tracking-widest mb-1 ${statusColor}`}>
+            {statusLabel}
+          </div>
+          <div className="text-[10px] font-mono font-bold text-white">Entry: ${formatPrice(entryPrice)}</div>
+        </div>
+      </div>
+
+      {/* ── Futures Trade Breakdown ── */}
+      {isFutures && (
+        <div className="mx-4 mb-3 rounded-lg bg-purple-500/5 border border-purple-500/10 p-2.5 grid grid-cols-3 gap-2 text-center">
+          <div>
+            <div className="text-[7px] text-slate-500 uppercase font-black tracking-wider mb-0.5">Margin Used</div>
+            <div className="text-[10px] font-bold font-mono text-purple-300">${margin.toFixed(2)}</div>
+            <div className="text-[7px] text-slate-600 mt-0.5">your capital at risk</div>
+          </div>
+          <div className="border-x border-purple-500/10">
+            <div className="text-[7px] text-slate-500 uppercase font-black tracking-wider mb-0.5">Position Size</div>
+            <div className="text-[10px] font-bold font-mono text-white">${positionSize.toFixed(2)}</div>
+            <div className="text-[7px] text-slate-600 mt-0.5">margin × {LEVERAGE}x leverage</div>
+          </div>
+          <div>
+            <div className="text-[7px] text-rose-500/70 uppercase font-black tracking-wider mb-0.5">Liq. Price</div>
+            <div className="text-[10px] font-bold font-mono text-rose-400">${formatPrice(liqPrice)}</div>
+            <div className="text-[7px] text-slate-600 mt-0.5">{isLong ? '−20% move wipes margin' : '+20% move wipes margin'}</div>
+          </div>
+        </div>
+      )}
+
+      {/* ── TP / SL / PnL ── */}
+      <div className="border-t border-white/5 grid grid-cols-3 divide-x divide-white/5 bg-white/[0.01]">
+        {s.status === 'active' ? (
+          <>
+            <div className="text-center py-2.5">
+              <div className="text-[7px] text-slate-500 uppercase font-black mb-0.5">Take Profit</div>
+              <div className="text-[9px] font-mono text-emerald-400 font-bold">${formatPrice(s.tp)}</div>
             </div>
-          )}
-       </div>
-       
-       <div className="flex items-center justify-between">
-          <div className="text-[8px] text-slate-600 font-bold uppercase tracking-tight">STAKE: ${s.stakeAmount || 100}</div>
-          {s.status === 'active' && (
-            <Badge className="bg-purple-500/20 text-purple-400 border-none px-1.5 py-0 h-4 text-[7px] font-black tracking-widest">LIVE</Badge>
-          )}
-       </div>
+            <div className="text-center py-2.5">
+              <div className="text-[7px] text-slate-500 uppercase font-black mb-0.5">Stop Loss</div>
+              <div className="text-[9px] font-mono text-rose-400 font-bold">${formatPrice(s.sl)}</div>
+            </div>
+            <div className="text-center py-2.5">
+              <div className="text-[7px] text-slate-500 uppercase font-black mb-0.5">Live PnL</div>
+              <div className={`text-[10px] font-mono font-black ${pnlPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%
+              </div>
+              <div className={`text-[8px] font-mono ${pnlUsd >= 0 ? 'text-emerald-500/70' : 'text-rose-500/70'}`}>
+                {pnlUsd >= 0 ? '+' : ''}${Math.abs(pnlUsd).toFixed(2)}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="col-span-3 text-center py-3 px-4">
+            <div className="text-[7px] text-slate-500 uppercase font-black mb-1">
+              {isLiquidated ? '⚠ Liquidated — Full Margin Lost' : 'Final Result'}
+            </div>
+            <div className={`text-xl font-black font-mono ${pnlPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%
+            </div>
+            <div className={`text-sm font-bold font-mono mt-0.5 ${pnlUsd >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+              {pnlUsd >= 0 ? '+' : '-'}${Math.abs(pnlUsd).toFixed(2)}
+              {isFutures && pnlUsd < 0 && <span className="text-slate-500 font-normal text-[10px] ml-1">(of ${margin.toFixed(2)} margin)</span>}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Footer ── */}
+      <div className="flex items-center justify-between px-4 py-2 border-t border-white/5">
+        <div className="text-[8px] text-slate-600 font-bold uppercase tracking-tight">
+          {isFutures
+            ? `MARGIN $${margin.toFixed(2)} · POS $${positionSize.toFixed(2)} · ${LEVERAGE}X`
+            : `STAKE: $${margin.toFixed(2)}`}
+        </div>
+        {s.status === 'active' && (
+          <Badge className="bg-purple-500/20 text-purple-400 border-none px-1.5 py-0 h-4 text-[7px] font-black tracking-widest">LIVE</Badge>
+        )}
+      </div>
     </div>
   );
 }
