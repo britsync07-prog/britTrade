@@ -168,8 +168,9 @@ export default function Dashboard() {
                         </div>
                         <div className="border-x border-white/5 px-2">
                            <div className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">24H RETURN</div>
-                           <div className={`text-xs font-bold ${Number(strat.prof24h || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                              {Number(strat.prof24h || 0) >= 0 ? '+$' : '-$'}{Math.abs(Number(strat.prof24h || 0)).toFixed(2)}
+                           <div className={`text-xs font-bold gap-1 flex items-baseline ${Number(strat.prof24h || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                              <span>{Number(strat.prof24h || 0) >= 0 ? '+' : ''}{Number(strat.prof24h || 0).toFixed(2)}%</span>
+                              <span className="text-[10px] opacity-70">({Number(strat.prof24h || 0) >= 0 ? '+$' : '-$'}{Math.abs(Number(strat.prof24h || 0)).toFixed(2)})</span>
                            </div>
                         </div>
                         <div className="text-right">

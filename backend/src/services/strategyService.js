@@ -59,9 +59,26 @@ class StrategyService {
 
       const config = this.configs[s.name];
 
-      // 2. Fetch Paper Trade Daily Budget
+      // 2. Fetch Paper Trade Daily Budget & Calculate True Equity
       const budget = await paperTradeService.getValidBudget(s.id);
-      const balance24h = budget.currentBalance;
+      
+      const openTrades = await db.query("SELECT * FROM paper_trades WHERE strategyId = ? AND status = 'open'", [s.id]);
+      let openPnlAndMargin = 0;
+      for (const t of openTrades) {
+         let livePrice = signalEngine.latestPrices[t.symbol] || t.entryPrice;
+         const isLong = t.side === 'buy' || t.side === 'long';
+         let pnlPct = 0;
+         
+         if (isLong) pnlPct = ((livePrice - t.entryPrice) / t.entryPrice) * 100 * t.leverage;
+         else pnlPct = ((t.entryPrice - livePrice) / t.entryPrice) * 100 * t.leverage;
+         
+         if (pnlPct <= -100) pnlPct = -100;
+         const pnlUsd = t.margin * (pnlPct / 100);
+         
+         openPnlAndMargin += (t.margin + pnlUsd);
+      }
+
+      const balance24h = budget.currentBalance + openPnlAndMargin;
       const profit24hUsd = balance24h - 100.0; // Subtract initial $100 budget
 
       s.prof24h = profit24hUsd.toFixed(2); // Set it to USD profit directly for 24h
