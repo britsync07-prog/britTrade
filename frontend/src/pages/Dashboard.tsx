@@ -161,21 +161,30 @@ export default function Dashboard() {
                         {strat.description || "Sophisticated AI mining node observing recursive market patterns to generate high-probability entry targets."}
                      </p>
 
-                     <div className="grid grid-cols-3 gap-4 py-6 border-y border-white/5 mb-8">
+                     <div className="grid grid-cols-3 gap-4 py-6 border-y border-white/5 mb-6">
                         <div>
                            <div className="text-[8px] font-black uppercase tracking-widest text-slate-500 mb-1">Risk Tier</div>
                            <div className={`text-xs font-bold ${strat.risk === 'High' ? 'text-red-400' : 'text-cyan-400'}`}>{strat.risk || 'Medium'}</div>
                         </div>
                         <div className="border-x border-white/5 px-2">
                            <div className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold">24H RETURN</div>
-                           <div className={`text-xs font-bold gap-1 flex items-baseline ${Number(strat.prof24h || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                              <span>{Number(strat.prof24h || 0) >= 0 ? '+' : ''}{Number(strat.prof24h || 0).toFixed(2)}%</span>
-                              <span className="text-[10px] opacity-70">({Number(strat.prof24h || 0) >= 0 ? '+$' : '-$'}{Math.abs(Number(strat.prof24h || 0)).toFixed(2)})</span>
+                           <div className={`text-xs font-bold ${Number(strat.prof24h || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                              {Number(strat.prof24h || 0) >= 0 ? '+' : ''}{Number(strat.prof24h || 0).toFixed(2)}%
                            </div>
                         </div>
                         <div className="text-right">
                            <div className="text-[8px] font-black uppercase tracking-widest text-slate-500 mb-1">Pairs</div>
                            <div className="text-xs font-bold text-slate-300">{Number(strat.pairCount || 0)} Scanned</div>
+                        </div>
+                     </div>
+
+                     <div className="mb-8 p-4 rounded-xl bg-white/5 border border-white/10 flex items-center justify-between group-hover:border-white/20 transition-all">
+                        <div>
+                           <div className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Return from Daily $100</div>
+                           <div className="text-xs text-slate-500 font-medium">Based on 24h simulated paper trades</div>
+                        </div>
+                        <div className={`text-xl font-black tracking-tighter ${Number(strat.prof24h || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                           {Number(strat.prof24h || 0) >= 0 ? '+$' : '-$'}{Math.abs(Number(strat.prof24h || 0)).toFixed(2)}
                         </div>
                      </div>
                   </div>
