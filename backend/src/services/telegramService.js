@@ -257,15 +257,28 @@ class TelegramService {
     return await db.run("UPDATE users SET telegramId = NULL WHERE id = ?", [userId]);
   }
 
-  async sendDirectNotification(telegramId, message) {
+  async safeSendMessage(telegramId, message) {
     if (!bot || !telegramId) return;
-    bot.sendMessage(telegramId, message, { parse_mode: 'Markdown' }).catch(console.error);
+    try {
+      await bot.sendMessage(telegramId, message, { parse_mode: 'Markdown' });
+    } catch (err) {
+      if (err.response && err.response.statusCode === 403) {
+        console.log(`[Telegram] User ${telegramId} blocked the bot. Unlinking...`);
+        await db.run("UPDATE users SET telegramId = NULL WHERE telegramId = ?", [telegramId.toString()]);
+      } else {
+        console.error(`[Telegram] Send error to ${telegramId}:`, err.message || err);
+      }
+    }
+  }
+
+  async sendDirectNotification(telegramId, message) {
+    await this.safeSendMessage(telegramId, message);
   }
 
   async notifySignalOpened(telegramId, strategyName, signal) {
     if (!bot || !telegramId) return;
     const message = formatEntryMessage(strategyName, signal);
-    bot.sendMessage(telegramId, message, { parse_mode: 'Markdown' }).catch(console.error);
+    await this.safeSendMessage(telegramId, message);
   }
 
   /**
@@ -309,7 +322,7 @@ class TelegramService {
       : formatExitMessage(strategy.name, signal);
 
     for (const user of users) {
-      bot.sendMessage(user.telegramId, message, { parse_mode: 'Markdown' }).catch(console.error);
+      await this.safeSendMessage(user.telegramId, message);
     }
   }
 
@@ -347,7 +360,7 @@ class TelegramService {
     const message = formatExitMessage(strategy.name, { symbol, side, price, pnl, status });
 
     for (const user of users) {
-      bot.sendMessage(user.telegramId, message, { parse_mode: 'Markdown' }).catch(console.error);
+      await this.safeSendMessage(user.telegramId, message);
     }
   }
 
@@ -355,7 +368,7 @@ class TelegramService {
     if (!bot || !telegramId) return;
     const signal = { symbol, side, price, pnl, status };
     const message = formatExitMessage(strategyName, signal);
-    bot.sendMessage(telegramId, message, { parse_mode: 'Markdown' }).catch(console.error);
+    await this.safeSendMessage(telegramId, message);
   }
 }
 
