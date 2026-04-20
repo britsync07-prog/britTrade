@@ -44,7 +44,7 @@ class StrategyService {
   async getAll() {
     const strategies = await db.query("SELECT * FROM strategies");
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    
+
     for (const s of strategies) {
       // 1. Get raw signals
       const allSignals = await db.query("SELECT pnl, status FROM signals WHERE strategyId = ?", [s.id]);
@@ -61,21 +61,21 @@ class StrategyService {
 
       // 2. Fetch Paper Trade Daily Budget & Calculate True Equity
       const budget = await paperTradeService.getValidBudget(s.id);
-      
+
       const openTrades = await db.query("SELECT * FROM paper_trades WHERE strategyId = ? AND status = 'open'", [s.id]);
       let openPnlAndMargin = 0;
       for (const t of openTrades) {
-         let livePrice = signalEngine.latestPrices[t.symbol] || t.entryPrice;
-         const isLong = t.side === 'buy' || t.side === 'long';
-         let pnlPct = 0;
-         
-         if (isLong) pnlPct = ((livePrice - t.entryPrice) / t.entryPrice) * 100 * t.leverage;
-         else pnlPct = ((t.entryPrice - livePrice) / t.entryPrice) * 100 * t.leverage;
-         
-         if (pnlPct <= -100) pnlPct = -100;
-         const pnlUsd = t.margin * (pnlPct / 100);
-         
-         openPnlAndMargin += (t.margin + pnlUsd);
+        let livePrice = signalEngine.latestPrices[t.symbol] || t.entryPrice;
+        const isLong = t.side === 'buy' || t.side === 'long';
+        let pnlPct = 0;
+
+        if (isLong) pnlPct = ((livePrice - t.entryPrice) / t.entryPrice) * 100 * t.leverage;
+        else pnlPct = ((t.entryPrice - livePrice) / t.entryPrice) * 100 * t.leverage;
+
+        if (pnlPct <= -100) pnlPct = -100;
+        const pnlUsd = t.margin * (pnlPct / 100);
+
+        openPnlAndMargin += (t.margin + pnlUsd);
       }
 
       const balance24h = budget.currentBalance + openPnlAndMargin;
@@ -128,15 +128,15 @@ class StrategyService {
   async getSignals(strategyId, userId = null, isAdmin = false) {
     let signals = await db.query("SELECT * FROM signals WHERE strategyId = ? ORDER BY timestamp DESC LIMIT 50", [strategyId]);
     if (userId && !isAdmin) {
-       const planToStrat = { 1: 'low_risk', 2: 'medium_risk', 3: 'high_risk' };
-       const targetPlan = planToStrat[Number(strategyId)];
-       if (targetPlan) {
-         const hasPurchase = await db.get(
-           "SELECT id FROM purchases WHERE userId = ? AND (planId = ? OR planId = 'bundle')",
-           [userId, targetPlan]
-         );
-         if (!hasPurchase) signals = signals.filter(s => s.status !== 'active');
-       }
+      const planToStrat = { 1: 'low_risk', 2: 'medium_risk', 3: 'high_risk' };
+      const targetPlan = planToStrat[Number(strategyId)];
+      if (targetPlan) {
+        const hasPurchase = await db.get(
+          "SELECT id FROM purchases WHERE userId = ? AND (planId = ? OR planId = 'bundle')",
+          [userId, targetPlan]
+        );
+        if (!hasPurchase) signals = signals.filter(s => s.status !== 'active');
+      }
     }
     return { signals };
   }

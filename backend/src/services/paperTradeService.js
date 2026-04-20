@@ -14,6 +14,27 @@ class PaperTradeService {
     this.FEE_PERCENTAGE = 0.001; // 0.1%
     this.TRADE_MARGIN = 10.0;
     this.MAX_CONCURRENT_TRADES = 10;
+    this.cleanupGhostTrades();
+  }
+
+  cleanupGhostTrades() {
+    setTimeout(async () => {
+      try {
+        const budgets = await db.query("SELECT * FROM strategy_daily_budgets");
+        for (const b of budgets) {
+          const ghostTrades = await db.query(
+            "SELECT * FROM paper_trades WHERE strategyId = ? AND status = 'open' AND timestamp < ?",
+            [b.strategyId, b.lastReset]
+          );
+          for (const t of ghostTrades) {
+            await db.run("UPDATE paper_trades SET status = 'closed', exitPrice = entryPrice, pnlUsd = 0, feeUsd = 0, closedAt = CURRENT_TIMESTAMP WHERE id = ?", [t.id]);
+            console.log(`[PaperTrade] Repaired ghost trade: ${t.id} for sys ${t.strategyId}`);
+          }
+        }
+      } catch (e) {
+        console.error('[PaperTrade] Cleanup Error:', e.message);
+      }
+    }, 5000);
   }
 
   async getValidBudget(strategyId) {
@@ -135,9 +156,8 @@ class PaperTradeService {
             
             for (const trade of openTrades) {
               const livePrice = await this.fetchCurrentPrice(trade.symbol);
-              if (livePrice > 0) {
-                await this.closePaperTrade(trade.signalId, livePrice);
-              }
+              const closePrice = livePrice > 0 ? livePrice : trade.entryPrice;
+              await this.closePaperTrade(trade.signalId, closePrice);
             }
 
             // 2. Reset balance to 100
