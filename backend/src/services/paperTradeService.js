@@ -46,7 +46,7 @@ class PaperTradeService {
     return budget;
   }
 
-  async openPaperTrade(strategyId, signalId, symbol, side, entryPrice, leverage = 1) {
+  async openPaperTrade(strategyId, signalId, symbol, side, rawPrice, leverage = 1, atr = 0) {
     // 1. Check budget
     const budget = await this.getValidBudget(strategyId);
     if (budget.currentBalance < this.TRADE_MARGIN) {
@@ -64,53 +64,75 @@ class PaperTradeService {
       return false;
     }
 
+    // Execution Engine (Slippage & Spread)
+    const slippage = atr > 0 ? (atr / rawPrice) * 0.1 : 0.001; // Dynamic 10% ATR slippage
+    const spread = 0.0005; // 0.05% baseline spread
+    const penalty = spread + slippage;
+    
+    // Simulate real-world bid/ask limit crossing
+    const fillPrice = side === 'buy' || side === 'long' 
+      ? rawPrice * (1 + penalty) 
+      : rawPrice * (1 - penalty);
+
     // 3. Deduct margin from budget
     const newBalance = budget.currentBalance - this.TRADE_MARGIN;
     await db.run("UPDATE strategy_daily_budgets SET currentBalance = ? WHERE strategyId = ?", [newBalance, strategyId]);
 
+    // Apply Entry Fee immediately in memory
+    const positionSize = this.TRADE_MARGIN * leverage;
+    const entryFeeUsd = positionSize * this.FEE_PERCENTAGE; // 0.1%
+
     // 4. Create paper trade
     await db.run(
-      "INSERT INTO paper_trades (strategyId, signalId, symbol, margin, leverage, side, entryPrice, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'open')",
-      [strategyId, signalId, symbol, this.TRADE_MARGIN, leverage, side, entryPrice]
+      "INSERT INTO paper_trades (strategyId, signalId, symbol, margin, leverage, side, entryPrice, feeUsd, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open')",
+      [strategyId, signalId, symbol, this.TRADE_MARGIN, leverage, side, fillPrice, entryFeeUsd]
     );
 
-    console.log(`[PaperTrade] Opened trade for ${symbol} | Margin: $${this.TRADE_MARGIN} | New Balance: $${newBalance}`);
+    console.log(`[PaperTrade] Opened trade for ${symbol} | Target: $${rawPrice.toFixed(4)} | Filled: $${fillPrice.toFixed(4)} | Slippage+Spread Penalty: ${(penalty*100).toFixed(3)}%`);
     return true;
   }
 
-  async closePaperTrade(signalId, exitPrice) {
+  async closePaperTrade(signalId, rawExitPrice, atr = 0) {
     const trade = await db.get("SELECT * FROM paper_trades WHERE signalId = ? AND status = 'open'", [signalId]);
     if (!trade) return false;
 
+    // Execution Engine (Exit Spread & Slippage)
+    const slippage = atr > 0 ? (atr / rawExitPrice) * 0.1 : 0.001; 
+    const spread = 0.0005;
+    const penalty = spread + slippage;
+
     const isLong = trade.side === 'buy' || trade.side === 'long';
+    // Exit slip: If long, you sell to close (lower). If short, you buy to cover (higher).
+    const fillPrice = isLong 
+      ? rawExitPrice * (1 - penalty) 
+      : rawExitPrice * (1 + penalty);
+
     let pnlPct = 0;
-    
     if (isLong) {
-      pnlPct = ((exitPrice - trade.entryPrice) / trade.entryPrice) * 100 * trade.leverage;
+      pnlPct = ((fillPrice - trade.entryPrice) / trade.entryPrice) * 100 * trade.leverage;
     } else {
-      pnlPct = ((trade.entryPrice - exitPrice) / trade.entryPrice) * 100 * trade.leverage;
+      pnlPct = ((trade.entryPrice - fillPrice) / trade.entryPrice) * 100 * trade.leverage;
     }
 
-    // Liquidation Check
-    if (pnlPct <= -100) pnlPct = -100;
+    // Real Binance Liquidation Model (95% Maintenance Margin for 5x tier)
+    if (pnlPct <= -95) pnlPct = -100;
 
     const pnlUsd = trade.margin * (pnlPct / 100);
     const positionSize = trade.margin * trade.leverage;
     
-    // 1% fee on total position size? Or just 1% of Margin? 
-    // Usually 1% fee is on position size, which might wipe out the account. 
-    // Let's do 1% of trade.margin for safety, or 1% of total outcome.
-    // User said "1% fee per trade". If position is $50, 1% is $0.50.
-    const feeUsd = positionSize * this.FEE_PERCENTAGE; 
-
-    const netPnlUsd = pnlUsd - feeUsd;
+    // Apply Exit Fee (0.1%)
+    const exitFeeUsd = positionSize * this.FEE_PERCENTAGE; 
+    
+    // Resolve Double Fees (Entry stored in DB + Exit)
+    const totalFeeUsd = trade.feeUsd + exitFeeUsd;
+    const netPnlUsd = pnlUsd - totalFeeUsd;
     
     // Return margin + net pnl to budget
     const returnedAmount = trade.margin + netPnlUsd;
 
     await db.run(
       "UPDATE paper_trades SET status = 'closed', exitPrice = ?, pnlUsd = ?, feeUsd = ?, closedAt = CURRENT_TIMESTAMP WHERE id = ?",
-      [exitPrice, netPnlUsd, feeUsd, trade.id]
+      [fillPrice, netPnlUsd, totalFeeUsd, trade.id]
     );
 
     await db.run(
@@ -118,7 +140,7 @@ class PaperTradeService {
       [returnedAmount, trade.strategyId]
     );
 
-    console.log(`[PaperTrade] Closed ${trade.symbol} | PnL: $${netPnlUsd.toFixed(2)} (Fee: $${feeUsd.toFixed(2)})`);
+    console.log(`[PaperTrade] Closed ${trade.symbol} | PnL: $${netPnlUsd.toFixed(2)} (Total Fees: $${totalFeeUsd.toFixed(2)})`);
     return true;
   }
 
