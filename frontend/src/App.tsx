@@ -11,6 +11,7 @@ import StrategyDetail from './pages/StrategyDetail';
 import TradingViewChart from './components/ui/TradingViewChart';
 import AdminDashboard from './pages/AdminDashboard';
 import api from './services/api';
+import { Logo } from './components/ui/Logo';
 
 const services: Service[] = [
   {
@@ -138,9 +139,8 @@ function LandingPage() {
     <div className="min-h-screen bg-[#020617] selection:bg-cyan-500/30">
       <nav className="fixed top-0 w-full z-50 border-b border-white/5 bg-slate-950/50 backdrop-blur-md">
         <div className="container mx-auto px-6 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <Activity className="text-cyan-400 w-8 h-8" />
-            <span className="text-xl font-bold tracking-tighter text-white">BRIT<span className="text-cyan-400">TRADE</span></span>
+          <div className="flex items-center bg-white/5 rounded-xl px-4 py-1 border border-white/5 shadow-xl shadow-black/20">
+            <Logo width={160} height={45} />
           </div>
           <div className="flex items-center gap-6">
             <a href="#pricing" className="text-sm font-bold text-cyan-400 hover:text-cyan-300 transition-colors uppercase tracking-widest">Pricing</a>
