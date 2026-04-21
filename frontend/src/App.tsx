@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { Hero } from './components/ui/animated-hero';
 import RadialOrbitalTimeline from './components/ui/radial-orbital-timeline';
 import { ServiceCarousel, type Service } from './components/ui/services-card';
-import { Clock, Activity, Shield, TrendingUp, Coins, Rocket, Layers } from "lucide-react";
+import { Activity, Shield, TrendingUp, Coins, Rocket, Layers } from "lucide-react";
 import { SignalBroadcast } from './components/ui/SignalBroadcast';
 import { PerformanceTicker } from './components/ui/PerformanceTicker';
 import Login from './pages/Login';
@@ -60,7 +60,63 @@ const services: Service[] = [
   },
 ];
 
-// ... timelineData remains unchanged ...
+const timelineData = [
+  {
+    id: 1,
+    title: "Secure Auth",
+    date: "Stable",
+    content: "Enterprise-grade JWT authentication and secure session management.",
+    category: "Security",
+    icon: Shield,
+    relatedIds: [2],
+    status: "completed" as const,
+    energy: 100,
+  },
+  {
+    id: 2,
+    title: "Signal Mining",
+    date: "Ready",
+    content: "Direct access to real-time premium signals with entry and exit targets.",
+    category: "Connectivity",
+    icon: Activity,
+    relatedIds: [2],
+    status: "completed" as const,
+    energy: 95,
+  },
+  {
+    id: 3,
+    title: "AI Analysis",
+    date: "Running",
+    content: "Advanced machine learning models scanning 200+ pairs for high-probability setups.",
+    category: "AI",
+    icon: TrendingUp,
+    relatedIds: [2, 4],
+    status: "in-progress" as const,
+    energy: 85,
+  },
+  {
+    id: 4,
+    title: "Risk Calibration",
+    date: "Active",
+    content: "Dynamic take-profit and stop-loss calculations based on market volatility.",
+    category: "Risk",
+    icon: Shield,
+    relatedIds: [3, 5],
+    status: "completed" as const,
+    energy: 90,
+  },
+  {
+    id: 5,
+    title: "Full Autonomy",
+    date: "Q2 2024",
+    content: "Completely hands-off autonomous portfolio rebalancing.",
+    category: "Future",
+    icon: Activity,
+    relatedIds: [4],
+    status: "pending" as const,
+    energy: 40,
+  },
+];
 
 function LandingPage() {
   const handlePurchase = async (planId: string) => {
