@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Activity, Mail, Lock, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 import api from '../services/api';
+import { LegalModal } from '../components/ui/LegalModal';
 
 interface LoginProps {
   onLogin: (user: any) => void;
@@ -11,17 +12,29 @@ export default function Login({ onLogin }: LoginProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignup, setIsSignup] = useState(false);
+  const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [legalType, setLegalType] = useState<'terms' | 'risk' | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    
+    if (isSignup && !agreed) {
+      setError('You must agree to the Terms and Risk Disclosure');
+      return;
+    }
+
     setLoading(true);
 
     try {
       const endpoint = isSignup ? '/auth/signup' : '/auth/login';
-      const res = await api.post(endpoint, { email, password });
+      const payload = isSignup 
+        ? { email, password, agreedToTerms: true, riskAccepted: true } 
+        : { email, password };
+        
+      const res = await api.post(endpoint, payload);
       localStorage.setItem('token', res.data.token);
       onLogin(res.data.user);
     } catch (err: any) {
@@ -33,6 +46,12 @@ export default function Login({ onLogin }: LoginProps) {
 
   return (
     <div className="min-h-screen bg-cyber-dark flex items-center justify-center p-6 relative overflow-hidden">
+      <LegalModal 
+        isOpen={!!legalType} 
+        onClose={() => setLegalType(null)} 
+        type={legalType || 'terms'} 
+      />
+
       {/* Premium Background Elements */}
       <div className="absolute inset-0 animate-mesh opacity-30" />
       <div className="absolute top-1/4 -left-20 w-96 h-96 bg-cyan-500/10 rounded-full blur-[120px] animate-pulse" />
@@ -93,10 +112,45 @@ export default function Login({ onLogin }: LoginProps) {
             </div>
           </div>
 
+          {isSignup && (
+            <div className="flex items-start gap-3 mt-6 p-1">
+              <div className="relative flex items-center mt-1">
+                <input
+                  id="agreed"
+                  type="checkbox"
+                  checked={agreed}
+                  onChange={(e) => setAgreed(e.target.checked)}
+                  className="w-5 h-5 rounded-lg border-white/10 bg-white/5 checked:bg-cyan-500 transition-all cursor-pointer appearance-none border checked:border-cyan-500"
+                />
+                {agreed && (
+                  <Activity size={12} className="absolute left-1 top-1 text-white pointer-events-none" />
+                )}
+              </div>
+              <label htmlFor="agreed" className="text-xs text-slate-400 leading-relaxed cursor-pointer select-none">
+                I agree to the{' '}
+                <button 
+                  type="button"
+                  onClick={() => setLegalType('terms')}
+                  className="text-cyan-400 hover:text-cyan-300 font-bold underline-offset-4 hover:underline"
+                >
+                  Terms & Conditions
+                </button>
+                {' '}and{' '}
+                <button 
+                  type="button"
+                  onClick={() => setLegalType('risk')}
+                  className="text-red-400 hover:text-red-300 font-bold underline-offset-4 hover:underline"
+                >
+                  Risk Disclosure
+                </button>
+              </label>
+            </div>
+          )}
+
           <button 
             type="submit" 
-            disabled={loading}
-            className="w-full h-14 bg-white text-black rounded-2xl flex items-center justify-center gap-3 mt-8 font-black text-sm uppercase tracking-widest hover:bg-slate-200 transition-all hover:scale-[1.01] active:scale-95 disabled:opacity-50 disabled:hover:scale-100 shadow-xl shadow-white/5"
+            disabled={loading || (isSignup && !agreed)}
+            className="w-full h-14 bg-white text-black rounded-2xl flex items-center justify-center gap-3 mt-8 font-black text-sm uppercase tracking-widest hover:bg-slate-200 transition-all hover:scale-[1.01] active:scale-95 disabled:opacity-30 disabled:hover:scale-100 shadow-xl shadow-white/5"
           >
             {loading ? 'Decrypting...' : (isSignup ? 'Init Sequence' : 'Authorize')}
             <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
@@ -115,3 +169,4 @@ export default function Login({ onLogin }: LoginProps) {
     </div>
   );
 }
+

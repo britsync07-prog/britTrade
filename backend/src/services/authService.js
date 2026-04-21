@@ -5,9 +5,10 @@ const db = require('../db');
 const SECRET = process.env.JWT_SECRET || 'your_super_secret_key';
 
 class AuthService {
-  async signup(email, password) {
+  async signup(email, password, agreedToTerms, riskAccepted) {
     if (!email || !email.trim()) throw new Error('Email is required');
     if (!password || password.length < 6) throw new Error('Password must be at least 6 characters');
+    if (!agreedToTerms || !riskAccepted) throw new Error('You must agree to the Terms and Risk Disclosure');
 
     const emailNormalized = email.trim().toLowerCase();
     const existing = await db.get("SELECT id FROM users WHERE email = ?", [emailNormalized]);
@@ -15,8 +16,8 @@ class AuthService {
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const result = await db.run(
-      "INSERT INTO users (email, password) VALUES (?, ?)",
-      [emailNormalized, hashedPassword]
+      "INSERT INTO users (email, password, agreedToTerms, riskAccepted) VALUES (?, ?, ?, ?)",
+      [emailNormalized, hashedPassword, agreedToTerms ? 1 : 0, riskAccepted ? 1 : 0]
     );
     return { id: result.id, email };
   }

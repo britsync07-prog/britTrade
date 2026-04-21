@@ -63,7 +63,8 @@ app.use('/admin', adminRoutes);
 // --- Authentication ---
 app.post('/auth/signup', async (req, res) => {
   try {
-    const user = await authService.signup(req.body.email, req.body.password);
+    const { email, password, agreedToTerms, riskAccepted } = req.body;
+    const user = await authService.signup(email, password, agreedToTerms, riskAccepted);
     res.status(201).json(user);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });

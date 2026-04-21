@@ -74,6 +74,12 @@ const initDb = async () => {
   if (!userRows.some(r => r.name === 'createdAt')) {
     await run("ALTER TABLE users ADD COLUMN createdAt DATETIME DEFAULT '2026-01-01 00:00:00'");
   }
+  if (!userRows.some(r => r.name === 'agreedToTerms')) {
+    await run("ALTER TABLE users ADD COLUMN agreedToTerms BOOLEAN DEFAULT 0");
+  }
+  if (!userRows.some(r => r.name === 'riskAccepted')) {
+    await run("ALTER TABLE users ADD COLUMN riskAccepted BOOLEAN DEFAULT 0");
+  }
 
   const userCount = await get("SELECT count(*) as count FROM users");
   if (userCount && userCount.count === 0) {
