@@ -4,7 +4,6 @@ import { Activity, Zap, TrendingUp, BarChart, LogOut, ShieldAlert, Send, ArrowRi
 import api from '../services/api';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
-import { Logo } from '../components/ui/Logo';
 
 
 export default function Dashboard() {
@@ -76,11 +75,7 @@ export default function Dashboard() {
 
       <div className="max-w-7xl mx-auto px-6 pt-12 space-y-12 relative z-10">
         <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8">
-          <div className="space-y-4">
-            <div className="bg-white/5 rounded-xl px-4 py-2 border border-white/5 w-fit shadow-xl shadow-black/20">
-              <Logo width={140} height={40} />
-            </div>
-            <div className="space-y-2">
+          <div className="space-y-2">
             <div className="flex items-center gap-3 mb-2">
               <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_10px_rgba(34,211,238,0.5)]" />
               <span className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-400/80">Systems Operational</span>
@@ -90,7 +85,6 @@ export default function Dashboard() {
             </h1>
             <p className="text-slate-400 text-lg font-medium max-w-xl">Monitor and deploy advanced AI mining strategies across global crypto markets.</p>
           </div>
-        </div>
 
           <div className="flex flex-wrap gap-4">
              <div className="glass-card px-6 py-4 flex items-center gap-4 hover:border-cyan-500/30 transition-all cursor-pointer group" onClick={() => window.open('https://t.me/BritSyncAI_bot', '_blank')}>

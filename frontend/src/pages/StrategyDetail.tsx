@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { motion } from 'framer-motion';
-import { Logo } from '../components/ui/Logo';
 
 export default function StrategyDetail() {
   const { id } = useParams();
@@ -126,15 +125,10 @@ export default function StrategyDetail() {
 
 
       <div className="max-w-7xl mx-auto px-4 md:px-8 pt-12 space-y-8 relative z-10">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
-          <Link to="/dashboard" className="inline-flex items-center gap-2 text-slate-500 hover:text-white transition-colors group">
-            <ChevronLeft size={20} className="group-hover:-translate-x-1 transition-transform" /> 
-            <span className="text-sm font-medium">Market Overview</span>
-          </Link>
-          <div className="bg-white/5 rounded-xl px-4 py-2 border border-white/5 shadow-xl shadow-black/20">
-            <Logo width={120} height={35} />
-          </div>
-        </div>
+        <Link to="/dashboard" className="inline-flex items-center gap-2 text-slate-500 hover:text-white transition-colors group mb-4">
+          <ChevronLeft size={20} className="group-hover:-translate-x-1 transition-transform" /> 
+          <span className="text-sm font-medium">Market Overview</span>
+        </Link>
 
         <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8">
           <div>

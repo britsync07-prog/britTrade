@@ -3,7 +3,6 @@ import { Activity, Mail, Lock, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 import api from '../services/api';
 import { LegalModal } from '../components/ui/LegalModal';
-import { Logo } from '../components/ui/Logo';
 
 interface LoginProps {
   onLogin: (user: any) => void;
@@ -64,12 +63,11 @@ export default function Login({ onLogin }: LoginProps) {
         className="glass-card w-full max-w-md p-8 md:p-12 relative z-10 shadow-2xl shadow-black/50"
       >
         <div className="flex flex-col items-center mb-10 text-center">
-          <div className="mb-6 relative group">
-            <div className="absolute inset-0 bg-white/20 blur-3xl rounded-2xl opacity-50 group-hover:opacity-100 transition-opacity" />
-            <div className="bg-white/10 p-4 rounded-3xl border border-white/10 relative z-10 backdrop-blur-xl">
-              <Logo width={220} height={60} />
-            </div>
+          <div className="p-4 bg-cyan-500/10 rounded-2xl mb-6 relative group">
+            <div className="absolute inset-0 bg-cyan-500/20 blur-xl rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity" />
+            <Activity className="w-12 h-12 text-cyan-400 relative z-10" />
           </div>
+          <h1 className="text-4xl font-bold tracking-tighter text-white mb-2">{isSignup ? 'Create Account' : 'Welcome Back'}</h1>
           <p className="text-slate-400 font-medium">{isSignup ? 'Start your automated trading journey' : 'Access your professional trading terminal'}</p>
         </div>
 
