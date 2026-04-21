@@ -128,12 +128,34 @@ function LandingPage() {
         const { data } = await api.get('/public/strategies/performance');
         setPerfData(data);
         
+        // Strategy Name Mapping
+        const nameMap: Record<string, string> = {
+          "Low Risk Strategy": "GridMeanReversion",
+          "Medium Risk Strategy": "TrendFollower",
+          "High Risk Strategy": "UltimateFuturesScalper"
+        };
+
         // Update services with live returns
         const updated = services.map(s => {
-          const match = data.find((p: any) => p.name === s.title.replace(' Strategy', '').replace(/\s/g, ''));
+          const backendName = nameMap[s.title];
+          const match = data.find((p: any) => p.name === backendName);
+          
           if (match) {
-            return { ...s, dailyReturn: `${parseFloat(match.prof24h) >= 0 ? '+' : ''}$${match.prof24h}` };
+            return { 
+              ...s, 
+              dailyReturn: `${parseFloat(match.prof24h) >= 0 ? '+' : ''}$${match.prof24h}` 
+            };
           }
+          
+          // Special handling for Bundle (combined profit)
+          if (s.planId === 'bundle') {
+            const totalProf = data.reduce((acc: number, p: any) => acc + parseFloat(p.prof24h || 0), 0);
+            return { 
+              ...s, 
+              dailyReturn: `${totalProf >= 0 ? '+' : ''}$${totalProf.toFixed(2)}` 
+            };
+          }
+
           return s;
         });
         setLocalServices(updated);
