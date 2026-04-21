@@ -217,6 +217,8 @@ export interface Service {
   gradient: string;
   price?: string;
   planId?: string;
+  dailyReturn?: string; // e.g. "+$0.00"
+  isSimulated?: boolean;
 }
 
 // Sub-component for individual cards
@@ -245,7 +247,7 @@ const ServiceCard = ({
     <motion.div
       variants={cardVariants}
       className={cn(
-        "relative flex h-[450px] w-full flex-col justify-between overflow-hidden rounded-3xl p-8 bg-gradient-to-r",
+        "relative flex h-[520px] w-full flex-col justify-between overflow-hidden rounded-3xl p-8 bg-gradient-to-r",
         service.gradient
       )}
     >
@@ -256,27 +258,49 @@ const ServiceCard = ({
         </span>
         <service.icon className="mb-auto h-12 w-12 text-white" />
       </div>
-      <div className="z-10">
-        <h3 className="mb-2 text-xl font-bold uppercase tracking-wider text-white">
-          {service.title}
-        </h3>
-        <p className="text-sm text-white/70 mb-4">{service.description}</p>
-        {service.price && (
-          <div className="text-2xl font-bold text-white mb-4">
-            {service.price}
-            <span className="text-sm font-normal text-white/60"> / month</span>
+
+      <div className="z-10 flex flex-col gap-4">
+        {/* Performance Badge */}
+        {service.dailyReturn && (
+          <div className="bg-black/20 backdrop-blur-md border border-white/10 rounded-2xl p-4 mb-2 group transition-all hover:bg-black/30">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-[10px] font-bold uppercase tracking-widest text-white/60">Live Simulation</span>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-black text-emerald-400 drop-shadow-[0_0_15px_rgba(52,211,153,0.3)]">
+                {service.dailyReturn}
+              </span>
+              <span className="text-[10px] font-medium text-white/40 uppercase">24h Return</span>
+            </div>
+            <p className="text-[9px] text-white/30 mt-1 italic">
+              Based on daily $100 paper trades
+            </p>
           </div>
         )}
-        <Button 
-          className="w-full bg-white text-black hover:bg-white/90"
-          onClick={() => service.planId && onPurchase?.(service.planId)}
-        >
-          {service.planId ? 'Purchase Now' : 'Get Started'}
-        </Button>
+
+        <div>
+          <h3 className="mb-2 text-xl font-bold uppercase tracking-wider text-white">
+            {service.title}
+          </h3>
+          <p className="text-sm text-white/70 mb-4">{service.description}</p>
+          {service.price && (
+            <div className="text-2xl font-bold text-white mb-4">
+              {service.price}
+              <span className="text-sm font-normal text-white/60"> / month</span>
+            </div>
+          )}
+          <Button 
+            className="w-full bg-white text-black hover:bg-white/90 font-bold py-6 rounded-xl"
+            onClick={() => service.planId && onPurchase?.(service.planId)}
+          >
+            {service.planId ? 'Purchase Now' : 'Get Started'}
+          </Button>
+        </div>
       </div>
 
       {/* Subtle overlay for better text readability */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
+      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent"></div>
     </motion.div>
   );
 };

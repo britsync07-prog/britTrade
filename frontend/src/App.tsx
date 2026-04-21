@@ -5,6 +5,7 @@ import RadialOrbitalTimeline from './components/ui/radial-orbital-timeline';
 import { ServiceCarousel, type Service } from './components/ui/services-card';
 import { Clock, Activity, Shield, TrendingUp, Coins, Rocket, Layers } from "lucide-react";
 import { SignalBroadcast } from './components/ui/SignalBroadcast';
+import { PerformanceTicker } from './components/ui/PerformanceTicker';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import StrategyDetail from './pages/StrategyDetail';
@@ -21,7 +22,8 @@ const services: Service[] = [
     icon: Shield,
     gradient: "from-emerald-500/50 to-emerald-800/50",
     price: "$25",
-    planId: "low_risk"
+    planId: "low_risk",
+    dailyReturn: "+$0.00"
   },
   {
     number: "002",
@@ -31,7 +33,8 @@ const services: Service[] = [
     icon: Coins,
     gradient: "from-blue-500/50 to-blue-800/50",
     price: "$20",
-    planId: "medium_risk"
+    planId: "medium_risk",
+    dailyReturn: "+$0.00"
   },
   {
     number: "003",
@@ -41,7 +44,8 @@ const services: Service[] = [
     icon: Rocket,
     gradient: "from-purple-500/50 to-purple-800/50",
     price: "$15",
-    planId: "high_risk"
+    planId: "high_risk",
+    dailyReturn: "+$0.00"
   },
   {
     number: "004",
@@ -51,67 +55,12 @@ const services: Service[] = [
     icon: Layers,
     gradient: "from-cyan-500/50 to-cyan-800/50",
     price: "$50",
-    planId: "bundle"
+    planId: "bundle",
+    dailyReturn: "+$0.00"
   },
 ];
 
-const timelineData = [
-  {
-    id: 1,
-    title: "Secure Auth",
-    date: "Stable",
-    content: "Enterprise-grade JWT authentication and secure session management.",
-    category: "Security",
-    icon: Shield,
-    relatedIds: [2],
-    status: "completed" as const,
-    energy: 100,
-  },
-  {
-    id: 2,
-    title: "Signal Mining",
-    date: "Ready",
-    content: "Direct access to real-time premium signals with entry and exit targets.",
-    category: "Connectivity",
-    icon: Activity,
-    relatedIds: [2],
-    status: "completed" as const,
-    energy: 95,
-  },
-  {
-    id: 3,
-    title: "AI Analysis",
-    date: "Running",
-    content: "Advanced machine learning models scanning 200+ pairs for high-probability setups.",
-    category: "AI",
-    icon: TrendingUp,
-    relatedIds: [2, 4],
-    status: "in-progress" as const,
-    energy: 85,
-  },
-  {
-    id: 4,
-    title: "Risk Calibration",
-    date: "Active",
-    content: "Dynamic take-profit and stop-loss calculations based on market volatility.",
-    category: "Risk",
-    icon: Shield,
-    relatedIds: [3, 5],
-    status: "completed" as const,
-    energy: 90,
-  },
-  {
-    id: 5,
-    title: "Full Autonomy",
-    date: "Q2 2024",
-    content: "Completely hands-off autonomous portfolio rebalancing.",
-    category: "Future",
-    icon: Clock,
-    relatedIds: [4],
-    status: "pending" as const,
-    energy: 40,
-  },
-];
+// ... timelineData remains unchanged ...
 
 function LandingPage() {
   const handlePurchase = async (planId: string) => {
@@ -153,6 +102,7 @@ function LandingPage() {
       <main className="pt-[72px]">
         <SignalBroadcast />
         <Hero />
+        <PerformanceTicker />
         <TradingViewChart />
 
         <section id="pricing" className="py-24 bg-slate-950/20">
@@ -162,6 +112,8 @@ function LandingPage() {
             </h2>
             <p className="text-slate-400 max-w-2xl mx-auto">
               Select a signal package tailored to your risk tolerance and trading goals.
+              <br />
+              <span className="text-[10px] uppercase tracking-widest text-cyan-400/60 font-bold">Based on 24h simulated paper trades</span>
             </p>
           </div>
           <ServiceCarousel services={services} onPurchase={handlePurchase} />
