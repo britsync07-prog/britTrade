@@ -119,6 +119,33 @@ const timelineData = [
 ];
 
 function LandingPage() {
+  const [perfData, setPerfData] = useState<any[]>([]);
+  const [localServices, setLocalServices] = useState(services);
+
+  useEffect(() => {
+    const fetchPerf = async () => {
+      try {
+        const { data } = await api.get('/public/strategies/performance');
+        setPerfData(data);
+        
+        // Update services with live returns
+        const updated = services.map(s => {
+          const match = data.find((p: any) => p.name === s.title.replace(' Strategy', '').replace(/\s/g, ''));
+          if (match) {
+            return { ...s, dailyReturn: `${parseFloat(match.prof24h) >= 0 ? '+' : ''}$${match.prof24h}` };
+          }
+          return s;
+        });
+        setLocalServices(updated);
+      } catch (e) {
+        console.error('Failed to fetch performance', e);
+      }
+    };
+    fetchPerf();
+    const interval = setInterval(fetchPerf, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   const handlePurchase = async (planId: string) => {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -158,7 +185,7 @@ function LandingPage() {
       <main className="pt-[72px]">
         <SignalBroadcast />
         <Hero />
-        <PerformanceTicker />
+        <PerformanceTicker data={perfData} />
         <TradingViewChart />
 
         <section id="pricing" className="py-24 bg-slate-950/20">
@@ -172,7 +199,7 @@ function LandingPage() {
               <span className="text-[10px] uppercase tracking-widest text-cyan-400/60 font-bold">Based on 24h simulated paper trades</span>
             </p>
           </div>
-          <ServiceCarousel services={services} onPurchase={handlePurchase} />
+          <ServiceCarousel services={localServices} onPurchase={handlePurchase} />
         </section>
         
         <section className="py-24 relative">

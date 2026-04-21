@@ -1,11 +1,39 @@
 import { TrendingUp, Activity, BarChart3, Target } from 'lucide-react';
 
-export function PerformanceTicker() {
+export function PerformanceTicker({ data = [] }: { data?: any[] }) {
+  const combinedYield = data.reduce((acc, s) => acc + parseFloat(s.pnl24h || 0), 0);
+  const avgProfit = data.length > 0 
+    ? data.reduce((acc, s) => acc + parseFloat(s.prof24h || 0), 0) / data.length 
+    : 0;
+  const avgWinRate = data.length > 0 
+    ? data.reduce((acc, s) => acc + parseFloat(s.winRate || 0), 0) / data.length 
+    : 0;
+
   const stats = [
-    { label: "Combined 24h Yield", value: "+0.00%", icon: TrendingUp, color: "text-emerald-400" },
-    { label: "Avg. Profit per $100", value: "+$0.00", icon: Target, color: "text-cyan-400" },
-    { label: "Win Rate (Simulated)", value: "0.0%", icon: Activity, color: "text-purple-400" },
-    { label: "Active Strategies", value: "3", icon: BarChart3, color: "text-blue-400" }
+    { 
+      label: "Combined 24h Yield", 
+      value: `${combinedYield >= 0 ? '+' : ''}${combinedYield.toFixed(2)}%`, 
+      icon: TrendingUp, 
+      color: "text-emerald-400" 
+    },
+    { 
+      label: "Avg. Profit per $100", 
+      value: `$${avgProfit.toFixed(2)}`, 
+      icon: Target, 
+      color: "text-cyan-400" 
+    },
+    { 
+      label: "Win Rate (Simulated)", 
+      value: `${avgWinRate.toFixed(1)}%`, 
+      icon: Activity, 
+      color: "text-purple-400" 
+    },
+    { 
+      label: "Active Strategies", 
+      value: data.length > 0 ? data.length.toString() : "3", 
+      icon: BarChart3, 
+      color: "text-blue-400" 
+    }
   ];
 
   return (

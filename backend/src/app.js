@@ -174,6 +174,20 @@ app.get('/public/signals/broadcast', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+app.get('/public/strategies/performance', async (req, res, next) => {
+  try {
+    const strategies = await strategyService.getAll();
+    const performance = strategies.map(s => ({
+      id: s.id,
+      name: s.name,
+      prof24h: s.prof24h,
+      pnl24h: s.pnl24h,
+      winRate: s.winRate
+    }));
+    res.json(performance);
+  } catch (e) { next(e); }
+});
+
 // --- REAL CHART DATA API ---
 // decodeURIComponent handles BTC%2FUSDT -> BTC/USDT correctly
 app.get('/charts/:symbol', authMiddleware, async (req, res, next) => {
