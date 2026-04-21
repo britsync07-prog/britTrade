@@ -1,0 +1,34 @@
+{
+    "trading_mode": "spot",
+    "max_open_trades": 50,
+    "stake_currency": "USDT",
+    "stake_amount": 10,
+    "dry_run": true,
+    "dry_run_wallet": 10000,
+    "timeframe": "1h",
+    "strategy_path": "backtest_mass/user_data/strategies/",
+    "pairlists": [
+        {
+            "method": "StaticPairList"
+        }
+    ],
+    "exchange": {
+        "name": "binance",
+        "pair_whitelist": [
+            "XRP/USDT",
+            "LINK/USDT",
+            "BNB/USDT",
+            "BTC/USDT",
+            "SOL/USDT",
+            "ETH/USDT"
+        ],
+        "pair_blacklist": []
+    },
+    "entry_pricing": {
+        "price_side": "same"
+    },
+    "exit_pricing": {
+        "price_side": "same"
+    },
+    "dataformat_ohlcv": "feather"
+}
