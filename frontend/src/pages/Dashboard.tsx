@@ -90,6 +90,7 @@ export default function Dashboard() {
             </h1>
             <p className="text-slate-400 text-lg font-medium max-w-xl">Monitor and deploy advanced AI mining strategies across global crypto markets.</p>
           </div>
+        </div>
 
           <div className="flex flex-wrap gap-4">
              <div className="glass-card px-6 py-4 flex items-center gap-4 hover:border-cyan-500/30 transition-all cursor-pointer group" onClick={() => window.open('https://t.me/BritSyncAI_bot', '_blank')}>

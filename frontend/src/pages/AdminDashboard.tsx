@@ -144,6 +144,7 @@ export default function AdminDashboard() {
             </h1>
             <p className="text-slate-400 text-lg font-medium max-w-xl">Global system oversight, user authorization, and infrastructure management.</p>
           </div>
+        </div>
 
           <div className="flex gap-4">
              <button 
