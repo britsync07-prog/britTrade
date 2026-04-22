@@ -293,7 +293,8 @@ export default function AdminDashboard() {
               </tbody>
             </table>
           </div>
-        </motion.div>
+          </motion.div>
+        )}
       </div>
 
       {/* Create Account Overlay */}
