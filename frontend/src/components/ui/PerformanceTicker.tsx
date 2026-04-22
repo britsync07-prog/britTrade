@@ -41,7 +41,7 @@ export function PerformanceTicker({ data = [] }: { data?: any[] }) {
       <div className="container mx-auto px-6">
         <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-white/5">
           {stats.map((stat, i) => (
-            <div key={i} className="py-6 px-4 flex flex-col items-center justify-center text-center group hover:bg-white/[0.02] transition-colors">
+            <div key={i} className="py-4 px-4 flex flex-col items-center justify-center text-center group hover:bg-white/[0.02] transition-colors">
               <div className="flex items-center gap-2 mb-2">
                 <stat.icon className={`w-4 h-4 ${stat.color} opacity-70`} />
                 <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">{stat.label}</span>

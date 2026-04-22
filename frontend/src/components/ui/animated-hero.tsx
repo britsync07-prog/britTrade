@@ -26,13 +26,13 @@ function Hero() {
   return (
     <div className="w-full">
       <div className="container mx-auto">
-        <div className="flex gap-8 pt-20 lg:pt-40 pb-12 items-center justify-center flex-col relative">
+        <div className="flex gap-4 pt-12 lg:pt-24 pb-8 items-center justify-center flex-col relative">
           <div className="flex gap-4 flex-col">
-            <h1 className="text-5xl md:text-7xl lg:text-8xl max-w-3xl tracking-tighter text-center font-extrabold drop-shadow-xl z-10">
+            <h1 className="text-4xl md:text-6xl lg:text-7xl max-w-3xl tracking-tighter text-center font-extrabold drop-shadow-xl z-10">
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-400 via-rose-500 to-red-600 animate-pulse">
                 Trading crypto is now
               </span>
-              <span className="relative flex w-full justify-center overflow-hidden text-center md:pb-4 md:pt-4 text-white drop-shadow-[0_0_20px_rgba(255,255,255,0.3)]">
+              <span className="relative flex w-full justify-center overflow-hidden text-center md:pb-2 md:pt-2 text-white drop-shadow-[0_0_20px_rgba(255,255,255,0.3)]">
                 &nbsp;
                 {titles.map((title, index) => (
                   <motion.span
@@ -58,14 +58,14 @@ function Hero() {
               </span>
             </h1>
 
-            <p className="text-lg md:text-xl leading-relaxed tracking-tight text-slate-300 max-w-2xl text-center mt-6 drop-shadow-sm">
+            <p className="text-lg md:text-xl leading-relaxed tracking-tight text-slate-300 max-w-2xl text-center mt-4 drop-shadow-sm">
               Navigating the volatile crypto market is a challenge. Avoid costly
               mistakes by ditching manual monitoring and guesswork. Our AI delivers
               real-time, high-accuracy crypto signals, making your
               trading journey more profitable and efficient than ever.
             </p>
           </div>
-          <div className="flex flex-row gap-3 mt-4 z-10 relative">
+          <div className="flex flex-row gap-3 mt-2 z-10 relative">
             <div className="absolute inset-0 bg-cyan-500/20 blur-xl rounded-full" />
             <Link to="/login?signup=true" className="relative group">
               <Button size="lg" className="gap-4 bg-white text-black hover:bg-slate-200 font-bold text-lg px-8 py-6 rounded-full transition-transform hover:scale-105 shadow-[0_0_40px_rgba(34,211,238,0.4)]">
