@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Send, User, Bot, Clock, Search, MessageSquare } from 'lucide-react';
+import { Send, User, Bot, Search, MessageSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import api from '../../services/api';
 
@@ -25,7 +25,6 @@ export default function SupportChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [replyText, setReplyText] = useState('');
   const [loadingChats, setLoadingChats] = useState(true);
-  const [loadingMessages, setLoadingMessages] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -178,7 +177,7 @@ export default function SupportChat() {
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar">
               <AnimatePresence initial={false}>
-                {messages.map((msg, idx) => (
+                {messages.map((msg) => (
                   <motion.div
                     key={msg.id}
                     initial={{ opacity: 0, y: 10, scale: 0.95 }}
