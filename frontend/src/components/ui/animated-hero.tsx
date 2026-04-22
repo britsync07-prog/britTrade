@@ -26,13 +26,13 @@ function Hero() {
   return (
     <div className="w-full">
       <div className="container mx-auto">
-        <div className="flex gap-4 pt-12 lg:pt-24 pb-8 items-center justify-center flex-col relative">
-          <div className="flex gap-4 flex-col">
-            <h1 className="text-4xl md:text-6xl lg:text-7xl max-w-3xl tracking-tighter text-center font-extrabold drop-shadow-xl z-10">
+        <div className="flex gap-2 pt-4 lg:pt-8 pb-4 items-center justify-center flex-col relative">
+          <div className="flex gap-2 flex-col">
+            <h1 className="text-3xl md:text-5xl lg:text-6xl max-w-3xl tracking-tighter text-center font-extrabold drop-shadow-xl z-10">
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-400 via-rose-500 to-red-600 animate-pulse">
                 Trading crypto is now
               </span>
-              <span className="relative flex w-full justify-center overflow-hidden text-center md:pb-2 md:pt-2 text-white drop-shadow-[0_0_20px_rgba(255,255,255,0.3)]">
+              <span className="relative flex w-full justify-center overflow-hidden text-center md:pb-1 md:pt-1 text-white drop-shadow-[0_0_20px_rgba(255,255,255,0.3)]">
                 &nbsp;
                 {titles.map((title, index) => (
                   <motion.span
@@ -58,7 +58,7 @@ function Hero() {
               </span>
             </h1>
 
-            <p className="text-lg md:text-xl leading-relaxed tracking-tight text-slate-300 max-w-2xl text-center mt-4 drop-shadow-sm">
+            <p className="text-base md:text-lg leading-relaxed tracking-tight text-slate-300 max-w-2xl text-center mt-2 drop-shadow-sm">
               Navigating the volatile crypto market is a challenge. Avoid costly
               mistakes by ditching manual monitoring and guesswork. Our AI delivers
               real-time, high-accuracy crypto signals, making your

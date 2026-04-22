@@ -191,7 +191,7 @@ function LandingPage() {
   return (
     <div className="min-h-screen bg-[#020617] selection:bg-cyan-500/30">
       <nav className="fixed top-0 w-full z-50 border-b border-white/5 bg-slate-950/50 backdrop-blur-md">
-        <div className="container mx-auto px-6 py-4 flex justify-between items-center">
+        <div className="container mx-auto px-6 py-2 flex justify-between items-center">
           <div className="flex items-center gap-2">
             <Activity className="text-cyan-400 w-8 h-8" />
             <span className="text-xl font-bold tracking-tighter text-white">BRIT<span className="text-cyan-400">TRADE</span></span>
@@ -204,7 +204,7 @@ function LandingPage() {
         </div>
       </nav>
 
-      <main className="pt-[72px]">
+      <main className="pt-[56px]">
         <SignalBroadcast />
         <Hero />
         <PerformanceTicker data={perfData} />

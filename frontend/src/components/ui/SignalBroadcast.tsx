@@ -34,7 +34,7 @@ export function SignalBroadcast() {
   if (signals.length === 0) return null;
 
   return (
-    <div className="w-full bg-slate-950/80 backdrop-blur-md border-b border-white/10 overflow-hidden relative z-40 py-2">
+    <div className="w-full bg-slate-950/80 backdrop-blur-md border-b border-white/10 overflow-hidden relative z-40 py-1">
       <div className="flex items-center gap-3 absolute left-0 h-full z-10 bg-gradient-to-r from-slate-950 via-slate-950 to-transparent px-4">
         <Activity className="w-4 h-4 text-cyan-400 animate-pulse" />
         <span className="text-xs font-bold uppercase tracking-widest text-cyan-400">Live Trades</span>
