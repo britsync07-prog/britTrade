@@ -7,11 +7,13 @@ import {
   X, 
   TrendingUp, 
   Zap, 
-  ArrowLeft 
+  ArrowLeft,
+  MessageSquare
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
+import SupportChat from '../components/admin/SupportChat';
 
 interface User {
   id: number;
@@ -30,6 +32,7 @@ export default function AdminDashboard() {
   const [newPassword, setNewPassword] = useState('');
   const [stats, setStats] = useState({ totalUsers: 0, totalSales: 0, totalRevenue: 0, activeSignals: 0 });
   const [filter, setFilter] = useState<'all' | 'premium' | 'trial'>('all');
+  const [activeTab, setActiveTab] = useState<'operators' | 'support'>('operators');
 
   useEffect(() => {
     fetchData();
@@ -142,6 +145,17 @@ export default function AdminDashboard() {
 
           <div className="flex gap-4">
              <button 
+               onClick={() => setActiveTab(activeTab === 'operators' ? 'support' : 'operators')}
+               className={`glass-card px-8 py-4 flex items-center gap-3 transition-all cursor-pointer group border-none ${
+                 activeTab === 'support' ? 'bg-cyan-500 text-white' : 'bg-white/5 text-slate-400 hover:bg-white/10'
+               }`}
+             >
+                <MessageSquare className="w-5 h-5" />
+                <span className="text-xs font-black uppercase tracking-widest">
+                  {activeTab === 'support' ? 'View Operators' : 'Support Chat'}
+                </span>
+             </button>
+             <button 
                onClick={() => setIsCreateModalOpen(true)}
                className="glass-card px-8 py-4 bg-white text-black flex items-center gap-3 hover:bg-slate-200 transition-all cursor-pointer group border-none"
              >
@@ -163,50 +177,57 @@ export default function AdminDashboard() {
           <AdminStat title="Total Sales" value={stats.totalSales} icon={Activity} color="text-purple-400" />
         </div>
 
-        {/* User Management Module */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="glass-card overflow-hidden border-white/5"
-        >
-          <div className="p-8 border-b border-white/5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white/[0.01]">
-            <div>
-               <h2 className="text-2xl font-black tracking-tight text-white">Operator Registry</h2>
-               <p className="text-slate-500 text-sm font-medium">Manage user permissions and monitor subscription health.</p>
+        {activeTab === 'support' ? (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+          >
+            <SupportChat />
+          </motion.div>
+        ) : (
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="glass-card overflow-hidden border-white/5"
+          >
+            <div className="p-8 border-b border-white/5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white/[0.01]">
+              <div>
+                 <h2 className="text-2xl font-black tracking-tight text-white">Operator Registry</h2>
+                 <p className="text-slate-500 text-sm font-medium">Manage user permissions and monitor subscription health.</p>
+              </div>
+              <div className="flex gap-2 p-1 bg-white/5 rounded-2xl">
+                 <button 
+                  onClick={() => setFilter('all')}
+                  className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filter === 'all' ? 'bg-white text-black' : 'hover:bg-white/5 text-slate-400'}`}
+                 >
+                   All
+                 </button>
+                 <button 
+                  onClick={() => setFilter('premium')}
+                  className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filter === 'premium' ? 'bg-white text-black' : 'hover:bg-white/5 text-slate-400'}`}
+                 >
+                   Premium
+                 </button>
+                 <button 
+                  onClick={() => setFilter('trial')}
+                  className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filter === 'trial' ? 'bg-white text-black' : 'hover:bg-white/5 text-slate-400'}`}
+                 >
+                   Trial
+                 </button>
+              </div>
             </div>
-            <div className="flex gap-2 p-1 bg-white/5 rounded-2xl">
-               <button 
-                onClick={() => setFilter('all')}
-                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filter === 'all' ? 'bg-white text-black' : 'hover:bg-white/5 text-slate-400'}`}
-               >
-                 All
-               </button>
-               <button 
-                onClick={() => setFilter('premium')}
-                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filter === 'premium' ? 'bg-white text-black' : 'hover:bg-white/5 text-slate-400'}`}
-               >
-                 Premium
-               </button>
-               <button 
-                onClick={() => setFilter('trial')}
-                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filter === 'trial' ? 'bg-white text-black' : 'hover:bg-white/5 text-slate-400'}`}
-               >
-                 Trial
-               </button>
-            </div>
-          </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="bg-white/[0.02]">
-                  <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-500">Operator</th>
-                  <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-500">Clearance</th>
-                  <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-500">Active Plans</th>
-                  <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-500">Joint Date</th>
-                  <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-500 text-right">Actions</th>
-                </tr>
-              </thead>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="bg-white/[0.02]">
+                    <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-500">Operator</th>
+                    <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-500">Clearance</th>
+                    <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-500">Active Plans</th>
+                    <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-500">Joint Date</th>
+                    <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-500 text-right">Actions</th>
+                  </tr>
+                </thead>
               <tbody className="divide-y divide-white/5">
                 {users.filter(u => {
                   if (filter === 'premium') return u.purchasedPlans?.length > 0;

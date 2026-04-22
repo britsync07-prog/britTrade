@@ -49,8 +49,8 @@ class StrategyService {
       // 1. Get raw signals
       const allSignals = await db.query("SELECT pnl, status FROM signals WHERE strategyId = ?", [s.id]);
       const signals24h = await db.query(
-        "SELECT pnl, status FROM signals WHERE strategyId = ? AND timestamp > ?",
-        [s.id, yesterday]
+        "SELECT pnl, status FROM signals WHERE strategyId = ? AND timestamp > datetime('now', '-1 day')",
+        [s.id]
       );
 
       const isClosed = (sig) => ['closed', 'completed', 'tp_hit', 'sl_hit'].includes(sig.status);
@@ -59,11 +59,15 @@ class StrategyService {
 
       const config = this.configs[s.name];
 
-      // 2. Fetch Paper Trade Daily Budget & Calculate True Equity
-      const budget = await paperTradeService.getValidBudget(s.id);
+      // 2. Calculate True 24h Profit from Paper Trades (Sliding Window)
+      const trades24h = await db.query(
+        "SELECT SUM(pnlUsd) as total FROM paper_trades WHERE strategyId = ? AND closedAt > datetime('now', '-1 day')",
+        [s.id]
+      );
+      const realized24h = parseFloat(trades24h[0].total || 0);
 
       const openTrades = await db.query("SELECT * FROM paper_trades WHERE strategyId = ? AND status = 'open'", [s.id]);
-      let openPnlAndMargin = 0;
+      let unrealizedPnl = 0;
       for (const t of openTrades) {
         let livePrice = signalEngine.latestPrices[t.symbol] || t.entryPrice;
         const isLong = t.side === 'buy' || t.side === 'long';
@@ -73,17 +77,15 @@ class StrategyService {
         else pnlPct = ((t.entryPrice - livePrice) / t.entryPrice) * 100 * t.leverage;
 
         if (pnlPct <= -100) pnlPct = -100;
-        const pnlUsd = t.margin * (pnlPct / 100);
-
-        openPnlAndMargin += (t.margin + pnlUsd);
+        unrealizedPnl += t.margin * (pnlPct / 100);
       }
 
-      const balance24h = budget.currentBalance + openPnlAndMargin;
-      const profit24hUsd = balance24h - 100.0; // Subtract initial $100 budget
-
+      const profit24hUsd = realized24h + unrealizedPnl;
       const sumSignals24h = signals24h.reduce((acc, sig) => acc + (Number(sig.pnl) || 0), 0);
-      s.pnl24h = sumSignals24h.toFixed(2); // Sum of % pnl from signals over 24h
-      s.prof24h = profit24hUsd.toFixed(2); // Set it to USD profit directly for 24h
+
+      // pnl24h should ideally represent the % return on the $100 budget
+      s.pnl24h = (profit24hUsd).toFixed(2); 
+      s.prof24h = profit24hUsd.toFixed(2);
       s.signalCount = allSignals.length;
       s.activeSignalCount = allSignals.filter(sig => sig.status === 'active').length;
       s.closedSignalCount = closed.length;

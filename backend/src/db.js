@@ -191,6 +191,23 @@ const initDb = async () => {
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
+  await run(`CREATE TABLE IF NOT EXISTS support_chats (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    telegramId TEXT UNIQUE NOT NULL,
+    firstName TEXT,
+    lastName TEXT,
+    username TEXT,
+    lastMessageAt DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  await run(`CREATE TABLE IF NOT EXISTS support_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chatId TEXT NOT NULL,
+    sender TEXT NOT NULL, -- 'user' or 'admin'
+    text TEXT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
   console.log('Database initialized successfully.');
 };
 
