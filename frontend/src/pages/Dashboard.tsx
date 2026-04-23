@@ -198,6 +198,26 @@ export default function Dashboard() {
                     };
                     const hasAccess = user?.purchasedPlans?.some((p: string) => planToStrat[p]?.includes(strat.id));
                     
+                    const handlePurchase = async (stratId: number) => {
+                      try {
+                        const stratToPlan: Record<number, string> = {
+                          1: 'low_risk',
+                          2: 'medium_risk',
+                          3: 'high_risk'
+                        };
+                        const planId = stratToPlan[stratId];
+                        if (!planId) return;
+
+                        const { data } = await api.post('/payments/create-session', { planId });
+                        if (data.url) {
+                          window.location.href = data.url;
+                        }
+                      } catch (e: any) {
+                        console.error('Purchase failed', e);
+                        alert(e.response?.data?.error || 'Failed to initiate purchase');
+                      }
+                    };
+
                     if (hasAccess) {
                       return (
                         <div className="flex gap-2">
@@ -216,11 +236,14 @@ export default function Dashboard() {
                     } else {
                       return (
                         <div className="flex gap-2">
-                          <Link to="/#pricing" className="block flex-1">
-                            <button className="w-full h-14 bg-cyan-500 hover:bg-cyan-600 text-white transition-all rounded-xl font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/20">
+                          <div className="block flex-1">
+                            <button 
+                              onClick={() => handlePurchase(strat.id)}
+                              className="w-full h-14 bg-cyan-500 hover:bg-cyan-600 text-white transition-all rounded-xl font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/20"
+                            >
                                Purchase <Zap size={16} />
                             </button>
-                          </Link>
+                          </div>
                           <Link to={`/strategy/${strat.id}?preview=true`} className="block flex-1">
                             <button className="w-full h-14 glass-card hover:bg-white/5 transition-all text-slate-300 font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2 rounded-xl border-white/10">
                                History
