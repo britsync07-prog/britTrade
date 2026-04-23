@@ -148,19 +148,7 @@ class PaperTradeService {
           if (now - lastReset >= ONE_DAY) {
             console.log(`[PaperTrade] Executing 24h reset for strategy ${budget.strategyId}...`);
             
-            // 1. Force close all open trades
-            const openTrades = await db.query(
-              "SELECT * FROM paper_trades WHERE strategyId = ? AND status = 'open'",
-              [budget.strategyId]
-            );
-            
-            for (const trade of openTrades) {
-              const livePrice = await this.fetchCurrentPrice(trade.symbol);
-              const closePrice = livePrice > 0 ? livePrice : trade.entryPrice;
-              await this.closePaperTrade(trade.signalId, closePrice);
-            }
-
-            // 2. Reset balance to 100
+            // 1. Reset balance to 100 (Do NOT force close trades anymore)
             await db.run(
               "UPDATE strategy_daily_budgets SET currentBalance = 100.0, lastReset = CURRENT_TIMESTAMP WHERE strategyId = ?",
               [budget.strategyId]

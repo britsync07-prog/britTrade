@@ -3,7 +3,7 @@
 This document provides the technical specification for the SaaS trading backend.
 
 ## 📌 Base Configuration
-- **Base URL:** `http://localhost:3000`
+- **Base URL:** `https://trade.mayfairmarketing.online`
 - **Authentication:** Bearer JWT Token required for all routes except signup/login.
 - **Content-Type:** `application/json`
 

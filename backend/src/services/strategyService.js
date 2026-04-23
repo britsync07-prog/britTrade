@@ -59,12 +59,15 @@ class StrategyService {
 
       const config = this.configs[s.name];
 
-      // 2. Calculate True 24h Profit from Paper Trades (Sliding Window)
-      const trades24h = await db.query(
-        "SELECT SUM(pnlUsd) as total FROM paper_trades WHERE strategyId = ? AND closedAt > datetime('now', '-1 day')",
-        [s.id]
+      // 2. Calculate True Daily Profit from Paper Trades (Since Last Reset)
+      const budget = await db.get("SELECT lastReset FROM strategy_daily_budgets WHERE strategyId = ?", [s.id]);
+      const resetTime = budget ? budget.lastReset : yesterday;
+
+      const tradesSinceReset = await db.query(
+        "SELECT SUM(pnlUsd) as total FROM paper_trades WHERE strategyId = ? AND closedAt > ?",
+        [s.id, resetTime]
       );
-      const realized24h = parseFloat(trades24h[0].total || 0);
+      const realizedDaily = parseFloat(tradesSinceReset[0].total || 0);
 
       const openTrades = await db.query("SELECT * FROM paper_trades WHERE strategyId = ? AND status = 'open'", [s.id]);
       let unrealizedPnl = 0;
@@ -80,7 +83,7 @@ class StrategyService {
         unrealizedPnl += t.margin * (pnlPct / 100);
       }
 
-      const profit24hUsd = realized24h + unrealizedPnl;
+      const profit24hUsd = realizedDaily + unrealizedPnl;
       const sumSignals24h = signals24h.reduce((acc, sig) => acc + (Number(sig.pnl) || 0), 0);
 
       // pnl24h should ideally represent the % return on the $100 budget
