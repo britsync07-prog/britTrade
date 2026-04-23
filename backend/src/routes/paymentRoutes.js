@@ -33,6 +33,12 @@ router.post('/create-session', authMiddleware, express.json(), async (req, res) 
       return res.status(400).json({ error: 'Invalid plan selected' });
     }
 
+    // Check if already purchased
+    const existing = await db.get("SELECT id FROM purchases WHERE userId = ? AND planId = ?", [req.userId, planId]);
+    if (existing) {
+      return res.status(400).json({ error: 'You have already purchased this plan' });
+    }
+
     const session = await getStripe().checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: [

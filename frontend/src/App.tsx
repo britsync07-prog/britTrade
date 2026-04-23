@@ -118,7 +118,7 @@ const timelineData = [
   },
 ];
 
-function LandingPage() {
+function LandingPage({ user }: { user: any }) {
   const [perfData, setPerfData] = useState<any[]>([]);
   const [localServices, setLocalServices] = useState(services);
 
@@ -169,6 +169,11 @@ function LandingPage() {
   }, []);
 
   const handlePurchase = async (planId: string) => {
+    if (user?.purchasedPlans?.includes(planId)) {
+      window.location.href = '/dashboard';
+      return;
+    }
+
     const token = localStorage.getItem('token');
     if (!token) {
       window.location.href = `/login?redirect=purchase&planId=${planId}`;
@@ -297,7 +302,7 @@ function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<LandingPage />} />
+        <Route path="/" element={<LandingPage user={user} />} />
         <Route 
           path="/login" 
           element={!user ? <Login onLogin={setUser} /> : <Navigate to="/dashboard" />} 
