@@ -163,7 +163,20 @@ function LandingPage({ user }: { user: any }) {
         console.error('Failed to fetch performance', e);
       }
     };
+
     fetchPerf();
+
+    // Handle hash scroll on initial load
+    if (window.location.hash) {
+      setTimeout(() => {
+        const id = window.location.hash.replace('#', '');
+        const element = document.getElementById(id);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth' });
+        }
+      }, 500); // Small delay to ensure content is rendered
+    }
+
     const interval = setInterval(fetchPerf, 30000);
     return () => clearInterval(interval);
   }, []);
