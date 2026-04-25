@@ -177,9 +177,12 @@ function LandingPage({ user }: { user: any }) {
           return s;
         });
         setLocalServices(finalized);
-      } catch (offerErr) {
-        console.error('Failed to fetch offers', offerErr);
-        setLocalServices(updated);
+        } catch (e) {
+          console.error('Failed to fetch offers', e);
+          setLocalServices(updated);
+        }
+      } catch (err) {
+        console.error('Failed to fetch performance', err);
       }
     };
 
