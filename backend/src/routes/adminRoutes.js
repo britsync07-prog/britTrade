@@ -23,8 +23,12 @@ router.get('/users', authMiddleware, adminMiddleware, async (req, res) => {
     );
 
     // Enrich with actual plans
+    const now = new Date().toISOString();
     for (let user of users) {
-      const purchases = await db.query("SELECT planId FROM purchases WHERE userId = ?", [user.id]);
+      const purchases = await db.query(
+        "SELECT planId, expiresAt FROM purchases WHERE userId = ? AND (expiresAt IS NULL OR expiresAt > ?)", 
+        [user.id, now]
+      );
       user.purchasedPlans = purchases.map(p => p.planId);
       user.planCount = purchases.length;
     }
@@ -83,7 +87,7 @@ router.delete('/users/:id', authMiddleware, adminMiddleware, async (req, res) =>
 // Get user purchases
 router.get('/users/:id/purchases', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const purchases = await db.query("SELECT planId, timestamp FROM purchases WHERE userId = ?", [req.params.id]);
+    const purchases = await db.query("SELECT planId, timestamp, expiresAt FROM purchases WHERE userId = ?", [req.params.id]);
     res.json(purchases);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -139,6 +143,78 @@ router.get('/stats', authMiddleware, adminMiddleware, async (req, res) => {
       totalRevenue: revenue,
       totalSales: totalPurchases.count
     });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// --- Marketing Management (Events & Offers) ---
+
+// Events
+router.get('/marketing/events', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const events = await db.query("SELECT * FROM events ORDER BY createdAt DESC");
+    res.json(events);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/marketing/events', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { name, planId, trialDays, startDate, endDate } = req.body;
+    if (!name || !planId || !trialDays || !startDate || !endDate) {
+      return res.status(400).json({ error: 'All fields are required' });
+    }
+    await db.run(
+      "INSERT INTO events (name, planId, trialDays, startDate, endDate) VALUES (?, ?, ?, ?, ?)",
+      [name, planId, trialDays, startDate, endDate]
+    );
+    res.status(201).json({ message: 'Event created successfully' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.delete('/marketing/events/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    await db.run("DELETE FROM events WHERE id = ?", [req.params.id]);
+    res.json({ message: 'Event deleted successfully' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Offers
+router.get('/marketing/offers', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const offers = await db.query("SELECT * FROM offers ORDER BY createdAt DESC");
+    res.json(offers);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/marketing/offers', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { planId, discountPercentage, startDate, endDate } = req.body;
+    if (!planId || !discountPercentage || !startDate || !endDate) {
+      return res.status(400).json({ error: 'All fields are required' });
+    }
+    await db.run(
+      "INSERT INTO offers (planId, discountPercentage, startDate, endDate) VALUES (?, ?, ?, ?)",
+      [planId, discountPercentage, startDate, endDate]
+    );
+    res.status(201).json({ message: 'Offer created successfully' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.delete('/marketing/offers/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    await db.run("DELETE FROM offers WHERE id = ?", [req.params.id]);
+    res.json({ message: 'Offer deleted successfully' });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

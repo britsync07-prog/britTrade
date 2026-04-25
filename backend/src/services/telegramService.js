@@ -166,8 +166,9 @@ if (token && token !== 'your_telegram_bot_token_here') {
               WHEN 2 THEN 'medium_risk'
               WHEN 3 THEN 'high_risk'
             END OR p.planId = 'bundle')
+         AND (p.expiresAt IS NULL OR p.expiresAt > ?)
        ORDER BY st.id`,
-      [user.id]
+      [user.id, new Date().toISOString()]
     );
   }
 
@@ -309,9 +310,10 @@ class TelegramService {
               WHEN 2 THEN 'medium_risk'
               WHEN 3 THEN 'high_risk'
             END OR p.planId = 'bundle')
+            AND (p.expiresAt IS NULL OR p.expiresAt > ?)
            )
          )`,
-      [strategyId, strategyId]
+      [strategyId, strategyId, new Date().toISOString()]
     );
 
     if (users.length === 0) return;
@@ -350,9 +352,10 @@ class TelegramService {
               WHEN 2 THEN 'medium_risk'
               WHEN 3 THEN 'high_risk'
             END OR p.planId = 'bundle')
+            AND (p.expiresAt IS NULL OR p.expiresAt > ?)
            )
          )`,
-      [strategyId, strategyId]
+      [strategyId, strategyId, new Date().toISOString()]
     );
 
     if (users.length === 0) return;

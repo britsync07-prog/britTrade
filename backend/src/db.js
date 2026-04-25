@@ -180,7 +180,34 @@ const initDb = async () => {
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     userId INTEGER,
     planId TEXT,
+    expiresAt DATETIME,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  const purchaseRows = await query("PRAGMA table_info(purchases)");
+  if (!purchaseRows.some(r => r.name === 'expiresAt')) {
+    await run("ALTER TABLE purchases ADD COLUMN expiresAt DATETIME");
+  }
+
+  await run(`CREATE TABLE IF NOT EXISTS events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    planId TEXT NOT NULL,
+    trialDays INTEGER NOT NULL,
+    startDate DATETIME NOT NULL,
+    endDate DATETIME NOT NULL,
+    status TEXT DEFAULT 'active',
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  await run(`CREATE TABLE IF NOT EXISTS offers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    planId TEXT NOT NULL,
+    discountPercentage INTEGER NOT NULL,
+    startDate DATETIME NOT NULL,
+    endDate DATETIME NOT NULL,
+    status TEXT DEFAULT 'active',
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
   await run(`CREATE TABLE IF NOT EXISTS notes (

@@ -19,6 +19,25 @@ class AuthService {
       "INSERT INTO users (email, password, agreedToTerms, riskAccepted) VALUES (?, ?, ?, ?)",
       [emailNormalized, hashedPassword, agreedToTerms ? 1 : 0, riskAccepted ? 1 : 0]
     );
+
+    // Check for active events for free trials
+    try {
+      const now = new Date().toISOString();
+      const activeEvent = await db.get(
+        "SELECT * FROM events WHERE status = 'active' AND startDate <= ? AND endDate >= ? LIMIT 1",
+        [now, now]
+      );
+
+      if (activeEvent) {
+        console.log(`[AuthService] Active event found: ${activeEvent.name}. Granting ${activeEvent.trialDays} days trial of ${activeEvent.planId} to ${emailNormalized}`);
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + activeEvent.trialDays);
+        await this.purchasePlan(result.id, activeEvent.planId, expiresAt.toISOString());
+      }
+    } catch (eventError) {
+      console.error('[AuthService] Failed to check for active events during signup:', eventError);
+    }
+
     return { id: result.id, email };
   }
 
@@ -44,21 +63,32 @@ class AuthService {
     if (user.role === 'admin') {
       user.purchasedPlans = ['low_risk', 'medium_risk', 'high_risk', 'bundle'];
     } else {
-      const purchases = await db.query("SELECT planId FROM purchases WHERE userId = ?", [userId]);
+      const now = new Date().toISOString();
+      const purchases = await db.query(
+        "SELECT planId FROM purchases WHERE userId = ? AND (expiresAt IS NULL OR expiresAt > ?)", 
+        [userId, now]
+      );
       user.purchasedPlans = purchases.map(p => p.planId);
     }
     return user;
   }
 
-  async purchasePlan(userId, planId) {
+  async purchasePlan(userId, planId, expiresAt = null) {
     try {
       if (!planId) throw new Error('Plan ID is required');
       
-      // Check if already purchased
-      const existing = await db.get("SELECT id FROM purchases WHERE userId = ? AND planId = ?", [userId, planId]);
-      if (existing) return { status: 'Already purchased' };
+      // Check if already purchased/active
+      const now = new Date().toISOString();
+      const existing = await db.get(
+        "SELECT id FROM purchases WHERE userId = ? AND planId = ? AND (expiresAt IS NULL OR expiresAt > ?)", 
+        [userId, planId, now]
+      );
+      if (existing) return { status: 'Already active' };
 
-      await db.run("INSERT INTO purchases (userId, planId) VALUES (?, ?)", [userId, planId]);
+      await db.run(
+        "INSERT INTO purchases (userId, planId, expiresAt) VALUES (?, ?, ?)", 
+        [userId, planId, expiresAt]
+      );
       
       // Automatic subscription logic
       const strategyService = require('./strategyService');

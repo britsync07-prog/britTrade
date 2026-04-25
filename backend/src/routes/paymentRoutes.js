@@ -4,6 +4,20 @@ const authService = require('../services/authService');
 const authMiddleware = require('./authMiddleware');
 const db = require('../db');
 
+// Get active offers
+router.get('/offers', async (req, res) => {
+  try {
+    const now = new Date().toISOString();
+    const offers = await db.query(
+      "SELECT * FROM offers WHERE status = 'active' AND startDate <= ? AND endDate >= ?",
+      [now, now]
+    );
+    res.json(offers);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Lazy-init Stripe to prevent crash if key is missing
 let stripe;
 const getStripe = () => {
@@ -33,6 +47,24 @@ router.post('/create-session', authMiddleware, express.json(), async (req, res) 
       return res.status(400).json({ error: 'Invalid plan selected' });
     }
 
+    // Check for active offers for this plan
+    let finalAmount = plan.amount;
+    try {
+      const now = new Date().toISOString();
+      const activeOffer = await db.get(
+        "SELECT * FROM offers WHERE planId = ? AND status = 'active' AND startDate <= ? AND endDate >= ? LIMIT 1",
+        [planId, now, now]
+      );
+
+      if (activeOffer) {
+        const discount = Math.floor(plan.amount * (activeOffer.discountPercentage / 100));
+        finalAmount = plan.amount - discount;
+        console.log(`[Payment] Applied ${activeOffer.discountPercentage}% discount to plan ${planId}. Original: ${plan.amount}, Final: ${finalAmount}`);
+      }
+    } catch (offerError) {
+      console.error('[Payment] Failed to check for active offers:', offerError);
+    }
+
     // Check if already purchased
     const existing = await db.get("SELECT id FROM purchases WHERE userId = ? AND planId = ?", [req.userId, planId]);
     if (existing) {
@@ -48,7 +80,7 @@ router.post('/create-session', authMiddleware, express.json(), async (req, res) 
             product_data: {
               name: plan.name,
             },
-            unit_amount: plan.amount,
+            unit_amount: finalAmount,
           },
           quantity: 1,
         },

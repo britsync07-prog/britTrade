@@ -148,19 +148,38 @@ function LandingPage({ user }: { user: any }) {
           }
           
           // Special handling for Bundle (combined profit)
-          if (s.planId === 'bundle') {
-            const totalProf = data.reduce((acc: number, p: any) => acc + parseFloat(p.prof24h || 0), 0);
-            return { 
-              ...s, 
-              dailyReturn: `${totalProf >= 0 ? '+' : ''}$${totalProf.toFixed(2)}` 
+        // Special handling for Bundle (combined profit)
+        if (s.planId === 'bundle') {
+          const totalProf = data.reduce((acc: number, p: any) => acc + parseFloat(p.prof24h || 0), 0);
+          return { 
+            ...s, 
+            dailyReturn: `${totalProf >= 0 ? '+' : ''}$${totalProf.toFixed(2)}` 
+          };
+        }
+
+        return s;
+      });
+
+      // Apply offers on top of updated performance data
+      try {
+        const { data: offers } = await api.get('/payments/offers');
+        const finalized = updated.map(s => {
+          const offer = offers.find((o: any) => o.planId === s.planId);
+          if (offer) {
+            const originalPriceVal = parseInt(s.price?.replace('$', '') || '0');
+            const discount = Math.floor(originalPriceVal * (offer.discountPercentage / 100));
+            return {
+              ...s,
+              originalPrice: s.price,
+              price: `$${originalPriceVal - discount}`
             };
           }
-
           return s;
         });
+        setLocalServices(finalized);
+      } catch (offerErr) {
+        console.error('Failed to fetch offers', offerErr);
         setLocalServices(updated);
-      } catch (e) {
-        console.error('Failed to fetch performance', e);
       }
     };
 

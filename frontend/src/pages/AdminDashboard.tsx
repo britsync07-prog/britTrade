@@ -8,7 +8,9 @@ import {
   TrendingUp, 
   Zap, 
   ArrowLeft,
-  MessageSquare
+  MessageSquare,
+  Gift,
+  Tag
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
@@ -32,12 +34,26 @@ export default function AdminDashboard() {
   const [newPassword, setNewPassword] = useState('');
   const [stats, setStats] = useState({ totalUsers: 0, totalSales: 0, totalRevenue: 0, activeSignals: 0 });
   const [filter, setFilter] = useState<'all' | 'premium' | 'trial'>('all');
-  const [activeTab, setActiveTab] = useState<'operators' | 'support'>('operators');
+  const [activeTab, setActiveTab] = useState<'operators' | 'support' | 'marketing'>('operators');
+  const [marketingData, setMarketingData] = useState<{ events: any[], offers: any[] }>({ events: [], offers: [] });
 
   useEffect(() => {
     fetchData();
     fetchStats();
+    fetchMarketing();
   }, []);
+
+  const fetchMarketing = async () => {
+    try {
+      const [eventsRes, offersRes] = await Promise.all([
+        api.get('/admin/marketing/events'),
+        api.get('/admin/marketing/offers')
+      ]);
+      setMarketingData({ events: eventsRes.data, offers: offersRes.data });
+    } catch (e) {
+      console.error('Failed to fetch marketing data', e);
+    }
+  };
 
   const fetchStats = async () => {
     try {
@@ -99,8 +115,16 @@ export default function AdminDashboard() {
     try {
       if (hasPlan) {
         await api.delete(`/admin/users/${userId}/purchases/${planId}`);
+        setSelectedUser(prev => prev ? {
+          ...prev,
+          purchasedPlans: prev.purchasedPlans.filter(p => p !== planId)
+        } : null);
       } else {
         await api.post(`/admin/users/${userId}/purchases`, { planId });
+        setSelectedUser(prev => prev ? {
+          ...prev,
+          purchasedPlans: [...(prev.purchasedPlans || []), planId]
+        } : null);
       }
       fetchData();
       fetchStats();
@@ -156,6 +180,15 @@ export default function AdminDashboard() {
                 </span>
              </button>
              <button 
+               onClick={() => setActiveTab('marketing')}
+               className={`glass-card px-8 py-4 flex items-center gap-3 transition-all cursor-pointer group border-none ${
+                 activeTab === 'marketing' ? 'bg-purple-500 text-white' : 'bg-white/5 text-slate-400 hover:bg-white/10'
+               }`}
+             >
+                <Tag className="w-5 h-5" />
+                <span className="text-xs font-black uppercase tracking-widest">Marketing</span>
+             </button>
+             <button 
                onClick={() => setIsCreateModalOpen(true)}
                className="glass-card px-8 py-4 bg-white text-black flex items-center gap-3 hover:bg-slate-200 transition-all cursor-pointer group border-none"
              >
@@ -183,6 +216,143 @@ export default function AdminDashboard() {
             animate={{ opacity: 1, scale: 1 }}
           >
             <SupportChat />
+          </motion.div>
+        ) : activeTab === 'marketing' ? (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-12"
+          >
+            {/* Events Section */}
+            <div className="glass-card overflow-hidden border-white/5">
+              <div className="p-8 border-b border-white/5 flex justify-between items-center bg-white/[0.01]">
+                <div>
+                  <h2 className="text-2xl font-black tracking-tight text-white flex items-center gap-3">
+                    <Gift className="text-purple-400" />
+                    Trial Events
+                  </h2>
+                  <p className="text-slate-500 text-sm font-medium">Configure limited-time free trials for new operators.</p>
+                </div>
+                <button 
+                  onClick={() => {
+                    const name = prompt('Event Name:');
+                    const planId = prompt('Plan ID (low_risk, medium_risk, high_risk, bundle):');
+                    const trialDays = prompt('Trial Duration (days):');
+                    const startDate = prompt('Start Date (YYYY-MM-DD):');
+                    const endDate = prompt('End Date (YYYY-MM-DD):');
+                    if (name && planId && trialDays && startDate && endDate) {
+                      api.post('/admin/marketing/events', { name, planId, trialDays: parseInt(trialDays), startDate, endDate })
+                        .then(() => fetchMarketing());
+                    }
+                  }}
+                  className="px-6 py-3 bg-purple-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-purple-400 transition-all"
+                >
+                  Create Event
+                </button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-white/[0.02]">
+                      <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-500">Event</th>
+                      <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-500">Plan</th>
+                      <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-500">Duration</th>
+                      <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-500">Timeline</th>
+                      <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-500 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {marketingData.events.map(event => (
+                      <tr key={event.id} className="hover:bg-white/[0.02] transition-colors">
+                        <td className="px-8 py-6 font-bold text-white text-sm">{event.name}</td>
+                        <td className="px-8 py-6">
+                           <span className="text-[10px] font-bold text-slate-400 bg-white/5 py-1 px-2 rounded-lg border border-white/5 uppercase">
+                              {event.planId.replace('_', ' ')}
+                            </span>
+                        </td>
+                        <td className="px-8 py-6 text-sm text-purple-400 font-bold">{event.trialDays} Days</td>
+                        <td className="px-8 py-6 text-[10px] text-slate-500 font-mono">
+                          {event.startDate.split('T')[0]} to {event.endDate.split('T')[0]}
+                        </td>
+                        <td className="px-8 py-6 text-right">
+                          <button 
+                            onClick={() => api.delete(`/admin/marketing/events/${event.id}`).then(() => fetchMarketing())}
+                            className="p-2 hover:bg-red-500/10 text-red-500 rounded-lg transition-all"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Offers Section */}
+            <div className="glass-card overflow-hidden border-white/5">
+              <div className="p-8 border-b border-white/5 flex justify-between items-center bg-white/[0.01]">
+                <div>
+                  <h2 className="text-2xl font-black tracking-tight text-white flex items-center gap-3">
+                    <Tag className="text-emerald-400" />
+                    Discount Offers
+                  </h2>
+                  <p className="text-slate-500 text-sm font-medium">Apply strategic price reductions to attract more users.</p>
+                </div>
+                <button 
+                  onClick={() => {
+                    const planId = prompt('Plan ID (low_risk, medium_risk, high_risk, bundle):');
+                    const discountPercentage = prompt('Discount %:');
+                    const startDate = prompt('Start Date (YYYY-MM-DD):');
+                    const endDate = prompt('End Date (YYYY-MM-DD):');
+                    if (planId && discountPercentage && startDate && endDate) {
+                      api.post('/admin/marketing/offers', { planId, discountPercentage: parseInt(discountPercentage), startDate, endDate })
+                        .then(() => fetchMarketing());
+                    }
+                  }}
+                  className="px-6 py-3 bg-emerald-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-400 transition-all"
+                >
+                  Create Offer
+                </button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-white/[0.02]">
+                      <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-500">Plan</th>
+                      <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-500">Discount</th>
+                      <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-500">Timeline</th>
+                      <th className="px-8 py-5 text-[10px] font-black uppercase tracking-widest text-slate-500 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {marketingData.offers.map(offer => (
+                      <tr key={offer.id} className="hover:bg-white/[0.02] transition-colors">
+                        <td className="px-8 py-6">
+                           <span className="text-[10px] font-bold text-slate-400 bg-white/5 py-1 px-2 rounded-lg border border-white/5 uppercase">
+                              {offer.planId.replace('_', ' ')}
+                            </span>
+                        </td>
+                        <td className="px-8 py-6">
+                           <span className="text-sm font-black text-emerald-400">-{offer.discountPercentage}% OFF</span>
+                        </td>
+                        <td className="px-8 py-6 text-[10px] text-slate-500 font-mono">
+                          {offer.startDate.split('T')[0]} to {offer.endDate.split('T')[0]}
+                        </td>
+                        <td className="px-8 py-6 text-right">
+                          <button 
+                            onClick={() => api.delete(`/admin/marketing/offers/${offer.id}`).then(() => fetchMarketing())}
+                            className="p-2 hover:bg-red-500/10 text-red-500 rounded-lg transition-all"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </motion.div>
         ) : (
           <motion.div 

@@ -216,6 +216,7 @@ export interface Service {
   icon: React.ElementType;
   gradient: string;
   price?: string;
+  originalPrice?: string;
   planId?: string;
   dailyReturn?: string; // e.g. "+$0.00"
   isSimulated?: boolean;
@@ -285,9 +286,16 @@ const ServiceCard = ({
           </h3>
           <p className="text-sm text-white/70 mb-4">{service.description}</p>
           {service.price && (
-            <div className="text-2xl font-bold text-white mb-4">
-              {service.price}
-              <span className="text-sm font-normal text-white/60"> / month</span>
+            <div className="flex flex-col mb-4">
+              {service.originalPrice && (
+                <span className="text-xs text-white/40 line-through font-bold">
+                  {service.originalPrice}
+                </span>
+              )}
+              <div className="text-2xl font-black text-white flex items-baseline gap-1">
+                {service.price}
+                <span className="text-sm font-normal text-white/60"> / month</span>
+              </div>
             </div>
           )}
           <Button 

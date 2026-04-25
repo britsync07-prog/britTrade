@@ -136,9 +136,10 @@ class StrategyService {
       const planToStrat = { 1: 'low_risk', 2: 'medium_risk', 3: 'high_risk' };
       const targetPlan = planToStrat[Number(strategyId)];
       if (targetPlan) {
+        const now = new Date().toISOString();
         const hasPurchase = await db.get(
-          "SELECT id FROM purchases WHERE userId = ? AND (planId = ? OR planId = 'bundle')",
-          [userId, targetPlan]
+          "SELECT id FROM purchases WHERE userId = ? AND (planId = ? OR planId = 'bundle') AND (expiresAt IS NULL OR expiresAt > ?)",
+          [userId, targetPlan, now]
         );
         if (!hasPurchase) signals = signals.filter(s => s.status !== 'active');
       }
