@@ -171,7 +171,8 @@ function LandingPage({ user }: { user: any }) {
             return {
               ...s,
               originalPrice: s.price,
-              price: `$${originalPriceVal - discount}`
+              price: `$${originalPriceVal - discount}`,
+              discountPercentage: offer.discountPercentage
             };
           }
           return s;

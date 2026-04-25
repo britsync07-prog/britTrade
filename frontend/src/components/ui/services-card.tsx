@@ -220,6 +220,7 @@ export interface Service {
   planId?: string;
   dailyReturn?: string; // e.g. "+$0.00"
   isSimulated?: boolean;
+  discountPercentage?: number;
 }
 
 // Sub-component for individual cards
@@ -281,6 +282,11 @@ const ServiceCard = ({
         )}
 
         <div>
+          {service.discountPercentage && (
+            <div className="absolute top-8 right-8 bg-white text-black text-[10px] font-black px-3 py-1 rounded-full shadow-xl z-20 animate-bounce">
+              {service.discountPercentage}% OFF
+            </div>
+          )}
           <h3 className="mb-2 text-xl font-bold uppercase tracking-wider text-white">
             {service.title}
           </h3>
