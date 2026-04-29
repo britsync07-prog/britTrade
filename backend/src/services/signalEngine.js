@@ -174,7 +174,7 @@ class SignalEngine {
 
               if ((activeSide === 'buy' || activeSide === 'long') && currentRsi > 50) signalSide = 'sell'; 
               else if (activeSide === 'short' && currentRsi < 50) signalSide = 'cover'; 
-              else if (!activeSignal && currentRsi < 30 && lastVol > 0) { signalSide = 'buy'; initialTp = currentPrice * 1.005; initialSl = currentPrice * 0.90; } 
+              // Long entries removed: User explicitly requested this strategy to ONLY take SHORT trades
               else if (!activeSignal && currentRsi > 70 && lastVol > 0) { signalSide = 'short'; initialTp = currentPrice * 0.995; initialSl = currentPrice * 1.10; }
             }
           }
