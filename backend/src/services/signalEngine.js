@@ -188,7 +188,7 @@ class SignalEngine {
             if (isEntry) { if (!activeSignal) shouldTrigger = true; } 
             else if (activeSignal) {
                 const activeSide = activeSignal.side.toLowerCase();
-                const respectsExitProfitOnly = ![1, 3].includes(id) || (((activeSide === 'buy' || activeSide === 'long') ? currentPrice > activeSignal.price : currentPrice < activeSignal.price));
+                const respectsExitProfitOnly = ![1].includes(id) || (((activeSide === 'buy' || activeSide === 'long') ? currentPrice > activeSignal.price : currentPrice < activeSignal.price));
                 if (respectsExitProfitOnly && ((signalSide === 'sell' && (activeSide === 'buy' || activeSide === 'long')) || (signalSide === 'cover' && activeSide === 'short'))) shouldTrigger = true;
             }
 
