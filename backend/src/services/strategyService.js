@@ -59,15 +59,12 @@ class StrategyService {
 
       const config = this.configs[s.name];
 
-      // 2. Calculate True Daily Profit from Paper Trades (Since Last Reset)
-      const budget = await db.get("SELECT lastReset FROM strategy_daily_budgets WHERE strategyId = ?", [s.id]);
-      const resetTime = budget ? budget.lastReset : yesterday;
-
-      const tradesSinceReset = await db.query(
+      // 2. Calculate True Daily Profit from Paper Trades (Rolling 24h)
+      const trades24h = await db.query(
         "SELECT SUM(pnlUsd) as total FROM paper_trades WHERE strategyId = ? AND closedAt > ?",
-        [s.id, resetTime]
+        [s.id, yesterday]
       );
-      const realizedDaily = parseFloat(tradesSinceReset[0].total || 0);
+      const realizedDaily = parseFloat(trades24h[0].total || 0);
 
       const openTrades = await db.query("SELECT * FROM paper_trades WHERE strategyId = ? AND status = 'open'", [s.id]);
       let unrealizedPnl = 0;
@@ -79,7 +76,8 @@ class StrategyService {
         if (isLong) pnlPct = ((livePrice - t.entryPrice) / t.entryPrice) * 100 * t.leverage;
         else pnlPct = ((t.entryPrice - livePrice) / t.entryPrice) * 100 * t.leverage;
 
-        if (pnlPct <= -100) pnlPct = -100;
+        const liquidationThreshold = t.leverage > 1 ? -85 : -100;
+        if (pnlPct <= liquidationThreshold) pnlPct = liquidationThreshold;
         unrealizedPnl += t.margin * (pnlPct / 100);
       }
 
