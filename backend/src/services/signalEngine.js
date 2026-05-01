@@ -83,6 +83,9 @@ class SignalEngine {
 
           if (sig.side === 'buy' || sig.side === 'long') pnl = ((currentPrice - sig.price) / sig.price) * 100 * leverage;
           else pnl = ((sig.price - currentPrice) / sig.price) * 100 * leverage;
+          
+          pnl = pnl - (leverage * 0.1); // Deduct 0.1% exchange fee
+
 
           const liquidationThreshold = leverage > 1 ? -85 : -100;
           if (pnl <= liquidationThreshold) {
@@ -200,6 +203,7 @@ class SignalEngine {
                  const entryPrice = activeSignal.price || currentPrice;
                  const leverage = id === 3 ? 5 : 1;
                  pnl = (activeSignal.side === 'buy' || activeSignal.side === 'long') ? ((currentPrice - entryPrice) / entryPrice) * 100 * leverage : ((entryPrice - currentPrice) / entryPrice) * 100 * leverage;
+                 pnl = pnl - (leverage * 0.1); // Deduct 0.1% exchange fee
                  const liquidationThreshold = leverage > 1 ? -85 : -100;
                  if (pnl <= liquidationThreshold) { pnl = liquidationThreshold; finalStatus = 'sl_hit'; }
                  await db.run("UPDATE signals SET status = 'closed', pnl = ? WHERE id = ?", [pnl, activeSignal.id]);
