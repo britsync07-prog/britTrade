@@ -191,7 +191,15 @@ class SignalEngine {
             if (isEntry) { if (!activeSignal) shouldTrigger = true; } 
             else if (activeSignal) {
                 const activeSide = activeSignal.side.toLowerCase();
-                const respectsExitProfitOnly = ![1].includes(id) || (((activeSide === 'buy' || activeSide === 'long') ? currentPrice > activeSignal.price : currentPrice < activeSignal.price));
+                const currentLeverage = id === 3 ? 5 : 1;
+                const grossPnlPct = (activeSide === 'buy' || activeSide === 'long') 
+                    ? ((currentPrice - activeSignal.price) / activeSignal.price) * 100 * currentLeverage 
+                    : ((activeSignal.price - currentPrice) / activeSignal.price) * 100 * currentLeverage;
+                
+                // "Profit Only System": Must be profitable enough to cover the 0.1% total exchange fee
+                const minRequiredPnlPct = currentLeverage * 0.1; 
+                const respectsExitProfitOnly = grossPnlPct > minRequiredPnlPct;
+
                 if (respectsExitProfitOnly && ((signalSide === 'sell' && (activeSide === 'buy' || activeSide === 'long')) || (signalSide === 'cover' && activeSide === 'short'))) shouldTrigger = true;
             }
 
