@@ -43,14 +43,15 @@ class StrategyService {
 
   async getAll() {
     const strategies = await db.query("SELECT * FROM strategies");
-    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-
     for (const s of strategies) {
       // 1. Get raw signals
+      const budget = await db.get("SELECT lastReset FROM strategy_daily_budgets WHERE strategyId = ?", [s.id]);
+      const lastReset = budget ? budget.lastReset : new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
       const allSignals = await db.query("SELECT pnl, status FROM signals WHERE strategyId = ?", [s.id]);
       const signals24h = await db.query(
-        "SELECT pnl, status FROM signals WHERE strategyId = ? AND timestamp > datetime('now', '-1 day')",
-        [s.id]
+        "SELECT pnl, status FROM signals WHERE strategyId = ? AND timestamp >= ?",
+        [s.id, lastReset]
       );
 
       const isClosed = (sig) => ['closed', 'completed', 'tp_hit', 'sl_hit'].includes(sig.status);
@@ -59,12 +60,12 @@ class StrategyService {
 
       const config = this.configs[s.name];
 
-      // 2. Calculate True Daily Profit from Paper Trades (Rolling 24h)
-      const trades24h = await db.query(
-        "SELECT SUM(pnlUsd) as total FROM paper_trades WHERE strategyId = ? AND closedAt > ?",
-        [s.id, yesterday]
+      // 2. Calculate True Daily Profit from Paper Trades (Since Reset)
+      const tradesSinceReset = await db.query(
+        "SELECT SUM(pnlUsd) as total FROM paper_trades WHERE strategyId = ? AND closedAt >= ?",
+        [s.id, lastReset]
       );
-      const realizedDaily = parseFloat(trades24h[0].total || 0);
+      const realizedDaily = parseFloat(tradesSinceReset[0].total || 0);
 
       const openTrades = await db.query("SELECT * FROM paper_trades WHERE strategyId = ? AND status = 'open'", [s.id]);
       let unrealizedPnl = 0;
@@ -129,7 +130,12 @@ class StrategyService {
   }
 
   async getSignals(strategyId, userId = null, isAdmin = false) {
-    let signals = await db.query("SELECT * FROM signals WHERE strategyId = ? ORDER BY timestamp DESC LIMIT 50", [strategyId]);
+    let signals = await db.query(`
+      SELECT sig.* FROM signals sig
+      JOIN strategy_daily_budgets sdb ON sdb.strategyId = sig.strategyId
+      WHERE sig.strategyId = ? AND sig.timestamp >= sdb.lastReset
+      ORDER BY sig.timestamp DESC
+    `, [strategyId]);
     if (userId && !isAdmin) {
       const planToStrat = { 1: 'low_risk', 2: 'medium_risk', 3: 'high_risk' };
       const targetPlan = planToStrat[Number(strategyId)];

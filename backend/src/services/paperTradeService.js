@@ -141,7 +141,8 @@ class PaperTradeService {
       try {
         const budgets = await db.query("SELECT * FROM strategy_daily_budgets");
         for (const budget of budgets) {
-          const lastReset = new Date(budget.lastReset).getTime();
+          // Append 'Z' to treat SQLite CURRENT_TIMESTAMP (which is UTC) as proper UTC in V8
+          const lastReset = new Date(budget.lastReset + 'Z').getTime();
           const now = Date.now();
           const ONE_DAY = 24 * 60 * 60 * 1000;
           

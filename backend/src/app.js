@@ -267,14 +267,15 @@ app.get('/portfolio/history', authMiddleware, async (req, res, next) => {
        JOIN strategies st ON sig.strategyId = st.id
        JOIN subscriptions sub ON sub.strategyId = sig.strategyId
        JOIN purchases p ON p.userId = sub.userId
+       JOIN strategy_daily_budgets sdb ON sdb.strategyId = sig.strategyId
        WHERE sub.userId = ?
+         AND sig.timestamp >= sdb.lastReset
          AND (p.planId = CASE sig.strategyId
               WHEN 1 THEN 'low_risk'
               WHEN 2 THEN 'medium_risk'
               WHEN 3 THEN 'high_risk'
             END OR p.planId = 'bundle')
-       ORDER BY sig.timestamp DESC
-       LIMIT 100`,
+       ORDER BY sig.timestamp DESC`,
       [req.userId]
     );
     res.json(signals);
