@@ -177,7 +177,7 @@ class SignalEngine {
 
               if ((activeSide === 'buy' || activeSide === 'long') && currentRsi > 50) signalSide = 'sell'; 
               else if (activeSide === 'short' && currentRsi < 50) signalSide = 'cover'; 
-              // Long entries removed: User explicitly requested this strategy to ONLY take SHORT trades
+              else if (!activeSignal && currentRsi < 30 && lastVol > 0) { signalSide = 'buy'; initialTp = currentPrice * 1.005; initialSl = currentPrice * 0.90; } 
               else if (!activeSignal && currentRsi > 70 && lastVol > 0) { signalSide = 'short'; initialTp = currentPrice * 0.995; initialSl = currentPrice * 1.10; }
             }
           }
@@ -191,15 +191,7 @@ class SignalEngine {
             if (isEntry) { if (!activeSignal) shouldTrigger = true; } 
             else if (activeSignal) {
                 const activeSide = activeSignal.side.toLowerCase();
-                const currentLeverage = id === 3 ? 5 : 1;
-                const grossPnlPct = (activeSide === 'buy' || activeSide === 'long') 
-                    ? ((currentPrice - activeSignal.price) / activeSignal.price) * 100 * currentLeverage 
-                    : ((activeSignal.price - currentPrice) / activeSignal.price) * 100 * currentLeverage;
-                
-                // "Profit Only System": Must be profitable enough to cover the 0.1% total exchange fee
-                const minRequiredPnlPct = currentLeverage * 0.1; 
-                const respectsExitProfitOnly = grossPnlPct > minRequiredPnlPct;
-
+                const respectsExitProfitOnly = ![1].includes(id) || (((activeSide === 'buy' || activeSide === 'long') ? currentPrice > activeSignal.price : currentPrice < activeSignal.price));
                 if (respectsExitProfitOnly && ((signalSide === 'sell' && (activeSide === 'buy' || activeSide === 'long')) || (signalSide === 'cover' && activeSide === 'short'))) shouldTrigger = true;
             }
 
