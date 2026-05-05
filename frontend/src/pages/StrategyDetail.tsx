@@ -528,7 +528,7 @@ function SignalCard({ signal: s, currentPrice, strategyName }: { signal: any, cu
                 {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%
               </div>
               <div className={`text-[8px] font-mono ${pnlUsd >= 0 ? 'text-emerald-500/70' : 'text-rose-500/70'}`}>
-                {pnlUsd >= 0 ? '+' : ''}${Math.abs(pnlUsd).toFixed(2)}
+                {pnlUsd >= 0 ? '+' : '-'}${Math.abs(pnlUsd).toFixed(2)}
               </div>
             </div>
           </>

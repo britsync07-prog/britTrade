@@ -1,0 +1,43 @@
+========================================
+PROJECT NAME (10-50 characters):
+AI Crypto Trading Dashboard & Signal Engine
+
+INDUSTRIES (Up to 6):
+- Cryptocurrency
+- Financial Services
+- Trading & Investments
+- Data Analytics
+- SaaS (Software as a Service)
+- Fintech
+
+PROJECT CATEGORIES (Up to 4):
+- Full-Stack Development
+- Cryptocurrency & Blockchain
+- Financial & Banking Web Apps
+- Dashboard & Admin Panels
+
+SEARCH TAGS:
+React, Node.js, TradingView, Crypto, Stripe
+
+PROJECT DESCRIPTION (Max 1400 characters):
+The Goal: 
+To provide retail traders with an enterprise-grade platform for monitoring AI-driven algorithmic strategies. The project solves the complexity of tracking real-time crypto signals across multiple risk profiles while providing a seamless subscription and alert experience.
+
+The Solution & Features:
+I built a high-performance SaaS trading platform featuring a real-time Signal Engine that analyzes Binance market data. Key features include:
+- Multi-Strategy Support: Low, Medium, and High-risk (Futures Scalping) strategies.
+- Live Signal Broadcasting: Real-time entry/exit targets displayed via a custom React dashboard.
+- Telegram Integration: Automated alerts sent directly to users via a dedicated bot.
+- Subscription Management: Stripe-powered payment system for strategy plans.
+- Paper Trading: Risk-free environment to test strategies before committing capital.
+- Advanced Charting: Integration with TradingView for technical analysis.
+
+Technical Implementation & Challenges:
+The backend is powered by Node.js and Express, utilizing a custom technical analysis engine (technicalindicators) to process RSI, SuperTrend, and Bollinger Bands. Data is persisted in SQLite with secure JWT-based authentication. The frontend is a modern, responsive React 19 application built with TypeScript, Tailwind CSS 4, and Framer Motion for high-end UI/UX. The main challenge was synchronizing high-frequency price data from Binance across the backend engine and frontend websocket-like updates while maintaining optimal performance.
+
+ATTACHMENT SUGGESTIONS:
+1. Main Dashboard View: Highlighting the Performance Ticker and active trade signals.
+2. Real-Time TradingView Chart: Showing technical indicators (RSI/SuperTrend) on a live crypto pair.
+3. Signal Alerts Component: A screenshot of the "Signal Broadcast" section showing recent Long/Short entries.
+4. Telegram Bot Interaction: A screenshot of a mobile phone receiving a trade signal notification from the bot.
+5. Animated Features Section: The "Radial Orbital Timeline" or "Animated Hero" showing the platform's tech roadmap.
