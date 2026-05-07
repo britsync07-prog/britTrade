@@ -54,8 +54,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await api.post('/auth/logout');
       localStorage.removeItem('token');
       setUser(null);
+      // Force full reload to landing page to clear any Google/Library state
+      window.location.href = '/';
     } catch (error) {
       console.error('Logout failed:', error);
+      window.location.href = '/';
     }
   };
 

@@ -19,6 +19,9 @@ const cookieParser = require('cookie-parser');
 const PORT = process.env.PORT || 7286;
 const app = express();
 
+// Trust proxy for secure cookies behind Nginx
+app.set('trust proxy', 1);
+
 if (!process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY.includes('placeholder')) {
   console.warn('\x1b[33m%s\x1b[0m', '[Warning] Stripe API keys are not configured. Payment features will be disabled.');
 }
