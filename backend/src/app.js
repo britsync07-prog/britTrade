@@ -9,7 +9,7 @@ const authService = require('./services/authService');
 const strategyService = require('./services/strategyService');
 
 const telegramService = require('./services/telegramService');
-const authMiddleware = require('./routes/authMiddleware');
+const { protect: authMiddleware } = require('./middleware/authMiddleware');
 const paymentRoutes = require('./routes/paymentRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const supportRoutes = require('./routes/supportRoutes');
