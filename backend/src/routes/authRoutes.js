@@ -17,11 +17,10 @@ router.post('/google', async (req, res) => {
     });
     const payload = ticket.getPayload();
     const { token, user } = await authService.googleLogin(payload);
-
     res.cookie('token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      secure: true,
+      sameSite: 'none',
       maxAge: 30 * 24 * 60 * 60 * 1000,
     });
 
@@ -44,8 +43,8 @@ router.post('/login', async (req, res) => {
     const { token, user } = await authService.login(req.body.email, req.body.password);
     res.cookie('token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      secure: true,
+      sameSite: 'none',
       maxAge: 24 * 60 * 60 * 1000,
     });
     res.json({ token, user });
