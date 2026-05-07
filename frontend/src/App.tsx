@@ -310,7 +310,7 @@ import { GoogleOAuthProvider } from '@react-oauth/google';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 function AppContent() {
-  const { user, loading, login } = useAuth();
+  const { user, loading } = useAuth();
 
   if (loading) return (
     <div className="min-h-screen bg-[#020617] flex items-center justify-center">

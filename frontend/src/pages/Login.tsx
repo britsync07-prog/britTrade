@@ -6,11 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { LegalModal } from '../components/ui/LegalModal';
 
-interface LoginProps {
-  onLogin: (user: any) => void;
-}
-
-export default function Login({ onLogin }: LoginProps) {
+export default function Login() {
   const { login: googleLogin } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
