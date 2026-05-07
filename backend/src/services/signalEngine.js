@@ -191,7 +191,13 @@ class SignalEngine {
             if (isEntry) { if (!activeSignal) shouldTrigger = true; } 
             else if (activeSignal) {
                 const activeSide = activeSignal.side.toLowerCase();
-                const respectsExitProfitOnly = ![1].includes(id) || (((activeSide === 'buy' || activeSide === 'long') ? currentPrice > activeSignal.price : currentPrice < activeSignal.price));
+                const leverage = id === 3 ? 5 : 1;
+                const fees = leverage * 0.1; // 0.1% per trade (entry+exit approx)
+                const currentGrossPnl = (activeSide === 'buy' || activeSide === 'long') 
+                    ? ((currentPrice - activeSignal.price) / activeSignal.price) * 100 * leverage 
+                    : ((activeSignal.price - currentPrice) / activeSignal.price) * 100 * leverage;
+                
+                const respectsExitProfitOnly = ![1, 3].includes(id) || (currentGrossPnl > fees);
                 if (respectsExitProfitOnly && ((signalSide === 'sell' && (activeSide === 'buy' || activeSide === 'long')) || (signalSide === 'cover' && activeSide === 'short'))) shouldTrigger = true;
             }
 
