@@ -40,8 +40,8 @@ class PaperTradeService {
   async getValidBudget(strategyId) {
     let budget = await db.get("SELECT * FROM strategy_daily_budgets WHERE strategyId = ?", [strategyId]);
     if (!budget) {
-      await db.run("INSERT INTO strategy_daily_budgets (strategyId, currentBalance) VALUES (?, ?)", [strategyId, 100.0]);
-      budget = { strategyId, currentBalance: 100.0, lastReset: new Date().toISOString() };
+      await db.run("INSERT INTO strategy_daily_budgets (strategyId, currentBalance, lastReset) VALUES (?, ?, CURRENT_TIMESTAMP)", [strategyId, 100.0]);
+      budget = { strategyId, currentBalance: 100.0, lastReset: new Date().toISOString().replace('T', ' ').split('.')[0] };
     }
     return budget;
   }

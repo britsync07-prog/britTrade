@@ -63,42 +63,37 @@ class StrategyService {
 
       const config = this.configs[s.name];
 
-      // 2. Calculate True Daily Profit from Paper Trades (Since Reset)
-      const tradesSinceReset = await db.query(
-        "SELECT SUM(pnlUsd) as total FROM paper_trades WHERE strategyId = ? AND closedAt >= ?",
-        [s.id, lastReset]
-      );
-      const realizedDaily = parseFloat(tradesSinceReset[0].total || 0);
+      // 2. Calculate Realized PnL from signals (Since Reset)
+      // sig.pnl is the % return of the trade. Since each trade is $10 (10% of $100 budget),
+      // the contribution to the total $100 budget is (sig.pnl / 10).
+      const realizedSignals = signals24h.filter(isClosed);
+      const realizedDailyUsd = realizedSignals.reduce((acc, sig) => acc + (parseFloat(sig.pnl || 0) / 10), 0);
 
-      // 3. Unrealized PnL (ONLY for trades that have a matching active signal)
-      const openTrades = await db.query(`
-        SELECT pt.* FROM paper_trades pt
-        JOIN signals sig ON pt.signalId = sig.id
-        WHERE pt.strategyId = ? AND pt.status = 'open' AND sig.status = 'active'
-      `, [s.id]);
+      // 3. Unrealized PnL (for active signals)
+      const activeSignals = signals24h.filter(sig => sig.status === 'active');
+      let unrealizedPnlUsd = 0;
       
-      let unrealizedPnl = 0;
-      for (const t of openTrades) {
-        let livePrice = signalEngine.latestPrices[t.symbol] || t.entryPrice;
-        const isLong = t.side === 'buy' || t.side === 'long';
-        let pnlPct = 0;
-
-        if (isLong) pnlPct = ((livePrice - t.entryPrice) / t.entryPrice) * 100 * t.leverage;
-        else pnlPct = ((t.entryPrice - livePrice) / t.entryPrice) * 100 * t.leverage;
-
-        const liquidationThreshold = t.leverage > 1 ? -85 : -100;
-        if (pnlPct <= liquidationThreshold) pnlPct = liquidationThreshold;
-        unrealizedPnl += t.margin * (pnlPct / 100);
+      for (const sig of activeSignals) {
+        const currentPrice = signalEngine.latestPrices[sig.symbol];
+        if (currentPrice && sig.price) {
+          const leverage = sig.strategyId === 3 ? 5 : 1;
+          let pnlPct = 0;
+          if (sig.side === 'buy' || sig.side === 'long') {
+            pnlPct = ((currentPrice - sig.price) / sig.price) * 100 * leverage;
+          } else {
+            pnlPct = ((sig.price - currentPrice) / sig.price) * 100 * leverage;
+          }
+          // Contribution to $100 budget
+          unrealizedPnlUsd += (pnlPct / 10);
+        }
       }
 
-      const profit24hUsd = realizedDaily + unrealizedPnl;
-      const sumSignals24h = signals24h.reduce((acc, sig) => acc + (Number(sig.pnl) || 0), 0);
+      const total24hProfitUsd = realizedDailyUsd + unrealizedPnlUsd;
 
-      // pnl24h should ideally represent the % return on the $100 budget
-      s.pnl24h = (profit24hUsd).toFixed(2); 
-      s.prof24h = profit24hUsd.toFixed(2);
+      s.pnl24h = total24hProfitUsd.toFixed(2); 
+      s.prof24h = total24hProfitUsd.toFixed(2);
       s.signalCount = allSignals.length;
-      s.activeSignalCount = allSignals.filter(sig => sig.status === 'active').length;
+      s.activeSignalCount = activeSignals.length;
       s.closedSignalCount = closed.length;
       s.winRate = closed.length > 0 ? ((wins.length / closed.length) * 100).toFixed(1) : '0.0';
       s.pairCount = config?.symbols?.length || 0;
