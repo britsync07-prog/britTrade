@@ -132,35 +132,44 @@ class PaperTradeService {
     }
   }
 
-  startDailyResetJob() {
-    // Run every minute and check if 24h passed
-    // Alternatively, just run it at exactly 00:00 UTC using node-schedule
+  async resetStrategy(strategyId) {
+    console.log(`[PaperTrade] Force resetting strategy ${strategyId}...`);
+    await db.run(
+      "UPDATE strategy_daily_budgets SET currentBalance = 100.0, lastReset = CURRENT_TIMESTAMP WHERE strategyId = ?",
+      [strategyId]
+    );
+    // Also cleanup any orphaned open trades for this strategy
+    await db.run(
+      "UPDATE paper_trades SET status = 'closed', pnlUsd = 0, closedAt = CURRENT_TIMESTAMP WHERE strategyId = ? AND status = 'open'",
+      [strategyId]
+    );
+    return true;
+  }
+
+  async checkAndReset(strategyId) {
+    const budget = await this.getValidBudget(strategyId);
+    const lastReset = new Date(budget.lastReset + 'Z').getTime();
+    const now = Date.now();
+    const ONE_DAY = 24 * 60 * 60 * 1000;
     
-    // To make it run locally without external libs, let's use setInterval
+    if (now - lastReset >= ONE_DAY) {
+      await this.resetStrategy(strategyId);
+      return true;
+    }
+    return false;
+  }
+
+  startDailyResetJob() {
     setInterval(async () => {
       try {
-        const budgets = await db.query("SELECT * FROM strategy_daily_budgets");
-        for (const budget of budgets) {
-          // Append 'Z' to treat SQLite CURRENT_TIMESTAMP (which is UTC) as proper UTC in V8
-          const lastReset = new Date(budget.lastReset + 'Z').getTime();
-          const now = Date.now();
-          const ONE_DAY = 24 * 60 * 60 * 1000;
-          
-          if (now - lastReset >= ONE_DAY) {
-            console.log(`[PaperTrade] Executing 24h reset for strategy ${budget.strategyId}...`);
-            
-            // 1. Reset balance to 100 (Do NOT force close trades anymore)
-            await db.run(
-              "UPDATE strategy_daily_budgets SET currentBalance = 100.0, lastReset = CURRENT_TIMESTAMP WHERE strategyId = ?",
-              [budget.strategyId]
-            );
-            console.log(`[PaperTrade] Reset complete for strategy ${budget.strategyId}. Balance is $100.`);
-          }
+        const budgets = await db.query("SELECT strategyId FROM strategy_daily_budgets");
+        for (const b of budgets) {
+          await this.checkAndReset(b.strategyId);
         }
       } catch(e) {
-        console.error('[PaperTrade] Reset Check Error:', e.message);
+        console.error('[PaperTrade] Reset Job Error:', e.message);
       }
-    }, 60 * 1000); // Check every minute
+    }, 60 * 1000);
   }
 }
 

@@ -44,6 +44,9 @@ class StrategyService {
   async getAll() {
     const strategies = await db.query("SELECT * FROM strategies");
     for (const s of strategies) {
+      // 0. Just-In-Time Reset Check (Self-healing)
+      await paperTradeService.checkAndReset(s.id);
+
       // 1. Get raw signals
       const budget = await db.get("SELECT lastReset FROM strategy_daily_budgets WHERE strategyId = ?", [s.id]);
       const lastReset = budget ? budget.lastReset : new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
@@ -67,7 +70,13 @@ class StrategyService {
       );
       const realizedDaily = parseFloat(tradesSinceReset[0].total || 0);
 
-      const openTrades = await db.query("SELECT * FROM paper_trades WHERE strategyId = ? AND status = 'open'", [s.id]);
+      // 3. Unrealized PnL (ONLY for trades that have a matching active signal)
+      const openTrades = await db.query(`
+        SELECT pt.* FROM paper_trades pt
+        JOIN signals sig ON pt.signalId = sig.id
+        WHERE pt.strategyId = ? AND pt.status = 'open' AND sig.status = 'active'
+      `, [s.id]);
+      
       let unrealizedPnl = 0;
       for (const t of openTrades) {
         let livePrice = signalEngine.latestPrices[t.symbol] || t.entryPrice;
