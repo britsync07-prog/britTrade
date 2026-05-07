@@ -33,8 +33,7 @@ export default function Login() {
         ? { email, password, agreedToTerms: true, riskAccepted: true } 
         : { email, password };
         
-      const res = await api.post(endpoint, payload);
-      localStorage.setItem('token', res.data.token);
+      await api.post(endpoint, payload);
       window.location.href = '/dashboard'; // Force refresh to load context
     } catch (err: any) {
       setError(err.response?.data?.error || 'Authentication failed');

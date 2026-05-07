@@ -5,8 +5,11 @@ import api from '../services/api';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
 
+import { useAuth } from '../context/AuthContext';
+
 
 export default function Dashboard() {
+  const { logout } = useAuth();
   const [strategies, setStrategies] = useState<any[]>([]);
   const [subscribed, setSubscribed] = useState<any[]>([]);
   const [user, setUser] = useState<any>(null);
@@ -109,7 +112,7 @@ export default function Dashboard() {
                </div>
              )}
 
-             <div className="glass-card p-4 hover:bg-rose-500/5 hover:border-rose-500/20 transition-all cursor-pointer" onClick={() => { localStorage.clear(); window.location.href = '/'; }}>
+             <div className="glass-card p-4 hover:bg-rose-500/5 hover:border-rose-500/20 transition-all cursor-pointer" onClick={() => logout()}>
                 <LogOut className="text-slate-500 hover:text-rose-400 w-6 h-6 transition-colors" />
              </div>
           </div>
