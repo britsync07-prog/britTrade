@@ -97,7 +97,7 @@ export default function Login() {
               theme="filled_black"
               shape="pill"
               text="continue_with"
-              width="100%"
+              width="360"
             />
           </div>
           

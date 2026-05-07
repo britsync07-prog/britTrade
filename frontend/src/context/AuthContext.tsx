@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-import axios from 'axios';
+import api from '../services/api';
 
 interface User {
   id: number;
@@ -20,15 +20,13 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:7286';
-
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   const checkAuth = async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/auth/me`, { withCredentials: true });
+      const response = await api.get('/auth/me');
       setUser(response.data);
     } catch (error) {
       setUser(null);
@@ -43,7 +41,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const login = async (idToken: string) => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/auth/google`, { idToken }, { withCredentials: true });
+      const response = await api.post('/auth/google', { idToken }, { withCredentials: true });
       setUser(response.data);
     } catch (error) {
       console.error('Login failed:', error);
@@ -53,7 +51,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const logout = async () => {
     try {
-      await axios.post(`${API_BASE_URL}/auth/logout`, {}, { withCredentials: true });
+      await api.post('/auth/logout', {}, { withCredentials: true });
       setUser(null);
     } catch (error) {
       console.error('Logout failed:', error);
