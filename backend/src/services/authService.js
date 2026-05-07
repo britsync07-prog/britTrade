@@ -41,6 +41,31 @@ class AuthService {
     return { id: result.id, email };
   }
 
+  async googleLogin(payload) {
+    const { email, sub: googleId, name, picture } = payload;
+    const emailNormalized = email.trim().toLowerCase();
+
+    let user = await db.get("SELECT * FROM users WHERE email = ?", [emailNormalized]);
+
+    if (!user) {
+      const result = await db.run(
+        "INSERT INTO users (email, password, role, status, name, picture) VALUES (?, ?, ?, ?, ?, ?)",
+        [emailNormalized, 'google-auth-no-password', 'user', 'active', name, picture]
+      );
+      user = { id: result.id, email: emailNormalized, role: 'user', status: 'active', name, picture };
+    } else {
+      // Update name/picture if changed
+      await db.run("UPDATE users SET name = ?, picture = ? WHERE id = ?", [name, picture, user.id]);
+      user.name = name;
+      user.picture = picture;
+    }
+
+    if (user.status === 'suspended') throw new Error("Account suspended");
+
+    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, SECRET, { expiresIn: '30d' });
+    return { token, user: { id: user.id, email: user.email, role: user.role, name: user.name, picture: user.picture } };
+  }
+
   async login(email, password) {
     if (!email || !password) throw new Error('Email and password are required');
 
@@ -53,11 +78,11 @@ class AuthService {
     if (user.status === 'suspended') throw new Error("Account suspended. Contact support.");
 
     const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, SECRET, { expiresIn: '24h' });
-    return { token, user: { id: user.id, email: user.email, role: user.role } };
+    return { token, user: { id: user.id, email: user.email, role: user.role, name: user.name, picture: user.picture } };
   }
 
   async me(userId) {
-    const user = await db.get("SELECT id, email, telegramId, balance, role, status FROM users WHERE id = ?", [userId]);
+    const user = await db.get("SELECT id, email, telegramId, balance, role, status, name, picture FROM users WHERE id = ?", [userId]);
     if (!user) return null;
     
     if (user.role === 'admin') {

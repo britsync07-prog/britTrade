@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Activity, Mail, Lock, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { GoogleLogin } from '@react-oauth/google';
+import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { LegalModal } from '../components/ui/LegalModal';
 
@@ -9,6 +11,7 @@ interface LoginProps {
 }
 
 export default function Login({ onLogin }: LoginProps) {
+  const { login: googleLogin } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignup, setIsSignup] = useState(false);
@@ -36,11 +39,20 @@ export default function Login({ onLogin }: LoginProps) {
         
       const res = await api.post(endpoint, payload);
       localStorage.setItem('token', res.data.token);
-      onLogin(res.data.user);
+      window.location.href = '/dashboard'; // Force refresh to load context
     } catch (err: any) {
       setError(err.response?.data?.error || 'Authentication failed');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoogleSuccess = async (credentialResponse: any) => {
+    try {
+      await googleLogin(credentialResponse.credential);
+      window.location.href = '/dashboard';
+    } catch (err) {
+      setError('Google login failed');
     }
   };
 
@@ -80,6 +92,25 @@ export default function Login({ onLogin }: LoginProps) {
             {error}
           </motion.div>
         )}
+
+        <div className="flex flex-col gap-4 mb-8">
+          <div className="flex justify-center">
+            <GoogleLogin
+              onSuccess={handleGoogleSuccess}
+              onError={() => setError('Google sign-in was unsuccessful')}
+              theme="filled_black"
+              shape="pill"
+              text="continue_with"
+              width="100%"
+            />
+          </div>
+          
+          <div className="flex items-center gap-4">
+            <div className="h-px bg-white/5 flex-1" />
+            <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Or use credentials</span>
+            <div className="h-px bg-white/5 flex-1" />
+          </div>
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">

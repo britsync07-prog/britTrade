@@ -306,28 +306,11 @@ function LandingPage({ user }: { user: any }) {
   );
 }
 
-function App() {
-  const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+import { GoogleOAuthProvider } from '@react-oauth/google';
+import { AuthProvider, useAuth } from './context/AuthContext';
 
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        if (token) {
-          const res = await api.get('/auth/me');
-          setUser(res.data); 
-        }
-      } catch (e) {
-        console.error('Auth verification failed, clearing session');
-        localStorage.removeItem('token');
-        setUser(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-    checkAuth();
-  }, []);
+function AppContent() {
+  const { user, loading, login } = useAuth();
 
   if (loading) return (
     <div className="min-h-screen bg-[#020617] flex items-center justify-center">
@@ -341,7 +324,7 @@ function App() {
         <Route path="/" element={<LandingPage user={user} />} />
         <Route 
           path="/login" 
-          element={!user ? <Login onLogin={setUser} /> : <Navigate to="/dashboard" />} 
+          element={!user ? <Login onLogin={() => {}} /> : <Navigate to="/dashboard" />} 
         />
         <Route 
           path="/dashboard/*" 
@@ -357,6 +340,16 @@ function App() {
         />
       </Routes>
     </Router>
+  );
+}
+
+function App() {
+  return (
+    <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID || ''}>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </GoogleOAuthProvider>
   );
 }
 

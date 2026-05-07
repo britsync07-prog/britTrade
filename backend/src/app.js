@@ -13,6 +13,8 @@ const authMiddleware = require('./routes/authMiddleware');
 const paymentRoutes = require('./routes/paymentRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const supportRoutes = require('./routes/supportRoutes');
+const authRoutes = require('./routes/authRoutes');
+const cookieParser = require('cookie-parser');
 
 const PORT = process.env.PORT || 7286;
 const app = express();
@@ -57,48 +59,12 @@ app.use(cors({
 }));
 
 app.use(express.json());
+app.use(cookieParser());
 
+app.use('/auth', authRoutes);
 app.use('/payments', paymentRoutes);
 app.use('/admin/support', authMiddleware, supportRoutes);
 app.use('/admin', adminRoutes);
-
-// --- Authentication ---
-app.post('/auth/signup', async (req, res) => {
-  try {
-    const { email, password, agreedToTerms, riskAccepted } = req.body;
-    const user = await authService.signup(email, password, agreedToTerms, riskAccepted);
-    res.status(201).json(user);
-  } catch (e) { res.status(400).json({ error: e.message }); }
-});
-
-app.post('/auth/login', async (req, res) => {
-  try {
-    const data = await authService.login(req.body.email, req.body.password);
-    res.json(data);
-  } catch (e) { res.status(401).json({ error: e.message }); }
-});
-
-app.get('/auth/me', authMiddleware, async (req, res, next) => {
-  try {
-    const user = await authService.me(req.userId);
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    res.json(user);
-  } catch (e) { next(e); }
-});
-
-app.post('/auth/balance', authMiddleware, async (req, res, next) => {
-  try {
-    const result = await authService.updateBalance(req.userId, req.body.balance);
-    res.json(result);
-  } catch (e) { res.status(400).json({ error: e.message }); }
-});
-
-app.post('/auth/purchase', authMiddleware, async (req, res, next) => {
-  try {
-    const result = await authService.purchasePlan(req.userId, req.body.planId);
-    res.json(result);
-  } catch (e) { res.status(400).json({ error: e.message }); }
-});
 
 // --- Strategy Management ---
 app.get('/strategies/prices', authMiddleware, async (req, res, next) => {

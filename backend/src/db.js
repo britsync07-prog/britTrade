@@ -80,6 +80,12 @@ const initDb = async () => {
   if (!userRows.some(r => r.name === 'riskAccepted')) {
     await run("ALTER TABLE users ADD COLUMN riskAccepted BOOLEAN DEFAULT 0");
   }
+  if (!userRows.some(r => r.name === 'name')) {
+    await run("ALTER TABLE users ADD COLUMN name TEXT");
+  }
+  if (!userRows.some(r => r.name === 'picture')) {
+    await run("ALTER TABLE users ADD COLUMN picture TEXT");
+  }
 
   const userCount = await get("SELECT count(*) as count FROM users");
   if (userCount && userCount.count === 0) {

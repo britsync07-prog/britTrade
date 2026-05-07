@@ -5,7 +5,12 @@ const SECRET = process.env.JWT_SECRET || 'your_super_secret_key';
 module.exports = async (req, res, next) => {
   try {
     const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
+    let token = authHeader && authHeader.split(' ')[1];
+    
+    // Support cookie-based auth
+    if (!token && req.cookies && req.cookies.token) {
+      token = req.cookies.token;
+    }
 
     if (!token) {
       return res.status(401).json({ error: 'No token provided' });
