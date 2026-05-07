@@ -324,7 +324,7 @@ function AppContent() {
         <Route path="/" element={<LandingPage user={user} />} />
         <Route 
           path="/login" 
-          element={!user ? <Login onLogin={() => {}} /> : <Navigate to="/dashboard" />} 
+          element={!user ? <Login /> : <Navigate to="/dashboard" />} 
         />
         <Route 
           path="/dashboard/*" 
