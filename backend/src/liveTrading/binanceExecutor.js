@@ -121,53 +121,75 @@ class BinanceExecutor {
    */
   async placeOrder(symbol, side, amountUSDT, orderType = 'market', price = null, strategyId = 1) {
     try {
+      if (this._testnet) {
+        // ── Demo Mode Manual Order Placement ────────────────────────────────
+        const crypto = require('crypto');
+        const axios = require('axios');
+        const isFutures = FUTURES_STRATEGIES.has(Number(strategyId));
+        const host = isFutures ? 'https://demo-fapi.binance.com' : 'https://demo-api.binance.com';
+        const endpoint = isFutures ? '/fapi/v1/order' : '/api/v3/order';
+        
+        // 1. Sync Time
+        const timeRes = await axios.get(`${host}${isFutures ? '/fapi/v1/time' : '/api/v3/time'}`);
+        const ts = timeRes.data.serverTime;
+        
+        // 2. Fetch Price for Quantity Calculation
+        const tickerRes = await axios.get(`${host}${isFutures ? '/fapi/v1/ticker/price' : '/api/v3/ticker/price'}?symbol=${symbol.replace('/', '')}`);
+        const currentPrice = parseFloat(tickerRes.data.price);
+        let qty = (amountUSDT / currentPrice).toFixed(5); // Simplistic precision
+        
+        // 3. Build Query
+        let query = `symbol=${symbol.replace('/', '')}&side=${side.toUpperCase()}&type=${orderType.toUpperCase()}&quantity=${qty}&timestamp=${ts}&recvWindow=60000`;
+        if (orderType === 'limit' && price) query += `&price=${price}&timeInForce=GTC`;
+        
+        const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
+        
+        // 4. POST Order
+        const res = await axios.post(`${host}${endpoint}?${query}&signature=${signature}`, null, {
+          headers: { 
+            'X-MBX-APIKEY': this._apiKey,
+            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.36'
+          }
+        });
+        
+        console.log(`[BinanceExecutor] ✅ Demo Order placed: ${res.data.orderId || res.data.id}`);
+        return res.data;
+      }
+
+      // ── Live Mode (Standard CCXT) ──────────────────────────────────────────
       await this._ensureMarkets();
       const client = this._client(strategyId);
       const sym = this._normalizeSymbol(symbol);
-
-      // Get current price to compute base asset quantity
       const ticker = await client.fetchTicker(sym);
       const currentPrice = ticker.last || ticker.close;
-      if (!currentPrice || currentPrice <= 0) throw new Error(`Invalid ticker price for ${sym}`);
-
-      // Compute base asset amount (e.g. BTC amount from USDT)
       let baseAmount = amountUSDT / currentPrice;
 
-      // Respect exchange precision
       if (client.markets && client.markets[sym]) {
         baseAmount = client.amountToPrecision(sym, baseAmount);
       }
 
       const params = {};
-
-      // For futures, set leverage via API before placing order
       if (FUTURES_STRATEGIES.has(Number(strategyId))) {
-        try {
-          // strategy 3 uses 5x leverage by default (set in config)
-          await client.setLeverage(5, sym);
-        } catch (_) {/* leverage may already be set */}
-        params.positionSide = 'BOTH'; // one-way mode
+        try { await client.setLeverage(5, sym); } catch (_) {}
+        params.positionSide = 'BOTH';
       }
 
       let order;
       if (orderType === 'limit' && price) {
-        const precPrice = client.markets?.[sym]
-          ? client.priceToPrecision(sym, price)
-          : price;
+        const precPrice = client.markets?.[sym] ? client.priceToPrecision(sym, price) : price;
         order = await client.createOrder(sym, 'limit', side, baseAmount, precPrice, params);
       } else {
         order = await client.createOrder(sym, 'market', side, baseAmount, undefined, params);
       }
 
-      console.log(
-        `[BinanceExecutor] ✅ Order placed | ${sym} ${side.toUpperCase()} ${baseAmount} | id=${order.id} | testnet=${this._testnet}`
-      );
       return order;
     } catch (err) {
-      console.error(`[BinanceExecutor] ❌ placeOrder failed: ${err.message}`);
-      return { error: err.message };
+      const msg = err.response?.data?.msg || err.message;
+      console.error(`[BinanceExecutor] ❌ placeOrder failed: ${msg}`);
+      return { error: msg };
     }
   }
+
 
   /**
    * Fetch USDT balance.
