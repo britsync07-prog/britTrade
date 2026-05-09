@@ -217,26 +217,34 @@ class BinanceExecutor {
     }
 
     // ── Demo Mode (Manual Sync + V2) ──────────────────────────────────────
-    // Mirrors python-binance logic: Independent time sync for Spot/Futures
     try {
       const crypto = require('crypto');
       const axios = require('axios');
+      
+      // DEBUG: Verify keys are decrypted correctly in production logs
+      console.log(`[BinanceExecutor] Debugging Demo Connection...`);
+      console.log(`[BinanceExecutor] Key: ${this._apiKey?.slice(0, 4)}****`);
+      console.log(`[BinanceExecutor] Secret: ${this._apiSecret?.slice(0, 4)}****`);
+
       const commonHeaders = { 
         'X-MBX-APIKEY': this._apiKey,
         'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.36'
       };
 
-      // 1. Fetch Futures Demo Balance (Sync with Futures Time)
+      // 1. Fetch Futures Demo Balance
       try {
         const fTimeRes = await axios.get('https://demo-fapi.binance.com/fapi/v1/time');
         const fTs = fTimeRes.data.serverTime;
         const fQuery = `timestamp=${fTs}&recvWindow=10000`;
-        const fSig = crypto.createHmac('sha256', this._apiSecret).update(fQuery).digest('hex');
+        const fSig = crypto.createHmac('sha256', Buffer.from(this._apiSecret, 'utf8'))
+                           .update(Buffer.from(fQuery, 'utf8'))
+                           .digest('hex');
         
         const futRes = await axios.get(`https://demo-fapi.binance.com/fapi/v2/account?${fQuery}&signature=${fSig}`, { 
           headers: commonHeaders, 
           timeout: 10000 
         });
+
         
         futRes.data.assets.forEach(a => {
           const val = parseFloat(a.walletBalance || 0);
@@ -253,12 +261,15 @@ class BinanceExecutor {
         const sTimeRes = await axios.get('https://demo-api.binance.com/api/v3/time');
         const sTs = sTimeRes.data.serverTime;
         const sQuery = `timestamp=${sTs}&recvWindow=10000`;
-        const sSig = crypto.createHmac('sha256', this._apiSecret).update(sQuery).digest('hex');
+        const sSig = crypto.createHmac('sha256', Buffer.from(this._apiSecret, 'utf8'))
+                           .update(Buffer.from(sQuery, 'utf8'))
+                           .digest('hex');
         
         const spotRes = await axios.get(`https://demo-api.binance.com/api/v3/account?${sQuery}&signature=${sSig}`, { 
           headers: commonHeaders, 
           timeout: 10000 
         });
+
         
         spotRes.data.balances.forEach(b => {
           const free = parseFloat(b.free || 0);
