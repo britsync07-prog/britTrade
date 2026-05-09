@@ -53,9 +53,9 @@ class BinanceExecutor {
     });
 
     if (testnet) {
-      // Official Demo Mode URLs (from Binance Docs)
-      this._spotClient.urls['api']['public'] = 'https://demo-api.binance.com/api';
-      this._spotClient.urls['api']['private'] = 'https://demo-api.binance.com/api';
+      // Legacy Testnet URLs (Standard Python-Binance default)
+      this._spotClient.urls['api']['public'] = 'https://testnet.binance.vision/api';
+      this._spotClient.urls['api']['private'] = 'https://testnet.binance.vision/api';
     }
 
     // ── Futures client ───────────────────────────────────────────────────────
@@ -65,12 +65,13 @@ class BinanceExecutor {
     });
 
     if (testnet) {
-      // Official Demo Mode URLs for Futures
-      this._futuresClient.urls['api']['fapiPublic'] = 'https://demo-fapi.binance.com/fapi';
-      this._futuresClient.urls['api']['fapiPrivate'] = 'https://demo-fapi.binance.com/fapi';
-      this._futuresClient.urls['api']['public'] = 'https://demo-fapi.binance.com/fapi';
-      this._futuresClient.urls['api']['private'] = 'https://demo-fapi.binance.com/fapi';
+      // Legacy Futures Testnet URLs
+      this._futuresClient.urls['api']['fapiPublic'] = 'https://testnet.binancefuture.com/fapi';
+      this._futuresClient.urls['api']['fapiPrivate'] = 'https://testnet.binancefuture.com/fapi';
+      this._futuresClient.urls['api']['public'] = 'https://testnet.binancefuture.com/fapi';
+      this._futuresClient.urls['api']['private'] = 'https://testnet.binancefuture.com/fapi';
     }
+
 
 
 
@@ -126,7 +127,7 @@ class BinanceExecutor {
         const crypto = require('crypto');
         const axios = require('axios');
         const isFutures = FUTURES_STRATEGIES.has(Number(strategyId));
-        const host = isFutures ? 'https://demo-fapi.binance.com' : 'https://demo-api.binance.com';
+        const host = isFutures ? 'https://testnet.binancefuture.com' : 'https://testnet.binance.vision';
         const endpoint = isFutures ? '/fapi/v1/order' : '/api/v3/order';
         const timeEndpoint = isFutures ? '/fapi/v1/time' : '/api/v3/time';
         const tickerEndpoint = isFutures ? '/fapi/v1/ticker/price' : '/api/v3/ticker/price';
@@ -231,16 +232,16 @@ class BinanceExecutor {
         'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.36'
       };
 
-      // 1. Fetch Futures Demo Balance
+      // 1. Fetch Futures Balance (Sync with Legacy Futures Time)
       try {
-        const fTimeRes = await axios.get('https://demo-fapi.binance.com/fapi/v1/time');
+        const fTimeRes = await axios.get('https://testnet.binancefuture.com/fapi/v1/time');
         const fTs = fTimeRes.data.serverTime;
         const fQuery = `timestamp=${fTs}&recvWindow=10000`;
         const fSig = crypto.createHmac('sha256', Buffer.from(this._apiSecret, 'utf8'))
                            .update(Buffer.from(fQuery, 'utf8'))
                            .digest('hex');
         
-        const futRes = await axios.get(`https://demo-fapi.binance.com/fapi/v2/account?${fQuery}&signature=${fSig}`, { 
+        const futRes = await axios.get(`https://testnet.binancefuture.com/fapi/v2/account?${fQuery}&signature=${fSig}`, { 
           headers: commonHeaders, 
           timeout: 10000 
         });
@@ -256,16 +257,16 @@ class BinanceExecutor {
         errors.push(`Futures Demo: ${msg}`);
       }
 
-      // 2. Fetch Spot Demo Balance (Sync with Spot Time)
+      // 2. Fetch Spot Balance (Sync with Legacy Spot Time)
       try {
-        const sTimeRes = await axios.get('https://demo-api.binance.com/api/v3/time');
+        const sTimeRes = await axios.get('https://testnet.binance.vision/api/v3/time');
         const sTs = sTimeRes.data.serverTime;
         const sQuery = `timestamp=${sTs}&recvWindow=10000`;
         const sSig = crypto.createHmac('sha256', Buffer.from(this._apiSecret, 'utf8'))
                            .update(Buffer.from(sQuery, 'utf8'))
                            .digest('hex');
         
-        const spotRes = await axios.get(`https://demo-api.binance.com/api/v3/account?${sQuery}&signature=${sSig}`, { 
+        const spotRes = await axios.get(`https://testnet.binance.vision/api/v3/account?${sQuery}&signature=${sSig}`, { 
           headers: commonHeaders, 
           timeout: 10000 
         });
