@@ -38,30 +38,43 @@ class BinanceExecutor {
       apiKey,
       secret: apiSecret,
       enableRateLimit: true,
-      options: { defaultType: 'spot' },
+      timeout: 15000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.36'
+      }
     };
 
     // ── Spot client ──────────────────────────────────────────────────────────
-    this._spotClient = new ccxt.binance({ ...baseConfig });
+    this._spotClient = new ccxt.binance({
+      ...baseConfig,
+      options: { defaultType: 'spot' }
+    });
+
     if (testnet) {
-      // setSandboxMode is DEPRECATED for futures (Binance killed it).
-      // enableDemoTrading is the new unified demo env (CCXT >= 4.5.6).
-      this._spotClient.enableDemoTrading(true);
+      // Manually force demo URLs to bypass any CCXT internal detection issues
+      this._spotClient.urls['api']['public'] = 'https://demo-api.binance.com/api/v3';
+      this._spotClient.urls['api']['private'] = 'https://demo-api.binance.com/api/v3';
+      this._spotClient.urls['api']['v1'] = 'https://demo-api.binance.com/api/v1';
     }
 
     // ── Futures client ───────────────────────────────────────────────────────
-    const futuresConfig = {
+    this._futuresClient = new ccxt.binance({
       ...baseConfig,
-      options: { defaultType: 'future' },
-    };
-    this._futuresClient = new ccxt.binance(futuresConfig);
+      options: { defaultType: 'future' }
+    });
+
     if (testnet) {
-      this._futuresClient.enableDemoTrading(true);
+      this._futuresClient.urls['api']['fapiPublic'] = 'https://demo-fapi.binance.com/fapi/v1';
+      this._futuresClient.urls['api']['fapiPrivate'] = 'https://demo-fapi.binance.com/fapi/v1';
+      this._futuresClient.urls['api']['public'] = 'https://demo-fapi.binance.com/fapi/v1';
+      this._futuresClient.urls['api']['private'] = 'https://demo-fapi.binance.com/fapi/v1';
     }
 
+
     this._initialized = true;
-    console.log(`[BinanceExecutor] Initialized — ${testnet ? 'DEMO (new unified env)' : 'LIVE'}`);
+    console.log(`[BinanceExecutor] Initialized — ${testnet ? 'DEMO (Explicit Endpoints)' : 'LIVE'}`);
   }
+
 
   /** Returns the correct CCXT client for the given strategyId */
   _client(strategyId) {
@@ -75,8 +88,8 @@ class BinanceExecutor {
   async _ensureMarkets() {
     if (!this._marketsPromise) {
       this._marketsPromise = Promise.all([
-        this._spotClient.loadMarkets(),
-        this._futuresClient.loadMarkets(),
+        this._spotClient.loadMarkets().catch(e => console.error('[BinanceExecutor] Spot loadMarkets failed:', e.message)),
+        this._futuresClient.loadMarkets().catch(e => console.error('[BinanceExecutor] Futures loadMarkets failed:', e.message)),
       ]);
     }
     return this._marketsPromise;
@@ -105,7 +118,7 @@ class BinanceExecutor {
    */
   async placeOrder(symbol, side, amountUSDT, orderType = 'market', price = null, strategyId = 1) {
     try {
-      await this._ensureMarkets(strategyId);
+      await this._ensureMarkets();
       const client = this._client(strategyId);
       const sym = this._normalizeSymbol(symbol);
 
@@ -158,21 +171,33 @@ class BinanceExecutor {
    * Returns { spot: number, futures: number } or { error }
    */
   async getBalance() {
+    let spot = 0;
+    let futures = 0;
+    let errors = [];
+
+    // Attempt Spot
     try {
       const spotBal = await this._spotClient.fetchBalance();
-      let futuresBal = null;
-      try {
-        futuresBal = await this._futuresClient.fetchBalance();
-      } catch (_) {}
-      return {
-        spot: spotBal?.USDT?.free ?? 0,
-        futures: futuresBal?.USDT?.free ?? 0,
-      };
-    } catch (err) {
-      console.error('[BinanceExecutor] getBalance error:', err.message);
-      return { error: err.message };
+      spot = spotBal?.USDT?.free ?? 0;
+    } catch (e) {
+      errors.push(`Spot: ${e.message}`);
     }
+
+    // Attempt Futures
+    try {
+      const futuresBal = await this._futuresClient.fetchBalance();
+      futures = futuresBal?.USDT?.free ?? 0;
+    } catch (e) {
+      errors.push(`Futures: ${e.message}`);
+    }
+
+    if (errors.length === 2) {
+      return { error: errors.join(' | ') };
+    }
+
+    return { spot, futures, partialError: errors.length > 0 ? errors.join(' | ') : null };
   }
+
 
   /**
    * Fetch a single order by ID.
