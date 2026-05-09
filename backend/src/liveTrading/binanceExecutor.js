@@ -207,15 +207,16 @@ class BinanceExecutor {
           timeout: 10000
         });
         
-        const usdtAsset = res.data.assets.find(a => a.asset === 'USDT');
-        futures = parseFloat(usdtAsset?.availableBalance || 0);
+        // Sum all assets (USDT + USDC + BTC, etc.) for total wallet balance
+        futures = res.data.assets.reduce((sum, a) => sum + parseFloat(a.walletBalance || 0), 0);
       } else {
         const futuresBal = await this._futuresClient.fetchBalance();
-        futures = futuresBal?.USDT?.free ?? 0;
+        futures = futuresBal?.USDT?.total ?? futuresBal?.total?.USDT ?? 0;
       }
     } catch (e) {
       errors.push(`Futures: ${e.message}`);
     }
+
 
     if (errors.length === 2) {
       return { error: errors.join(' | ') };
