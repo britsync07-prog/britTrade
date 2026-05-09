@@ -2,12 +2,7 @@
 
 /**
  * binanceExecutor.js
- * ==================
- * CCXT-powered Binance execution layer.
- * Handles both Spot (strategies 1 & 2) and Futures (strategy 3).
- *
- * Supports live and testnet modes.
- * All methods are safe to call — errors are caught and returned as { error }.
+ * Mirroring exactly the logic of python-binance library
  */
 
 const ccxt = require('ccxt');
@@ -39,20 +34,24 @@ class BinanceExecutor {
       }
     };
 
+    // Spot client init
     this._spotClient = new ccxt.binance({ ...baseConfig, options: { defaultType: 'spot' } });
     if (testnet) {
       this._spotClient.urls['api']['public'] = 'https://testnet.binance.vision/api';
       this._spotClient.urls['api']['private'] = 'https://testnet.binance.vision/api';
     }
 
+    // Futures client init
     this._futuresClient = new ccxt.binance({ ...baseConfig, options: { defaultType: 'future' } });
     if (testnet) {
       this._futuresClient.urls['api']['fapiPublic'] = 'https://testnet.binancefuture.com/fapi';
       this._futuresClient.urls['api']['fapiPrivate'] = 'https://testnet.binancefuture.com/fapi';
+      this._futuresClient.urls['api']['public'] = 'https://testnet.binancefuture.com/fapi';
+      this._futuresClient.urls['api']['private'] = 'https://testnet.binancefuture.com/fapi';
     }
 
     this._initialized = true;
-    console.log(`[BinanceExecutor] Initialized — ${testnet ? 'TESTNET' : 'LIVE'}`);
+    console.log(`[BinanceExecutor] Initialized — ${testnet ? 'TESTNET (Legacy)' : 'LIVE'}`);
   }
 
   _client(strategyId) {
@@ -77,13 +76,12 @@ class BinanceExecutor {
   async placeOrder(symbol, side, amountUSDT, orderType = 'market', price = null, strategyId = 1) {
     try {
       if (this._testnet) {
-        // ── Manual Signing Logic (Mirroring Python hmac + alphabetical sort) ──
         const crypto = require('crypto');
         const axios = require('axios');
         const isFutures = FUTURES_STRATEGIES.has(Number(strategyId));
         
-        // Host selection
-        const host = isFutures ? 'https://demo-fapi.binance.com' : 'https://demo-api.binance.com';
+        // Host selection (Exactly as python-binance)
+        const host = isFutures ? 'https://testnet.binancefuture.com' : 'https://testnet.binance.vision';
         const endpoint = isFutures ? '/fapi/v1/order' : '/api/v3/order';
         const timeEndpoint = isFutures ? '/fapi/v1/time' : '/api/v3/time';
         const tickerEndpoint = isFutures ? '/fapi/v1/ticker/price' : '/api/v3/ticker/price';
@@ -92,12 +90,12 @@ class BinanceExecutor {
         const timeRes = await axios.get(`${host}${timeEndpoint}`);
         const ts = timeRes.data.serverTime;
 
-        // 2. Ticker
+        // 2. Fetch Price
         const tickerRes = await axios.get(`${host}${tickerEndpoint}?symbol=${symbol.replace('/', '')}`);
         const currentPrice = parseFloat(tickerRes.data.price);
         const qty = (amountUSDT / currentPrice).toFixed(5);
 
-        // 3. Build & Alphabetically Sort Params (Python Logic)
+        // 3. Alphabetical Sort Params (Python Logic: base_client.py:493)
         const params = {
           symbol: symbol.replace('/', ''),
           side: side.toUpperCase(),
@@ -116,9 +114,12 @@ class BinanceExecutor {
                           .update(Buffer.from(query, 'utf8'))
                           .digest('hex');
 
-        // 4. Request
+        // 4. POST Order
         const res = await axios.post(`${host}${endpoint}?${query}&signature=${sig}`, null, {
-          headers: { 'X-MBX-APIKEY': this._apiKey, 'User-Agent': baseConfig.headers['User-Agent'] }
+          headers: { 
+            'X-MBX-APIKEY': this._apiKey, 
+            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.36'
+          }
         });
         return res.data;
       }
@@ -128,8 +129,7 @@ class BinanceExecutor {
       const sym = this._normalizeSymbol(symbol);
       const ticker = await client.fetchTicker(sym);
       const baseAmount = client.amountToPrecision(sym, amountUSDT / (ticker.last || ticker.close));
-      
-      const extra = isFutures ? { positionSide: 'BOTH' } : {};
+      const extra = FUTURES_STRATEGIES.has(Number(strategyId)) ? { positionSide: 'BOTH' } : {};
       return await client.createOrder(sym, orderType, side, baseAmount, price, extra);
     } catch (err) {
       return { error: err.response?.data?.msg || err.message };
@@ -155,23 +155,23 @@ class BinanceExecutor {
       'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.36' 
     };
 
-    // Futures Demo
+    // Futures Testnet (v2 account info as in python-binance)
     try {
-      const t = await axios.get('https://demo-fapi.binance.com/fapi/v1/time');
+      const t = await axios.get('https://testnet.binancefuture.com/fapi/v1/time');
       const p = { timestamp: t.data.serverTime, recvWindow: 10000 };
       const q = Object.keys(p).sort().map(k => `${k}=${p[k]}`).join('&');
       const s = crypto.createHmac('sha256', Buffer.from(this._apiSecret, 'utf8')).update(Buffer.from(q, 'utf8')).digest('hex');
-      const r = await axios.get(`https://demo-fapi.binance.com/fapi/v2/account?${q}&signature=${s}`, { headers });
+      const r = await axios.get(`https://testnet.binancefuture.com/fapi/v2/account?${q}&signature=${s}`, { headers });
       r.data.assets.forEach(a => { if (a.asset === 'USDT') futures += parseFloat(a.walletBalance); });
     } catch (e) { errors.push(`Futures: ${e.response?.data?.msg || e.message}`); }
 
-    // Spot Demo
+    // Spot Testnet
     try {
-      const t = await axios.get('https://demo-api.binance.com/api/v3/time');
+      const t = await axios.get('https://testnet.binance.vision/api/v3/time');
       const p = { timestamp: t.data.serverTime, recvWindow: 10000 };
       const q = Object.keys(p).sort().map(k => `${k}=${p[k]}`).join('&');
       const s = crypto.createHmac('sha256', Buffer.from(this._apiSecret, 'utf8')).update(Buffer.from(q, 'utf8')).digest('hex');
-      const r = await axios.get(`https://demo-api.binance.com/api/v3/account?${q}&signature=${s}`, { headers });
+      const r = await axios.get(`https://testnet.binance.vision/api/v3/account?${q}&signature=${s}`, { headers });
       r.data.balances.forEach(b => { if (b.asset === 'USDT') spot += parseFloat(b.free) + parseFloat(b.locked); });
     } catch (e) { errors.push(`Spot: ${e.response?.data?.msg || e.message}`); }
 
