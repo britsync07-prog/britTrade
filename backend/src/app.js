@@ -15,6 +15,8 @@ const adminRoutes = require('./routes/adminRoutes');
 const supportRoutes = require('./routes/supportRoutes');
 const authRoutes = require('./routes/authRoutes');
 const cookieParser = require('cookie-parser');
+const liveTradingAdminRoutes = require('./routes/liveTradingAdminRoutes');
+const liveTradeOrchestrator = require('./liveTrading/liveTradeOrchestrator');
 
 const PORT = process.env.PORT || 7286;
 const app = express();
@@ -67,6 +69,7 @@ app.use(cookieParser());
 app.use('/auth', authRoutes);
 app.use('/payments', paymentRoutes);
 app.use('/admin/support', authMiddleware, supportRoutes);
+app.use('/admin/live-trading', liveTradingAdminRoutes);
 app.use('/admin', adminRoutes);
 
 // --- Strategy Management ---
@@ -300,6 +303,9 @@ async function start() {
     for (const s of strats) {
       strategyService.runStrategy(s.id).catch(err => console.error('Failed to auto-run strategy:', err));
     }
+
+    // Initialize live trading orchestrator (admin-only Binance trading)
+    await liveTradeOrchestrator.initialize();
     
     console.log(`Starting server on port ${PORT}...`);
     const server = app.listen(PORT, () => {

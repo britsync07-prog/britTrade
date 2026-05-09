@@ -10,12 +10,14 @@ import {
   ArrowLeft,
   MessageSquare,
   Gift,
-  Tag
+  Tag,
+  Radio
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
 import SupportChat from '../components/admin/SupportChat';
+import LiveTradingPanel from '../components/admin/LiveTradingPanel';
 
 interface User {
   id: number;
@@ -34,7 +36,7 @@ export default function AdminDashboard() {
   const [newPassword, setNewPassword] = useState('');
   const [stats, setStats] = useState({ totalUsers: 0, totalSales: 0, totalRevenue: 0, activeSignals: 0 });
   const [filter, setFilter] = useState<'all' | 'premium' | 'trial'>('all');
-  const [activeTab, setActiveTab] = useState<'operators' | 'support' | 'marketing'>('operators');
+  const [activeTab, setActiveTab] = useState<'operators' | 'support' | 'marketing' | 'livetrading'>('operators');
   const [marketingData, setMarketingData] = useState<{ events: any[], offers: any[] }>({ events: [], offers: [] });
 
   useEffect(() => {
@@ -167,37 +169,52 @@ export default function AdminDashboard() {
             <p className="text-slate-400 text-lg font-medium max-w-xl">Global system oversight, user authorization, and infrastructure management.</p>
           </div>
 
-          <div className="flex gap-4">
+          <div className="flex flex-wrap gap-3">
              <button 
-               onClick={() => setActiveTab(activeTab === 'operators' ? 'support' : 'operators')}
-               className={`glass-card px-8 py-4 flex items-center gap-3 transition-all cursor-pointer group border-none ${
+               onClick={() => setActiveTab('support')}
+               className={`glass-card px-6 py-3 flex items-center gap-2 transition-all cursor-pointer border-none ${
                  activeTab === 'support' ? 'bg-cyan-500 text-white' : 'bg-white/5 text-slate-400 hover:bg-white/10'
                }`}
              >
-                <MessageSquare className="w-5 h-5" />
-                <span className="text-xs font-black uppercase tracking-widest">
-                  {activeTab === 'support' ? 'View Operators' : 'Support Chat'}
-                </span>
+                <MessageSquare className="w-4 h-4" />
+                <span className="text-xs font-black uppercase tracking-widest">Support</span>
              </button>
              <button 
                onClick={() => setActiveTab('marketing')}
-               className={`glass-card px-8 py-4 flex items-center gap-3 transition-all cursor-pointer group border-none ${
+               className={`glass-card px-6 py-3 flex items-center gap-2 transition-all cursor-pointer border-none ${
                  activeTab === 'marketing' ? 'bg-purple-500 text-white' : 'bg-white/5 text-slate-400 hover:bg-white/10'
                }`}
              >
-                <Tag className="w-5 h-5" />
+                <Tag className="w-4 h-4" />
                 <span className="text-xs font-black uppercase tracking-widest">Marketing</span>
              </button>
              <button 
-               onClick={() => setIsCreateModalOpen(true)}
-               className="glass-card px-8 py-4 bg-white text-black flex items-center gap-3 hover:bg-slate-200 transition-all cursor-pointer group border-none"
+               onClick={() => setActiveTab('livetrading')}
+               className={`glass-card px-6 py-3 flex items-center gap-2 transition-all cursor-pointer border-none ${
+                 activeTab === 'livetrading' ? 'bg-emerald-500 text-white' : 'bg-white/5 text-slate-400 hover:bg-white/10'
+               }`}
              >
-                <Users className="w-5 h-5" />
-                <span className="text-xs font-black uppercase tracking-widest">Create Operator</span>
+                <Radio className="w-4 h-4" />
+                <span className="text-xs font-black uppercase tracking-widest">Live Trading</span>
              </button>
-             <Link to="/dashboard" className="glass-card px-8 py-4 flex items-center gap-3 hover:border-cyan-500/30 transition-all cursor-pointer group">
-                <ArrowLeft className="text-cyan-400 w-5 h-5 group-hover:scale-110 transition-transform" />
-                <span className="text-xs font-black uppercase tracking-widest text-white">Back to Dashboard</span>
+             <button 
+               onClick={() => setActiveTab('operators')}
+               className={`glass-card px-6 py-3 flex items-center gap-2 transition-all cursor-pointer border-none ${
+                 activeTab === 'operators' ? 'bg-white text-black' : 'bg-white/5 text-slate-400 hover:bg-white/10'
+               }`}
+             >
+                <Users className="w-4 h-4" />
+                <span className="text-xs font-black uppercase tracking-widest">Operators</span>
+             </button>
+             <button 
+               onClick={() => setIsCreateModalOpen(true)}
+               className="glass-card px-6 py-3 bg-white/5 text-slate-400 flex items-center gap-2 hover:bg-white/10 transition-all cursor-pointer border-none"
+             >
+                <span className="text-xs font-black uppercase tracking-widest">+ New Operator</span>
+             </button>
+             <Link to="/dashboard" className="glass-card px-6 py-3 flex items-center gap-2 hover:border-cyan-500/30 transition-all cursor-pointer group">
+                <ArrowLeft className="text-cyan-400 w-4 h-4" />
+                <span className="text-xs font-black uppercase tracking-widest text-white">Dashboard</span>
              </Link>
           </div>
         </header>
@@ -210,7 +227,11 @@ export default function AdminDashboard() {
           <AdminStat title="Total Sales" value={stats.totalSales} icon={Activity} color="text-purple-400" />
         </div>
 
-        {activeTab === 'support' ? (
+        {activeTab === 'livetrading' ? (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+            <LiveTradingPanel />
+          </motion.div>
+        ) : activeTab === 'support' ? (
           <motion.div
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}

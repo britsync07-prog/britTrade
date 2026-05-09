@@ -39,6 +39,18 @@ class SignalEngine {
     this.runningProcesses = new Map();
     this.lastSignals = {}; 
     this.latestPrices = {};
+    this._signalListeners = []; // Live trading hook: callbacks registered externally
+  }
+
+  /** Register a callback to be called whenever a new signal is generated */
+  registerSignalListener(fn) {
+    this._signalListeners.push(fn);
+  }
+
+  _fireSignalListeners(signal) {
+    for (const fn of this._signalListeners) {
+      try { fn(signal); } catch (_) {}
+    }
   }
 
   async fetchOHLC(symbol, interval) {
@@ -223,7 +235,13 @@ class SignalEngine {
                   // Start Paper Trade for this signal
                   await paperTradeService.openPaperTrade(id, result.lastID, symbol, signalSide, currentPrice, leverage);
                   await getTelegramService().broadcastSignal({ strategyId: id, strategyName: strategy.name, symbol, side: signalSide, price: currentPrice, tp: initialTp, sl: initialSl, stakeAmount: 10 });
-               } else await getTelegramService().broadcastClose(id, symbol, signalSide, currentPrice, pnl, finalStatus);
+                  // Fire live trade hook (non-blocking)
+                  this._fireSignalListeners({ strategyId: id, symbol, side: signalSide, price: currentPrice, tp: initialTp, sl: initialSl, signalId: result.lastID, isEntry: true });
+               } else {
+                  await getTelegramService().broadcastClose(id, symbol, signalSide, currentPrice, pnl, finalStatus);
+                  // Fire live trade hook for exit signal (non-blocking)
+                  this._fireSignalListeners({ strategyId: id, symbol, side: signalSide, price: currentPrice, signalId: result.lastID, isEntry: false });
+               }
             }
           } else delete this.lastSignals[`${id}_${symbol}`];
         } catch (e) {}
