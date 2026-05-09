@@ -177,16 +177,42 @@ class BinanceExecutor {
 
     // Attempt Spot
     try {
-      const spotBal = await this._spotClient.fetchBalance();
-      spot = spotBal?.USDT?.free ?? 0;
+      if (this._testnet) {
+        // Spot Testnet is often down/unreliable, we'll try it but it might fail
+        const spotBal = await this._spotClient.fetchBalance();
+        spot = spotBal?.USDT?.free ?? 0;
+      } else {
+        const spotBal = await this._spotClient.fetchBalance();
+        spot = spotBal?.USDT?.free ?? 0;
+      }
     } catch (e) {
       errors.push(`Spot: ${e.message}`);
     }
 
     // Attempt Futures
     try {
-      const futuresBal = await this._futuresClient.fetchBalance();
-      futures = futuresBal?.USDT?.free ?? 0;
+      if (this._testnet) {
+        // NUCLEAR FIX: Manual V2 call for legacy testnet because CCXT blocks it
+        const crypto = require('crypto');
+        const axios = require('axios');
+        const ts = Date.now();
+        const query = `timestamp=${ts}&recvWindow=60000`;
+        const signature = crypto.createHmac('sha256', this._futuresClient.secret).update(query).digest('hex');
+        
+        const res = await axios.get(`https://testnet.binancefuture.com/fapi/v2/account?${query}&signature=${signature}`, {
+          headers: { 
+            'X-MBX-APIKEY': this._futuresClient.apiKey,
+            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.36'
+          },
+          timeout: 10000
+        });
+        
+        const usdtAsset = res.data.assets.find(a => a.asset === 'USDT');
+        futures = parseFloat(usdtAsset?.availableBalance || 0);
+      } else {
+        const futuresBal = await this._futuresClient.fetchBalance();
+        futures = futuresBal?.USDT?.free ?? 0;
+      }
     } catch (e) {
       errors.push(`Futures: ${e.message}`);
     }
@@ -197,6 +223,7 @@ class BinanceExecutor {
 
     return { spot, futures, partialError: errors.length > 0 ? errors.join(' | ') : null };
   }
+
 
 
   /**
