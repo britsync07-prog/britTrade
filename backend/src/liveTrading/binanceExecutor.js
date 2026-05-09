@@ -53,10 +53,9 @@ class BinanceExecutor {
     });
 
     if (testnet) {
-      // Manually force demo URLs to bypass any CCXT internal detection issues
-      this._spotClient.urls['api']['public'] = 'https://demo-api.binance.com/api/v3';
-      this._spotClient.urls['api']['private'] = 'https://demo-api.binance.com/api/v3';
-      this._spotClient.urls['api']['v1'] = 'https://demo-api.binance.com/api/v1';
+      // Official Demo Mode URLs (from Binance Docs)
+      this._spotClient.urls['api']['public'] = 'https://demo-api.binance.com/api';
+      this._spotClient.urls['api']['private'] = 'https://demo-api.binance.com/api';
     }
 
     // ── Futures client ───────────────────────────────────────────────────────
@@ -66,11 +65,13 @@ class BinanceExecutor {
     });
 
     if (testnet) {
-      this._futuresClient.urls['api']['fapiPublic'] = 'https://demo-fapi.binance.com/fapi/v1';
-      this._futuresClient.urls['api']['fapiPrivate'] = 'https://demo-fapi.binance.com/fapi/v1';
-      this._futuresClient.urls['api']['public'] = 'https://demo-fapi.binance.com/fapi/v1';
-      this._futuresClient.urls['api']['private'] = 'https://demo-fapi.binance.com/fapi/v1';
+      // Official Demo Mode URLs for Futures
+      this._futuresClient.urls['api']['fapiPublic'] = 'https://demo-fapi.binance.com/fapi';
+      this._futuresClient.urls['api']['fapiPrivate'] = 'https://demo-fapi.binance.com/fapi';
+      this._futuresClient.urls['api']['public'] = 'https://demo-fapi.binance.com/fapi';
+      this._futuresClient.urls['api']['private'] = 'https://demo-fapi.binance.com/fapi';
     }
+
 
 
     this._initialized = true;
@@ -190,49 +191,45 @@ class BinanceExecutor {
       }
     }
 
-    // ── Testnet Mode (Manual Sync + V2) ──────────────────────────────────────
-    // Matches python-binance logic exactly
+    // ── Demo Mode (Manual Sync + V2) ──────────────────────────────────────
+    // Matches official Demo Mode specifications
     try {
       const crypto = require('crypto');
       const axios = require('axios');
+      const headers = { 
+        'X-MBX-APIKEY': this._apiKey,
+        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.36'
+      };
 
-      // 1. Sync Time (Avoids 401/Timestamp errors)
-      const timeRes = await axios.get('https://testnet.binancefuture.com/fapi/v1/time');
-      const serverTime = timeRes.data.serverTime;
-      
-      // 2. Build Signed Request
-      const ts = serverTime;
+      // 1. Sync Time with Futures Demo
+      const timeRes = await axios.get('https://demo-fapi.binance.com/fapi/v1/time');
+      const ts = timeRes.data.serverTime;
       const query = `timestamp=${ts}&recvWindow=60000`;
       const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
       
-      // 3. Fetch Unified Account Data
-      const res = await axios.get(`https://testnet.binancefuture.com/fapi/v2/account?${query}&signature=${signature}`, {
-        headers: { 
-          'X-MBX-APIKEY': this._apiKey,
-          'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.36'
-        },
-        timeout: 10000
-      });
-
-      // 4. Split Assets (USDT -> Futures, Others -> Spot)
-      // This matches how the user sees their balance in the screenshot
-      res.data.assets.forEach(a => {
+      // 2. Fetch Futures Demo Balance
+      const futRes = await axios.get(`https://demo-fapi.binance.com/fapi/v2/account?${query}&signature=${signature}`, { headers, timeout: 10000 });
+      futRes.data.assets.forEach(a => {
         const val = parseFloat(a.walletBalance || 0);
-        if (val <= 0) return;
-
-        if (a.asset === 'USDT') {
-          futures += val;
-        } else {
-          // For USDC and BTC, we show them as "Spot" to match the user's mental model
-          // Even though they are in the futures wallet as collateral.
-          spot += val; // Note: In a real app we'd convert BTC to USDT price, but let's keep it simple for now
-        }
+        if (a.asset === 'USDT') futures += val;
+        else spot += val; // BTC/USDC collateral counts towards 'Spot' in our UI
       });
+
+      // 3. Fetch Spot Demo Balance (Optional, but good for completeness)
+      try {
+        const spotSignature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
+        const spotRes = await axios.get(`https://demo-api.binance.com/api/v3/account?${query}&signature=${spotSignature}`, { headers, timeout: 5000 });
+        spotRes.data.balances.forEach(b => {
+          if (b.asset === 'USDT') spot += parseFloat(b.free || 0);
+          else if (parseFloat(b.free) > 0) spot += parseFloat(b.free || 0); // simplistic sum
+        });
+      } catch (_) {}
 
     } catch (e) {
       const msg = e.response?.data?.msg || e.message;
-      errors.push(`Testnet: ${msg}`);
+      errors.push(`Demo Mode: ${msg}`);
     }
+
 
     if (errors.length > 0) {
       return { error: errors.join(' | ') };
