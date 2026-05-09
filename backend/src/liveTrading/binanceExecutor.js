@@ -128,19 +128,22 @@ class BinanceExecutor {
         const isFutures = FUTURES_STRATEGIES.has(Number(strategyId));
         const host = isFutures ? 'https://demo-fapi.binance.com' : 'https://demo-api.binance.com';
         const endpoint = isFutures ? '/fapi/v1/order' : '/api/v3/order';
+        const timeEndpoint = isFutures ? '/fapi/v1/time' : '/api/v3/time';
+        const tickerEndpoint = isFutures ? '/fapi/v1/ticker/price' : '/api/v3/ticker/price';
         
-        // 1. Sync Time
-        const timeRes = await axios.get(`${host}${isFutures ? '/fapi/v1/time' : '/api/v3/time'}`);
+        // 1. Sync Time (Specific to Host)
+        const timeRes = await axios.get(`${host}${timeEndpoint}`);
         const ts = timeRes.data.serverTime;
         
         // 2. Fetch Price for Quantity Calculation
-        const tickerRes = await axios.get(`${host}${isFutures ? '/fapi/v1/ticker/price' : '/api/v3/ticker/price'}?symbol=${symbol.replace('/', '')}`);
+        const tickerRes = await axios.get(`${host}${tickerEndpoint}?symbol=${symbol.replace('/', '')}`);
         const currentPrice = parseFloat(tickerRes.data.price);
-        let qty = (amountUSDT / currentPrice).toFixed(5); // Simplistic precision
+        let qty = (amountUSDT / currentPrice).toFixed(5); 
         
         // 3. Build Query
-        let query = `symbol=${symbol.replace('/', '')}&side=${side.toUpperCase()}&type=${orderType.toUpperCase()}&quantity=${qty}&timestamp=${ts}&recvWindow=60000`;
+        let query = `symbol=${symbol.replace('/', '')}&side=${side.toUpperCase()}&type=${orderType.toUpperCase()}&quantity=${qty}&timestamp=${ts}&recvWindow=10000`;
         if (orderType === 'limit' && price) query += `&price=${price}&timeInForce=GTC`;
+
         
         const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
         
@@ -214,43 +217,66 @@ class BinanceExecutor {
     }
 
     // ── Demo Mode (Manual Sync + V2) ──────────────────────────────────────
-    // Matches official Demo Mode specifications
+    // Mirrors python-binance logic: Independent time sync for Spot/Futures
     try {
       const crypto = require('crypto');
       const axios = require('axios');
-      const headers = { 
+      const commonHeaders = { 
         'X-MBX-APIKEY': this._apiKey,
         'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.36'
       };
 
-      // 1. Sync Time with Futures Demo
-      const timeRes = await axios.get('https://demo-fapi.binance.com/fapi/v1/time');
-      const ts = timeRes.data.serverTime;
-      const query = `timestamp=${ts}&recvWindow=60000`;
-      const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
-      
-      // 2. Fetch Futures Demo Balance
-      const futRes = await axios.get(`https://demo-fapi.binance.com/fapi/v2/account?${query}&signature=${signature}`, { headers, timeout: 10000 });
-      futRes.data.assets.forEach(a => {
-        const val = parseFloat(a.walletBalance || 0);
-        if (a.asset === 'USDT') futures += val;
-        else spot += val; // BTC/USDC collateral counts towards 'Spot' in our UI
-      });
-
-      // 3. Fetch Spot Demo Balance (Optional, but good for completeness)
+      // 1. Fetch Futures Demo Balance (Sync with Futures Time)
       try {
-        const spotSignature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
-        const spotRes = await axios.get(`https://demo-api.binance.com/api/v3/account?${query}&signature=${spotSignature}`, { headers, timeout: 5000 });
-        spotRes.data.balances.forEach(b => {
-          if (b.asset === 'USDT') spot += parseFloat(b.free || 0);
-          else if (parseFloat(b.free) > 0) spot += parseFloat(b.free || 0); // simplistic sum
+        const fTimeRes = await axios.get('https://demo-fapi.binance.com/fapi/v1/time');
+        const fTs = fTimeRes.data.serverTime;
+        const fQuery = `timestamp=${fTs}&recvWindow=10000`;
+        const fSig = crypto.createHmac('sha256', this._apiSecret).update(fQuery).digest('hex');
+        
+        const futRes = await axios.get(`https://demo-fapi.binance.com/fapi/v2/account?${fQuery}&signature=${fSig}`, { 
+          headers: commonHeaders, 
+          timeout: 10000 
         });
-      } catch (_) {}
+        
+        futRes.data.assets.forEach(a => {
+          const val = parseFloat(a.walletBalance || 0);
+          if (a.asset === 'USDT') futures += val;
+          else if (val > 0) spot += val; // Collateral
+        });
+      } catch (fe) {
+        const msg = fe.response?.data?.msg || fe.message;
+        errors.push(`Futures Demo: ${msg}`);
+      }
+
+      // 2. Fetch Spot Demo Balance (Sync with Spot Time)
+      try {
+        const sTimeRes = await axios.get('https://demo-api.binance.com/api/v3/time');
+        const sTs = sTimeRes.data.serverTime;
+        const sQuery = `timestamp=${sTs}&recvWindow=10000`;
+        const sSig = crypto.createHmac('sha256', this._apiSecret).update(sQuery).digest('hex');
+        
+        const spotRes = await axios.get(`https://demo-api.binance.com/api/v3/account?${sQuery}&signature=${sSig}`, { 
+          headers: commonHeaders, 
+          timeout: 10000 
+        });
+        
+        spotRes.data.balances.forEach(b => {
+          const free = parseFloat(b.free || 0);
+          const locked = parseFloat(b.locked || 0);
+          if (free > 0 || locked > 0) {
+            if (b.asset === 'USDT') spot += (free + locked); // Simplified summing for USDT
+            else if (free > 0) spot += free; 
+          }
+        });
+      } catch (se) {
+        const msg = se.response?.data?.msg || se.message;
+        errors.push(`Spot Demo: ${msg}`);
+      }
 
     } catch (e) {
-      const msg = e.response?.data?.msg || e.message;
-      errors.push(`Demo Mode: ${msg}`);
+      errors.push(`Demo Mode Critical: ${e.message}`);
     }
+
 
 
     if (errors.length > 0) {
