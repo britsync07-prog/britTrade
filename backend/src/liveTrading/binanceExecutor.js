@@ -2,12 +2,11 @@
 
 /**
  * binanceExecutor.js
- * Mirroring exactly the logic of python-binance library
+ * Final Auto-Detect Logic: Tries both Legacy and Demo endpoints
  */
 
 const ccxt = require('ccxt');
 
-// Strategy 3 is futures, 1 & 2 are spot
 const FUTURES_STRATEGIES = new Set([3]);
 
 class BinanceExecutor {
@@ -21,12 +20,12 @@ class BinanceExecutor {
 
   async init(apiKey, apiSecret, testnet = true) {
     this._testnet = testnet;
-    this._apiKey = apiKey;
-    this._apiSecret = apiSecret;
+    this._apiKey = (apiKey || '').trim();
+    this._apiSecret = (apiSecret || '').trim();
 
     const baseConfig = {
-      apiKey,
-      secret: apiSecret,
+      apiKey: this._apiKey,
+      secret: this._apiSecret,
       enableRateLimit: true,
       timeout: 15000,
       headers: {
@@ -34,106 +33,11 @@ class BinanceExecutor {
       }
     };
 
-    // Spot client init
     this._spotClient = new ccxt.binance({ ...baseConfig, options: { defaultType: 'spot' } });
-    if (testnet) {
-      this._spotClient.urls['api']['public'] = 'https://testnet.binance.vision/api';
-      this._spotClient.urls['api']['private'] = 'https://testnet.binance.vision/api';
-    }
-
-    // Futures client init
     this._futuresClient = new ccxt.binance({ ...baseConfig, options: { defaultType: 'future' } });
-    if (testnet) {
-      this._futuresClient.urls['api']['fapiPublic'] = 'https://testnet.binancefuture.com/fapi';
-      this._futuresClient.urls['api']['fapiPrivate'] = 'https://testnet.binancefuture.com/fapi';
-      this._futuresClient.urls['api']['public'] = 'https://testnet.binancefuture.com/fapi';
-      this._futuresClient.urls['api']['private'] = 'https://testnet.binancefuture.com/fapi';
-    }
 
     this._initialized = true;
-    console.log(`[BinanceExecutor] Initialized — ${testnet ? 'TESTNET (Legacy)' : 'LIVE'}`);
-  }
-
-  _client(strategyId) {
-    if (!this._initialized) throw new Error('BinanceExecutor not initialized');
-    return FUTURES_STRATEGIES.has(Number(strategyId)) ? this._futuresClient : this._spotClient;
-  }
-
-  async _ensureMarkets() {
-    if (!this._marketsPromise) {
-      this._marketsPromise = Promise.all([
-        this._spotClient.loadMarkets().catch(() => {}),
-        this._futuresClient.loadMarkets().catch(() => {}),
-      ]);
-    }
-    return this._marketsPromise;
-  }
-
-  _normalizeSymbol(symbol) {
-    return symbol.replace(':USDT', '').replace('USDTUSDT', 'USDT');
-  }
-
-  async placeOrder(symbol, side, amountUSDT, orderType = 'market', price = null, strategyId = 1) {
-    try {
-      if (this._testnet) {
-        const crypto = require('crypto');
-        const axios = require('axios');
-        const isFutures = FUTURES_STRATEGIES.has(Number(strategyId));
-        
-        // Host selection (Exactly as python-binance)
-        const host = isFutures ? 'https://testnet.binancefuture.com' : 'https://testnet.binance.vision';
-        const endpoint = isFutures ? '/fapi/v1/order' : '/api/v3/order';
-        const timeEndpoint = isFutures ? '/fapi/v1/time' : '/api/v3/time';
-        const tickerEndpoint = isFutures ? '/fapi/v1/ticker/price' : '/api/v3/ticker/price';
-
-        // 1. Sync Time
-        const timeRes = await axios.get(`${host}${timeEndpoint}`);
-        const ts = timeRes.data.serverTime;
-
-        // 2. Fetch Price
-        const tickerRes = await axios.get(`${host}${tickerEndpoint}?symbol=${symbol.replace('/', '')}`);
-        const currentPrice = parseFloat(tickerRes.data.price);
-        const qty = (amountUSDT / currentPrice).toFixed(5);
-
-        // 3. Alphabetical Sort Params (Python Logic: base_client.py:493)
-        const params = {
-          symbol: symbol.replace('/', ''),
-          side: side.toUpperCase(),
-          type: orderType.toUpperCase(),
-          quantity: qty,
-          timestamp: ts,
-          recvWindow: 10000
-        };
-        if (orderType === 'limit' && price) {
-          params.price = price;
-          params.timeInForce = 'GTC';
-        }
-
-        const query = Object.keys(params).sort().map(k => `${k}=${params[k]}`).join('&');
-        const sig = crypto.createHmac('sha256', Buffer.from(this._apiSecret, 'utf8'))
-                          .update(Buffer.from(query, 'utf8'))
-                          .digest('hex');
-
-        // 4. POST Order
-        const res = await axios.post(`${host}${endpoint}?${query}&signature=${sig}`, null, {
-          headers: { 
-            'X-MBX-APIKEY': this._apiKey, 
-            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.36'
-          }
-        });
-        return res.data;
-      }
-
-      await this._ensureMarkets();
-      const client = this._client(strategyId);
-      const sym = this._normalizeSymbol(symbol);
-      const ticker = await client.fetchTicker(sym);
-      const baseAmount = client.amountToPrecision(sym, amountUSDT / (ticker.last || ticker.close));
-      const extra = FUTURES_STRATEGIES.has(Number(strategyId)) ? { positionSide: 'BOTH' } : {};
-      return await client.createOrder(sym, orderType, side, baseAmount, price, extra);
-    } catch (err) {
-      return { error: err.response?.data?.msg || err.message };
-    }
+    console.log(`[BinanceExecutor] Initialized — ${testnet ? 'TESTNET (Auto-Detect)' : 'LIVE'}`);
   }
 
   async getBalance() {
@@ -150,38 +54,75 @@ class BinanceExecutor {
 
     const crypto = require('crypto');
     const axios = require('axios');
-    const headers = { 
-      'X-MBX-APIKEY': this._apiKey, 
-      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.36' 
-    };
+    const headers = { 'X-MBX-APIKEY': this._apiKey, 'User-Agent': 'Mozilla/5.0' };
 
-    // Futures Testnet (v2 account info as in python-binance)
-    try {
-      const t = await axios.get('https://testnet.binancefuture.com/fapi/v1/time');
-      const p = { timestamp: t.data.serverTime, recvWindow: 10000 };
-      const q = Object.keys(p).sort().map(k => `${k}=${p[k]}`).join('&');
-      const s = crypto.createHmac('sha256', Buffer.from(this._apiSecret, 'utf8')).update(Buffer.from(q, 'utf8')).digest('hex');
-      const r = await axios.get(`https://testnet.binancefuture.com/fapi/v2/account?${q}&signature=${s}`, { headers });
-      r.data.assets.forEach(a => { if (a.asset === 'USDT') futures += parseFloat(a.walletBalance); });
-    } catch (e) { errors.push(`Futures: ${e.response?.data?.msg || e.message}`); }
+    // Try multiple environments (Legacy then Demo)
+    const envs = [
+      { name: 'Legacy', spot: 'https://testnet.binance.vision/api', fut: 'https://testnet.binancefuture.com/fapi' },
+      { name: 'Demo', spot: 'https://demo-api.binance.com/api', fut: 'https://demo-fapi.binance.com/fapi' }
+    ];
 
-    // Spot Testnet
-    try {
-      const t = await axios.get('https://testnet.binance.vision/api/v3/time');
-      const p = { timestamp: t.data.serverTime, recvWindow: 10000 };
-      const q = Object.keys(p).sort().map(k => `${k}=${p[k]}`).join('&');
-      const s = crypto.createHmac('sha256', Buffer.from(this._apiSecret, 'utf8')).update(Buffer.from(q, 'utf8')).digest('hex');
-      const r = await axios.get(`https://testnet.binance.vision/api/v3/account?${q}&signature=${s}`, { headers });
-      r.data.balances.forEach(b => { if (b.asset === 'USDT') spot += parseFloat(b.free) + parseFloat(b.locked); });
-    } catch (e) { errors.push(`Spot: ${e.response?.data?.msg || e.message}`); }
+    let success = false;
+    for (const env of envs) {
+      try {
+        // Futures
+        const ft = await axios.get(`${env.fut}/v1/time`);
+        const fp = { timestamp: ft.data.serverTime, recvWindow: 10000 };
+        const fq = Object.keys(fp).sort().map(k => `${k}=${fp[k]}`).join('&');
+        const fs = crypto.createHmac('sha256', Buffer.from(this._apiSecret, 'utf8')).update(Buffer.from(fq, 'utf8')).digest('hex');
+        const fr = await axios.get(`${env.fut}/v2/account?${fq}&signature=${fs}`, { headers });
+        
+        // Spot
+        const st = await axios.get(`${env.spot}/v3/time`);
+        const sp = { timestamp: st.data.serverTime, recvWindow: 10000 };
+        const sq = Object.keys(sp).sort().map(k => `${k}=${sp[k]}`).join('&');
+        const ss = crypto.createHmac('sha256', Buffer.from(this._apiSecret, 'utf8')).update(Buffer.from(sq, 'utf8')).digest('hex');
+        const sr = await axios.get(`${env.spot}/v3/account?${sq}&signature=${ss}`, { headers });
 
-    return errors.length > 0 ? { error: errors.join(' | ') } : { spot, futures };
+        // Sum up
+        fr.data.assets.forEach(a => { if (a.asset === 'USDT') futures = parseFloat(a.walletBalance); });
+        sr.data.balances.forEach(b => { if (b.asset === 'USDT') spot = parseFloat(b.free) + parseFloat(b.locked); });
+        
+        success = true;
+        break; // Exit loop on success
+      } catch (e) {
+        errors.push(`${env.name}: ${e.response?.data?.msg || e.message}`);
+      }
+    }
+
+    return success ? { spot, futures } : { error: errors.join(' | ') };
   }
 
-  async fetchOrder(id, sym, sid = 1) { try { return await this._client(sid).fetchOrder(id, this._normalizeSymbol(sym)); } catch (e) { return { error: e.message }; } }
-  async cancelOrder(id, sym, sid = 1) { try { return await this._client(sid).cancelOrder(id, this._normalizeSymbol(sym)); } catch (e) { return { error: e.message }; } }
+  async placeOrder(symbol, side, amountUSDT, orderType = 'market', price = null, strategyId = 1) {
+    // Similar fallback logic for order placement
+    const crypto = require('crypto');
+    const axios = require('axios');
+    const isFutures = FUTURES_STRATEGIES.has(Number(strategyId));
+    
+    const hosts = isFutures 
+      ? ['https://testnet.binancefuture.com/fapi', 'https://demo-fapi.binance.com/fapi']
+      : ['https://testnet.binance.vision/api', 'https://demo-api.binance.com/api'];
+
+    for (const host of hosts) {
+      try {
+        const t = await axios.get(`${host}/v1/time`);
+        const ticker = await axios.get(`${host}/${isFutures ? 'v1' : 'v3'}/ticker/price?symbol=${symbol.replace('/', '')}`);
+        const qty = (amountUSDT / parseFloat(ticker.data.price)).toFixed(5);
+        const p = { symbol: symbol.replace('/', ''), side: side.toUpperCase(), type: orderType.toUpperCase(), quantity: qty, timestamp: t.data.serverTime, recvWindow: 10000 };
+        if (orderType === 'limit' && price) { p.price = price; p.timeInForce = 'GTC'; }
+        const q = Object.keys(p).sort().map(k => `${k}=${p[k]}`).join('&');
+        const s = crypto.createHmac('sha256', Buffer.from(this._apiSecret, 'utf8')).update(Buffer.from(q, 'utf8')).digest('hex');
+        const res = await axios.post(`${host}/${isFutures ? 'v1' : 'v3'}/order?${q}&signature=${s}`, null, { headers: { 'X-MBX-APIKEY': this._apiKey } });
+        return res.data;
+      } catch (e) { /* try next host */ }
+    }
+    return { error: 'Failed on all environments' };
+  }
+
+  _normalizeSymbol(s) { return s.replace(':USDT', '').replace('USDTUSDT', 'USDT'); }
+  _client(sid) { return FUTURES_STRATEGIES.has(Number(sid)) ? this._futuresClient : this._spotClient; }
   isReady() { return this._initialized; }
-  destroy() { this._spotClient = this._futuresClient = null; this._initialized = false; }
+  destroy() { this._initialized = false; }
 }
 
 module.exports = new BinanceExecutor();
