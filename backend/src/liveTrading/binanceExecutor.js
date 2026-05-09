@@ -44,7 +44,9 @@ class BinanceExecutor {
     // ── Spot client ──────────────────────────────────────────────────────────
     this._spotClient = new ccxt.binance({ ...baseConfig });
     if (testnet) {
-      this._spotClient.setSandboxMode(true);
+      // setSandboxMode is DEPRECATED for futures (Binance killed it).
+      // enableDemoTrading is the new unified demo env (CCXT >= 4.5.6).
+      this._spotClient.enableDemoTrading(true);
     }
 
     // ── Futures client ───────────────────────────────────────────────────────
@@ -54,11 +56,11 @@ class BinanceExecutor {
     };
     this._futuresClient = new ccxt.binance(futuresConfig);
     if (testnet) {
-      this._futuresClient.setSandboxMode(true);
+      this._futuresClient.enableDemoTrading(true);
     }
 
     this._initialized = true;
-    console.log(`[BinanceExecutor] Initialized — testnet=${testnet}`);
+    console.log(`[BinanceExecutor] Initialized — ${testnet ? 'DEMO (new unified env)' : 'LIVE'}`);
   }
 
   /** Returns the correct CCXT client for the given strategyId */
