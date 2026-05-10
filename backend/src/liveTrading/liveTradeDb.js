@@ -82,24 +82,31 @@ async function initLiveTradeDb() {
       enabled           INTEGER DEFAULT 0,
       order_type        TEXT DEFAULT 'market',
       trade_amount_usdt REAL DEFAULT 10.0,
-      leverage          INTEGER DEFAULT 1,
-      max_open_orders   INTEGER DEFAULT 1,
+      allocated_capital REAL DEFAULT 100.0,
+      leverage          INTEGER DEFAULT 5,
+      max_open_orders   INTEGER DEFAULT 5,
       updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
+  // Migration: add allocated_capital if missing
+  const configCols = await all("PRAGMA table_info(live_trade_configs)");
+  if (!configCols.some(c => c.name === 'allocated_capital')) {
+    await run('ALTER TABLE live_trade_configs ADD COLUMN allocated_capital REAL DEFAULT 100.0');
+  }
+
   // Seed default configs for strategies 1-3
   const strategies = [
-    { id: 1, leverage: 1,  amount: 10.0 },
-    { id: 2, leverage: 1,  amount: 10.0 },
-    { id: 3, leverage: 5,  amount: 10.0 },
+    { id: 1, leverage: 5,  amount: 10.0, capital: 100.0 },
+    { id: 2, leverage: 5,  amount: 10.0, capital: 100.0 },
+    { id: 3, leverage: 5,  amount: 10.0, capital: 100.0 },
   ];
   for (const s of strategies) {
     await run(`
       INSERT OR IGNORE INTO live_trade_configs
-        (strategy_id, enabled, order_type, trade_amount_usdt, leverage)
-      VALUES (?, 0, 'market', ?, ?)
-    `, [s.id, s.amount, s.leverage]);
+        (strategy_id, enabled, order_type, trade_amount_usdt, leverage, allocated_capital)
+      VALUES (?, 0, 'market', ?, ?, ?)
+    `, [s.id, s.amount, s.leverage, s.capital]);
   }
 
   // Every Binance order placed
@@ -188,7 +195,7 @@ async function getStrategyConfig(strategyId) {
 }
 
 async function updateStrategyConfig(strategyId, fields) {
-  const allowed = ['enabled', 'order_type', 'trade_amount_usdt', 'leverage', 'max_open_orders'];
+  const allowed = ['enabled', 'order_type', 'trade_amount_usdt', 'leverage', 'max_open_orders', 'allocated_capital'];
   const sets = [];
   const vals = [];
   for (const [k, v] of Object.entries(fields)) {

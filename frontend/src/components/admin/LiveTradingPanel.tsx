@@ -10,7 +10,14 @@ import api from '../../services/api';
 interface DashboardData {
   status: { configured: boolean; enabled: boolean; testnet: boolean; executorReady: boolean };
   balance: { spot: number | null; futures: number | null; error: string | null };
-  strategyConfigs: Array<{ strategy_id: number; enabled: number; trade_amount_usdt: number; leverage: number; order_type: string }>;
+  strategyConfigs: Array<{ 
+    strategy_id: number; 
+    enabled: number; 
+    trade_amount_usdt: number; 
+    allocated_capital: number;
+    leverage: number; 
+    order_type: string 
+  }>;
   orders: Array<{
     id: number; strategy_id: number; symbol: string; side: string; amount: number;
     price: number; avg_fill_price: number | null; status: string; testnet: number;
@@ -35,6 +42,8 @@ export default function LiveTradingPanel() {
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [killMsg, setKillMsg] = useState('');
   const [showConfig, setShowConfig] = useState(false);
+  const [editingStratId, setEditingStratId] = useState<number | null>(null);
+  const [editValues, setEditValues] = useState({ amount: 10, leverage: 5, capital: 100 });
 
   const fetchDashboard = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
@@ -101,6 +110,18 @@ export default function LiveTradingPanel() {
   const handleStrategyToggle = async (stratId: number, current: number) => {
     try {
       await api.put(`/admin/live-trading/strategies/${stratId}`, { enabled: current === 0 });
+      fetchDashboard(true);
+    } catch (err: any) { alert(err.response?.data?.error || 'Update failed'); }
+  };
+
+  const handleUpdateStrategy = async (stratId: number) => {
+    try {
+      await api.put(`/admin/live-trading/strategies/${stratId}`, {
+        trade_amount_usdt: editValues.amount,
+        leverage: editValues.leverage,
+        allocated_capital: editValues.capital
+      });
+      setEditingStratId(null);
       fetchDashboard(true);
     } catch (err: any) { alert(err.response?.data?.error || 'Update failed'); }
   };
@@ -247,16 +268,58 @@ export default function LiveTradingPanel() {
                 <div className={`text-sm font-black ${STRATEGY_COLORS[sc.strategy_id] || 'text-white'}`}>
                   {STRATEGY_NAMES[sc.strategy_id] || `Strategy ${sc.strategy_id}`}
                 </div>
-                <div className="text-[10px] text-slate-500 mt-0.5">
-                  ${sc.trade_amount_usdt} per trade · {sc.leverage}x · {sc.order_type}
-                </div>
+                {editingStratId === sc.strategy_id ? (
+                  <div className="grid grid-cols-3 gap-2 mt-3">
+                    <div>
+                      <label className="text-[8px] text-slate-500 uppercase block mb-1">Trade Amt ($)</label>
+                      <input type="number" value={editValues.amount} onChange={e => setEditValues({ ...editValues, amount: parseFloat(e.target.value) })}
+                        className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-white outline-none focus:border-cyan-500" />
+                    </div>
+                    <div>
+                      <label className="text-[8px] text-slate-500 uppercase block mb-1">Leverage (x)</label>
+                      <input type="number" value={editValues.leverage} onChange={e => setEditValues({ ...editValues, leverage: parseInt(e.target.value) })}
+                        className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-white outline-none focus:border-cyan-500" />
+                    </div>
+                    <div>
+                      <label className="text-[8px] text-slate-500 uppercase block mb-1">Capital ($)</label>
+                      <input type="number" value={editValues.capital} onChange={e => setEditValues({ ...editValues, capital: parseFloat(e.target.value) })}
+                        className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-white outline-none focus:border-cyan-500" />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-[10px] text-slate-500 mt-0.5">
+                    ${sc.trade_amount_usdt} per trade · {sc.leverage}x · ${sc.allocated_capital || 0} Capital
+                  </div>
+                )}
               </div>
-              <button onClick={() => handleStrategyToggle(sc.strategy_id, sc.enabled)}
-                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${
-                  sc.enabled ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-white/5 text-slate-500 border-white/10 hover:border-white/20'
-                }`}>
-                {sc.enabled ? '● Active' : '○ Inactive'}
-              </button>
+              <div className="flex items-center gap-2">
+                {editingStratId === sc.strategy_id ? (
+                  <>
+                    <button onClick={() => handleUpdateStrategy(sc.strategy_id)}
+                      className="px-3 py-1.5 bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-lg text-[9px] font-black uppercase hover:bg-cyan-500/30 transition-all">
+                      Save
+                    </button>
+                    <button onClick={() => setEditingStratId(null)}
+                      className="px-3 py-1.5 bg-white/5 text-slate-400 border border-white/10 rounded-lg text-[9px] font-black uppercase hover:bg-white/10 transition-all">
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <button onClick={() => {
+                    setEditingStratId(sc.strategy_id);
+                    setEditValues({ amount: sc.trade_amount_usdt, leverage: sc.leverage, capital: sc.allocated_capital });
+                  }}
+                    className="p-2 hover:bg-white/5 text-slate-500 hover:text-white transition-all">
+                    <Zap size={14} />
+                  </button>
+                )}
+                <button onClick={() => handleStrategyToggle(sc.strategy_id, sc.enabled)}
+                  className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${
+                    sc.enabled ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-white/5 text-slate-500 border-white/10 hover:border-white/20'
+                  }`}>
+                  {sc.enabled ? '● Active' : '○ Inactive'}
+                </button>
+              </div>
             </div>
           ))}
         </div>

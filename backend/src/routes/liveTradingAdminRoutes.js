@@ -203,12 +203,13 @@ router.put('/strategies/:id', async (req, res) => {
     const strategyId = parseInt(req.params.id, 10);
     if (isNaN(strategyId)) return res.status(400).json({ error: 'Invalid strategy id' });
 
-    const { enabled, order_type, trade_amount_usdt, leverage, max_open_orders } = req.body;
+    const { enabled, order_type, trade_amount_usdt, leverage, max_open_orders, allocated_capital } = req.body;
 
     const updates = {};
     if (typeof enabled === 'boolean') updates.enabled = enabled ? 1 : 0;
     if (order_type) updates.order_type = order_type;
     if (trade_amount_usdt != null) updates.trade_amount_usdt = parseFloat(trade_amount_usdt);
+    if (allocated_capital != null) updates.allocated_capital = parseFloat(allocated_capital);
     if (leverage != null) updates.leverage = parseInt(leverage, 10);
     if (max_open_orders != null) updates.max_open_orders = parseInt(max_open_orders, 10);
 
@@ -300,8 +301,13 @@ router.get('/dashboard', async (req, res) => {
         return { ...order, livePnlUSDT: null, livePnlPct: null };
       }
       try {
-        const sym = order.symbol.replace('/', '').replace(':USDT', '');
-        const ticker = await axios.get(`https://api.binance.com/api/v3/ticker/price?symbol=${sym}`);
+        let sym = order.symbol.replace('/', '').replace(':', '').replace('USDTUSDT', 'USDT');
+        if (sym === 'SHIBUSDT') sym = '1000SHIBUSDT';
+        if (sym === 'PEPEUSDT') sym = '1000PEPEUSDT';
+        if (sym === 'BONKUSDT') sym = '1000BONKUSDT';
+        if (sym === 'FLOKIUSDT') sym = '1000FLOKIUSDT';
+
+        const ticker = await axios.get(`https://fapi.binance.com/fapi/v1/ticker/price?symbol=${sym}`);
         const currentPrice = parseFloat(ticker.data.price);
         const entryPrice = order.avg_fill_price || order.price;
         const leverage = strategyConfigs.find(s => s.strategy_id === order.strategy_id)?.leverage || 1;

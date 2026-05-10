@@ -119,11 +119,19 @@ class LiveTradeOrchestrator {
         return; // Strategy not enabled for live trading
       }
 
-      // 4. Max open orders guard
+      // 4. Capital & Max open orders guard
       const openOrders = await liveTradeDb.getOpenOrders(strategyId);
-      if (isEntry && openOrders.length >= (stratConfig.max_open_orders || 1)) {
-        log('info', `Max open orders reached for strategy ${strategyId} — skipping entry signal`);
-        return;
+      const totalMarginUsed = openOrders.reduce((sum, o) => sum + (o.amount_usdt || 0), 0);
+      
+      if (isEntry) {
+        if (openOrders.length >= (stratConfig.max_open_orders || 5)) {
+          log('info', `Max open orders reached (${openOrders.length}) — skipping entry`);
+          return;
+        }
+        if ((totalMarginUsed + stratConfig.trade_amount_usdt) > (stratConfig.allocated_capital || 100)) {
+          log('info', `Insufficient allocated capital (Used: $${totalMarginUsed.toFixed(2)} / Limit: $${stratConfig.allocated_capital}) — skipping entry`);
+          return;
+        }
       }
 
       // 5. Map signal side to Binance order side
