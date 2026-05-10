@@ -184,21 +184,20 @@ class LiveTradeOrchestrator {
       const orderId = await liveTradeDb.insertOrder({
         strategy_id: strategyId,
         signal_id: signalId,
-        binance_id: order.id || order.orderId,
+        binance_id: order.id,
         client_oid: order.clientOrderId || null,
         symbol,
         side: orderSide,
         order_type: order.type || 'market',
-        amount_usdt: stratConfig.trade_amount_usdt,      // always USDT reference
-        amount: order.amount || null,                    // base-asset qty from Binance
-        price: order.average || order.price || price,
-        avg_fill_price: order.average || order.price || null,
+        amount_usdt: stratConfig.trade_amount_usdt,
+        amount: order.amount,
+        price: order.price,
+        avg_fill_price: order.average || order.price,
         testnet: config.testnet,
         status: order.status || 'open',
       });
 
-      log('info', `✅ Order saved | DB id=${orderId} | Binance id=${order.id} | ${symbol} ${orderSide}`);
-
+      log('info', `✅ Order saved | DB id=${orderId} | Binance id=${order.id} | ${symbol} ${orderSide} @ $${order.price}`);
     } catch (err) {
       console.error('[LiveTradeOrchestrator] handleSignal error:', err.message);
       liveTradeDb.addLog('error', `Unexpected error in handleSignal: ${err.message}`, { strategy_id: strategyId, signal_id: signalId }).catch(() => {});

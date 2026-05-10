@@ -214,7 +214,21 @@ class BinanceExecutor {
           headers: { 'X-MBX-APIKEY': this._apiKey, 'User-Agent': 'Mozilla/5.0' },
           timeout: 10000
         });
-        return res.data;
+
+        // Normalize response to standard format
+        const raw = res.data;
+        return {
+          id: raw.orderId || raw.id,
+          clientOrderId: raw.clientOrderId,
+          symbol: symbol,
+          side: side,
+          type: orderType,
+          status: raw.status?.toLowerCase() || 'open',
+          amount: parseFloat(raw.origQty || qty),
+          price: parseFloat(raw.avgPrice || raw.price || tickerRes.data.price),
+          average: parseFloat(raw.avgPrice || raw.price || tickerRes.data.price),
+          raw: raw
+        };
       } catch (e) {
         lastError = e.response?.data?.msg || e.message;
         console.warn(`[BinanceExecutor] ${env.name} Order Fail: ${lastError}`);
