@@ -94,9 +94,10 @@ Phase 3 — Parallel Delegation
 
 Whenever possible:
 
-execute independent subtasks in parallel
-reduce latency
-maximize specialist coverage
+- execute independent subtasks in parallel
+- **MANDATORY:** wait 10 seconds between summoning each new agent to avoid rate limits
+- reduce latency
+- maximize specialist coverage
 
 Example:
 
