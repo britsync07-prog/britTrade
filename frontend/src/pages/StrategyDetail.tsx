@@ -332,7 +332,7 @@ export default function StrategyDetail() {
                              </div>
                              <div className="space-y-4 max-h-[480px] overflow-y-auto pr-1 relative">
                                 {sigs.filter((s: any) => s.status === 'active').map((s: any) => (
-                                  <SignalCard key={s.id} signal={s} currentPrice={prices[s.symbol]} strategyName={strategy.name} />
+                                  <SignalCard key={s.id} signal={s} currentPrice={prices[s.symbol]} />
                                 ))}
                                 {sigs.filter((s: any) => s.status === 'active').length === 0 && (
                                   <div className="py-8 bg-white/[0.01] border border-dashed border-white/5 rounded-2xl text-center text-slate-600 text-[10px] uppercase font-bold tracking-widest">No active signals found</div>
@@ -350,7 +350,7 @@ export default function StrategyDetail() {
                            </div>
                            <div className="space-y-4 max-h-[480px] overflow-y-auto pr-1">
                               {closedSigs.map((s: any) => (
-                                <SignalCard key={s.id} signal={s} currentPrice={prices[s.symbol]} strategyName={strategy.name} />
+                                <SignalCard key={s.id} signal={s} currentPrice={prices[s.symbol]} />
                               ))}
                               {closedSigs.length === 0 && (
                                 <div className="py-8 bg-white/[0.01] border border-dashed border-white/5 rounded-2xl text-center text-slate-600 text-[10px] uppercase font-bold tracking-widest">No closed signals yet</div>
@@ -413,7 +413,7 @@ function StrategyTradingViewChart({ symbol, strategyName }: { symbol: string, st
   );
 }
 
-function SignalCard({ signal: s, currentPrice, strategyName }: { signal: any, currentPrice?: number, strategyName?: string }) {
+function SignalCard({ signal: s, currentPrice }: { signal: any, currentPrice?: number }) {
   const LEVERAGE = 5;
   const margin = s.stakeAmount || 10;         // Capital at risk (initial margin)
   const positionSize = margin * LEVERAGE;       // Total position value controlled

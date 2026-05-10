@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Wallet, TrendingUp, TrendingDown, Activity, Power, PowerOff,
+  TrendingUp, TrendingDown, Activity, Power, PowerOff,
   RefreshCw, AlertTriangle, CheckCircle, XCircle, ChevronUp, ChevronDown,
   Zap, DollarSign, BarChart2, ShieldOff
 } from 'lucide-react';
