@@ -74,8 +74,11 @@ router.post('/config', async (req, res) => {
       return res.status(400).json({ error: 'apiKey and apiSecret are required' });
     }
 
-    const apiKeyEnc = encrypt(apiKey.trim());
-    const apiSecEnc = encrypt(apiSecret.trim());
+    const cleanKey = apiKey.replace(/\s/g, '');
+    const cleanSecret = apiSecret.replace(/\s/g, '');
+
+    const apiKeyEnc = encrypt(cleanKey);
+    const apiSecEnc = encrypt(cleanSecret);
 
     await liveTradeDb.saveBinanceConfig(apiKeyEnc, apiSecEnc, testnet);
 

@@ -79,6 +79,7 @@ class LiveTradeOrchestrator {
       console.warn('[LiveTradeOrchestrator] Could not decrypt Binance credentials');
       return;
     }
+    console.log(`[LiveTradeOrchestrator] Decrypted Key Length: ${apiKey.length}, Secret Length: ${apiSecret.length}`);
     await binanceExecutor.init(apiKey, apiSecret, config.testnet === 1);
     console.log(`[LiveTradeOrchestrator] Executor booted — testnet=${config.testnet === 1}`);
   }

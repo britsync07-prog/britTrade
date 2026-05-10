@@ -41,7 +41,11 @@ class BinanceExecutor {
   }
 
   async getBalance() {
+    if (!this._initialized) return { error: 'Executor not initialized' };
+
     let spot = 0, futures = 0, errors = [];
+    
+    // For Live mode, use CCXT
     if (!this._testnet) {
       try {
         const s = await this._spotClient.fetchBalance();
@@ -49,17 +53,29 @@ class BinanceExecutor {
         const f = await this._futuresClient.fetchBalance();
         futures = f.USDT?.total ?? 0;
         return { spot, futures };
-      } catch (e) { return { error: e.message }; }
+      } catch (e) { 
+        console.error('[BinanceExecutor] Live Balance Error:', e.message);
+        return { error: e.message }; 
+      }
     }
 
+    // For Testnet/Demo mode, use manual signing (CCXT is unreliable for Demo Mode)
     const crypto = require('crypto');
     const axios = require('axios');
     const headers = { 'X-MBX-APIKEY': this._apiKey, 'User-Agent': 'Mozilla/5.0' };
 
-    // Try multiple environments (Legacy then Demo)
+    // Environments to try
     const envs = [
-      { name: 'Legacy', spot: 'https://testnet.binance.vision/api', fut: 'https://testnet.binancefuture.com/fapi' },
-      { name: 'Demo', spot: 'https://demo-api.binance.com/api', fut: 'https://demo-fapi.binance.com/fapi' }
+      { 
+        name: 'Legacy', 
+        spot: 'https://testnet.binance.vision/api/v3', 
+        fut: 'https://testnet.binancefuture.com/fapi/v2' 
+      },
+      { 
+        name: 'Demo', 
+        spot: 'https://demo-api.binance.com/api/v3', 
+        fut: 'https://demo-fapi.binance.com/fapi/v2' 
+      }
     ];
 
     let success = false;
@@ -74,28 +90,34 @@ class BinanceExecutor {
 
       // Try Futures
       try {
-        const ft = await axios.get(`${env.fut}/v1/time`, { timeout: 5000 });
-        const fp = { timestamp: ft.data.serverTime, recvWindow: 10000 };
-        const fq = Object.keys(fp).sort().map(k => `${k}=${fp[k]}`).join('&');
-        const fs = crypto.createHmac('sha256', Buffer.from(this._apiSecret, 'utf8')).update(Buffer.from(fq, 'utf8')).digest('hex');
-        const fr = await axios.get(`${env.fut}/v2/account?${fq}&signature=${fs}`, { headers, timeout: 5000 });
+        const timeRes = await axios.get(env.fut.replace('/v2', '/v1') + '/time', { timeout: 5000 });
+        const params = { timestamp: timeRes.data.serverTime, recvWindow: 10000 };
+        const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
+        const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
         
-        fr.data.assets.forEach(a => { if (a.asset === 'USDT') envFutures = parseFloat(a.walletBalance); });
-        futOk = true;
+        const res = await axios.get(`${env.fut}/account?${query}&signature=${signature}`, { headers, timeout: 5000 });
+        
+        if (res.data.assets) {
+          res.data.assets.forEach(a => { if (a.asset === 'USDT') envFutures = parseFloat(a.walletBalance); });
+          futOk = true;
+        }
       } catch (e) {
         envErrors.push(`Futures: ${e.response?.data?.msg || e.message}`);
       }
 
       // Try Spot
       try {
-        const st = await axios.get(`${env.spot}/v3/time`, { timeout: 5000 });
-        const sp = { timestamp: st.data.serverTime, recvWindow: 10000 };
-        const sq = Object.keys(sp).sort().map(k => `${k}=${sp[k]}`).join('&');
-        const ss = crypto.createHmac('sha256', Buffer.from(this._apiSecret, 'utf8')).update(Buffer.from(sq, 'utf8')).digest('hex');
-        const sr = await axios.get(`${env.spot}/v3/account?${sq}&signature=${ss}`, { headers, timeout: 5000 });
+        const timeRes = await axios.get(env.spot + '/time', { timeout: 5000 });
+        const params = { timestamp: timeRes.data.serverTime, recvWindow: 10000 };
+        const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
+        const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
 
-        sr.data.balances.forEach(b => { if (b.asset === 'USDT') envSpot = parseFloat(b.free) + parseFloat(b.locked); });
-        spotOk = true;
+        const res = await axios.get(`${env.spot}/account?${query}&signature=${signature}`, { headers, timeout: 5000 });
+
+        if (res.data.balances) {
+          res.data.balances.forEach(b => { if (b.asset === 'USDT') envSpot = parseFloat(b.free) + parseFloat(b.locked); });
+          spotOk = true;
+        }
       } catch (e) {
         envErrors.push(`Spot: ${e.response?.data?.msg || e.message}`);
       }
