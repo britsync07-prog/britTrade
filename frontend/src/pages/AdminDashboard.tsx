@@ -36,14 +36,28 @@ export default function AdminDashboard() {
   const [newPassword, setNewPassword] = useState('');
   const [stats, setStats] = useState({ totalUsers: 0, totalSales: 0, totalRevenue: 0, activeSignals: 0 });
   const [filter, setFilter] = useState<'all' | 'premium' | 'trial'>('all');
-  const [activeTab, setActiveTab] = useState<'operators' | 'support' | 'marketing' | 'livetrading'>('operators');
+  const [activeTab, setActiveTab] = useState<'operators' | 'support' | 'marketing' | 'livetrading'>('livetrading');
   const [marketingData, setMarketingData] = useState<{ events: any[], offers: any[] }>({ events: [], offers: [] });
+  const [binanceStats, setBinanceStats] = useState({ balance: 0, pnl: 0 });
 
   useEffect(() => {
     fetchData();
     fetchStats();
     fetchMarketing();
+    fetchBinance();
+    const iv = setInterval(fetchBinance, 15000);
+    return () => clearInterval(iv);
   }, []);
+
+  const fetchBinance = async () => {
+    try {
+      const res = await api.get('/admin/live-trading/dashboard');
+      setBinanceStats({
+        balance: res.data.balance.futures || 0,
+        pnl: res.data.summary.totalLivePnlUSDT || 0
+      });
+    } catch (e) {}
+  };
 
   const fetchMarketing = async () => {
     try {
@@ -221,10 +235,10 @@ export default function AdminDashboard() {
 
         {/* System Health Overview */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-          <AdminStat title="Total Operators" value={stats.totalUsers} icon={Users} color="text-cyan-400" />
-          <AdminStat title="Total Revenue" value={`$${stats.totalRevenue.toLocaleString()}`} icon={TrendingUp} color="text-emerald-400" />
+          <AdminStat title="Futures Balance" value={`$${binanceStats.balance.toLocaleString()}`} icon={TrendingUp} color="text-cyan-400" />
+          <AdminStat title="Live PnL (Open)" value={`${binanceStats.pnl >= 0 ? '+' : ''}$${binanceStats.pnl.toFixed(2)}`} icon={Activity} color={binanceStats.pnl >= 0 ? "text-emerald-400" : "text-red-400"} />
           <AdminStat title="Active Signals" value={stats.activeSignals} icon={Zap} color="text-yellow-400" />
-          <AdminStat title="Total Sales" value={stats.totalSales} icon={Activity} color="text-purple-400" />
+          <AdminStat title="Total Operators" value={stats.totalUsers} icon={Users} color="text-purple-400" />
         </div>
 
         {activeTab === 'livetrading' ? (

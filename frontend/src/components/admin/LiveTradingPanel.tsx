@@ -257,67 +257,85 @@ export default function LiveTradingPanel() {
 
       {/* Strategy configs */}
       <div className="glass-card border-white/5 overflow-hidden">
-        <div className="p-6 border-b border-white/5">
-          <h3 className="text-sm font-black text-white uppercase tracking-widest">Strategy Live Trading Config</h3>
-          <p className="text-slate-500 text-xs mt-1">Enable strategies and set USDT trade amounts</p>
+        <div className="p-8 border-b border-white/5 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white/[0.01]">
+          <div>
+            <h3 className="text-xl font-black text-white uppercase tracking-tighter flex items-center gap-3">
+              <Zap className="text-cyan-400" size={20} />
+              Live Strategy Deployment
+            </h3>
+            <p className="text-slate-500 text-xs mt-1">Configure real-time capital allocation and risk parameters.</p>
+          </div>
+          <div className="flex gap-4 p-4 bg-white/5 rounded-2xl border border-white/10">
+             <div className="text-center px-4 border-r border-white/5">
+                <div className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Total Allocated</div>
+                <div className="text-lg font-black text-white">${strategyConfigs.reduce((acc, s) => acc + (s.allocated_capital || 0), 0).toFixed(2)}</div>
+             </div>
+             <div className="text-center px-4">
+                <div className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Active Nodes</div>
+                <div className="text-lg font-black text-emerald-400">{strategyConfigs.filter(s => s.enabled).length} / {strategyConfigs.length}</div>
+             </div>
+          </div>
         </div>
         <div className="divide-y divide-white/5">
           {strategyConfigs.map(sc => (
-            <div key={sc.strategy_id} className="p-5 flex flex-wrap items-center gap-4">
-              <div className="flex-1 min-w-[160px]">
-                <div className={`text-sm font-black ${STRATEGY_COLORS[sc.strategy_id] || 'text-white'}`}>
+            <div key={sc.strategy_id} className={`p-6 flex flex-wrap items-center gap-6 transition-all ${sc.enabled ? 'bg-emerald-500/[0.02]' : ''}`}>
+              <div className="flex-1 min-w-[200px]">
+                <div className={`text-lg font-black tracking-tight ${STRATEGY_COLORS[sc.strategy_id] || 'text-white'}`}>
                   {STRATEGY_NAMES[sc.strategy_id] || `Strategy ${sc.strategy_id}`}
                 </div>
                 {editingStratId === sc.strategy_id ? (
-                  <div className="grid grid-cols-3 gap-2 mt-3">
+                  <div className="grid grid-cols-3 gap-3 mt-4 p-4 bg-white/5 rounded-2xl border border-white/5">
                     <div>
-                      <label className="text-[8px] text-slate-500 uppercase block mb-1">Trade Amt ($)</label>
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Trade Amt (USDT)</label>
                       <input type="number" value={editValues.amount} onChange={e => setEditValues({ ...editValues, amount: parseFloat(e.target.value) })}
-                        className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-white outline-none focus:border-cyan-500" />
+                        className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white font-bold outline-none focus:border-cyan-500 transition-all" />
                     </div>
                     <div>
-                      <label className="text-[8px] text-slate-500 uppercase block mb-1">Leverage (x)</label>
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Leverage (X)</label>
                       <input type="number" value={editValues.leverage} onChange={e => setEditValues({ ...editValues, leverage: parseInt(e.target.value) })}
-                        className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-white outline-none focus:border-cyan-500" />
+                        className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white font-bold outline-none focus:border-cyan-500 transition-all" />
                     </div>
                     <div>
-                      <label className="text-[8px] text-slate-500 uppercase block mb-1">Capital ($)</label>
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Total Capital ($)</label>
                       <input type="number" value={editValues.capital} onChange={e => setEditValues({ ...editValues, capital: parseFloat(e.target.value) })}
-                        className="w-full bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-white outline-none focus:border-cyan-500" />
+                        className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white font-bold outline-none focus:border-cyan-500 transition-all" />
                     </div>
                   </div>
                 ) : (
-                  <div className="text-[10px] text-slate-500 mt-0.5">
-                    ${sc.trade_amount_usdt} per trade · {sc.leverage}x · ${sc.allocated_capital || 0} Capital
+                  <div className="flex gap-4 mt-2">
+                    <div className="text-[10px] text-slate-400 font-bold uppercase"><span className="text-slate-600 mr-1">Trade:</span> ${sc.trade_amount_usdt}</div>
+                    <div className="text-[10px] text-slate-400 font-bold uppercase"><span className="text-slate-600 mr-1">Lev:</span> {sc.leverage}x</div>
+                    <div className="text-[10px] text-cyan-400/80 font-bold uppercase"><span className="text-slate-600 mr-1">Capital:</span> ${sc.allocated_capital || 0}</div>
                   </div>
                 )}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 {editingStratId === sc.strategy_id ? (
-                  <>
+                  <div className="flex flex-col gap-2">
                     <button onClick={() => handleUpdateStrategy(sc.strategy_id)}
-                      className="px-3 py-1.5 bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-lg text-[9px] font-black uppercase hover:bg-cyan-500/30 transition-all">
-                      Save
+                      className="px-6 py-2.5 bg-cyan-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-cyan-400 transition-all shadow-lg shadow-cyan-500/20">
+                      Apply Changes
                     </button>
                     <button onClick={() => setEditingStratId(null)}
-                      className="px-3 py-1.5 bg-white/5 text-slate-400 border border-white/10 rounded-lg text-[9px] font-black uppercase hover:bg-white/10 transition-all">
+                      className="px-6 py-2.5 bg-white/5 text-slate-400 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all">
                       Cancel
                     </button>
-                  </>
+                  </div>
                 ) : (
                   <button onClick={() => {
                     setEditingStratId(sc.strategy_id);
                     setEditValues({ amount: sc.trade_amount_usdt, leverage: sc.leverage, capital: sc.allocated_capital });
                   }}
-                    className="p-2 hover:bg-white/5 text-slate-500 hover:text-white transition-all">
-                    <Zap size={14} />
+                    className="h-12 px-6 flex items-center gap-2 bg-white/5 text-slate-400 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all">
+                    <Settings size={14} />
+                    Configure
                   </button>
                 )}
                 <button onClick={() => handleStrategyToggle(sc.strategy_id, sc.enabled)}
-                  className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${
-                    sc.enabled ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-white/5 text-slate-500 border-white/10 hover:border-white/20'
+                  className={`h-12 px-8 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-all ${
+                    sc.enabled ? 'bg-emerald-500 text-white border-emerald-400 shadow-lg shadow-emerald-500/20' : 'bg-slate-800 text-slate-500 border-white/5 hover:border-white/10'
                   }`}>
-                  {sc.enabled ? '● Active' : '○ Inactive'}
+                  {sc.enabled ? '● DEPLOYED' : '○ OFFLINE'}
                 </button>
               </div>
             </div>
