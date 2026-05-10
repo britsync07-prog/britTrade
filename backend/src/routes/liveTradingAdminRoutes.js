@@ -129,8 +129,8 @@ router.post('/config/test', async (req, res) => {
       success: true,
       testnet: config?.testnet === 1,
       balance: {
-        spotUSDT: balance.spot,
-        futuresUSDT: balance.futures,
+        spot: balance.spot,
+        futures: balance.futures,
       },
     });
   } catch (err) {
