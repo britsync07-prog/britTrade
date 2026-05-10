@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   TrendingUp, TrendingDown, Activity, Power, PowerOff,
   RefreshCw, AlertTriangle, CheckCircle, XCircle, ChevronUp, ChevronDown,
-  Zap, DollarSign, BarChart2, ShieldOff
+  Zap, DollarSign, BarChart2, ShieldOff, Settings
 } from 'lucide-react';
 import api from '../../services/api';
 
