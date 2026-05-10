@@ -235,7 +235,7 @@ export default function AdminDashboard() {
 
         {/* System Health Overview */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-          <AdminStat title="Futures Balance" value={`$${binanceStats.balance.toLocaleString()}`} icon={TrendingUp} color="text-cyan-400" />
+          <AdminStat title="Futures Balance" value={`$${binanceStats.balance.toFixed(2)}`} icon={TrendingUp} color="text-cyan-400" />
           <AdminStat title="Live PnL (Open)" value={`${binanceStats.pnl >= 0 ? '+' : ''}$${binanceStats.pnl.toFixed(2)}`} icon={Activity} color={binanceStats.pnl >= 0 ? "text-emerald-400" : "text-red-400"} />
           <AdminStat title="Active Signals" value={stats.activeSignals} icon={Zap} color="text-yellow-400" />
           <AdminStat title="Total Operators" value={stats.totalUsers} icon={Users} color="text-purple-400" />
