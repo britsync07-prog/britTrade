@@ -217,6 +217,8 @@ class BinanceExecutor {
 
         // Normalize response to standard format
         const raw = res.data;
+        const fillPrice = parseFloat(raw.avgPrice) || parseFloat(raw.price) || parseFloat(tickerRes.data.price);
+        
         return {
           id: raw.orderId || raw.id,
           clientOrderId: raw.clientOrderId,
@@ -225,8 +227,8 @@ class BinanceExecutor {
           type: orderType,
           status: raw.status?.toLowerCase() || 'open',
           amount: parseFloat(raw.origQty || qty),
-          price: parseFloat(raw.avgPrice || raw.price || tickerRes.data.price),
-          average: parseFloat(raw.avgPrice || raw.price || tickerRes.data.price),
+          price: fillPrice,
+          average: fillPrice,
           raw: raw
         };
       } catch (e) {

@@ -191,14 +191,13 @@ class LiveTradeOrchestrator {
         order_type: order.type || 'market',
         amount_usdt: stratConfig.trade_amount_usdt,
         amount: order.amount,
-        price: order.price,
-        avg_fill_price: order.average || order.price,
+        price: parseFloat(order.price) || 0,
+        avg_fill_price: parseFloat(order.average || order.price) || 0,
         testnet: config.testnet,
         status: order.status || 'open',
-      });
+        });
 
-      log('info', `✅ Order saved | DB id=${orderId} | Binance id=${order.id} | ${symbol} ${orderSide} @ $${order.price}`);
-    } catch (err) {
+        log('info', `✅ Order saved | DB id=${orderId} | Binance id=${order.id} | ${symbol} ${orderSide} @ $${parseFloat(order.price).toFixed(4)}`);    } catch (err) {
       console.error('[LiveTradeOrchestrator] handleSignal error:', err.message);
       liveTradeDb.addLog('error', `Unexpected error in handleSignal: ${err.message}`, { strategy_id: strategyId, signal_id: signalId }).catch(() => {});
     }
