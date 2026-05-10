@@ -136,29 +136,91 @@ class BinanceExecutor {
   }
 
   async placeOrder(symbol, side, amountUSDT, orderType = 'market', price = null, strategyId = 1) {
-    // Similar fallback logic for order placement
+    if (!this._testnet) {
+       // Live mode logic using CCXT
+       const client = this._client(strategyId);
+       try {
+         const ticker = await client.fetchTicker(symbol);
+         const qty = amountUSDT / ticker.last;
+         const order = await client.createOrder(symbol, orderType, side, qty, price);
+         return order;
+       } catch (e) { return { error: e.message }; }
+    }
+
+    // Testnet/Demo mode manual logic
     const crypto = require('crypto');
     const axios = require('axios');
     const isFutures = FUTURES_STRATEGIES.has(Number(strategyId));
     
-    const hosts = isFutures 
-      ? ['https://testnet.binancefuture.com/fapi', 'https://demo-fapi.binance.com/fapi']
-      : ['https://testnet.binance.vision/api', 'https://demo-api.binance.com/api'];
-
-    for (const host of hosts) {
-      try {
-        const t = await axios.get(`${host}/v1/time`);
-        const ticker = await axios.get(`${host}/${isFutures ? 'v1' : 'v3'}/ticker/price?symbol=${symbol.replace('/', '')}`);
-        const qty = (amountUSDT / parseFloat(ticker.data.price)).toFixed(5);
-        const p = { symbol: symbol.replace('/', ''), side: side.toUpperCase(), type: orderType.toUpperCase(), quantity: qty, timestamp: t.data.serverTime, recvWindow: 10000 };
-        if (orderType === 'limit' && price) { p.price = price; p.timeInForce = 'GTC'; }
-        const q = Object.keys(p).sort().map(k => `${k}=${p[k]}`).join('&');
-        const s = crypto.createHmac('sha256', Buffer.from(this._apiSecret, 'utf8')).update(Buffer.from(q, 'utf8')).digest('hex');
-        const res = await axios.post(`${host}/${isFutures ? 'v1' : 'v3'}/order?${q}&signature=${s}`, null, { headers: { 'X-MBX-APIKEY': this._apiKey } });
-        return res.data;
-      } catch (e) { /* try next host */ }
+    // Normalize symbol for Binance API
+    let bSymbol = symbol.replace('/', '').replace(':', '').replace('USDTUSDT', 'USDT');
+    if (isFutures) {
+      if (bSymbol === 'SHIBUSDT') bSymbol = '1000SHIBUSDT';
+      if (bSymbol === 'PEPEUSDT') bSymbol = '1000PEPEUSDT';
+      if (bSymbol === 'BONKUSDT') bSymbol = '1000BONKUSDT';
+      if (bSymbol === 'FLOKIUSDT') bSymbol = '1000FLOKIUSDT';
     }
-    return { error: 'Failed on all environments' };
+
+    const envs = isFutures 
+      ? [
+          { name: 'Legacy', url: 'https://testnet.binancefuture.com/fapi' },
+          { name: 'Demo', url: 'https://demo-fapi.binance.com/fapi' }
+        ]
+      : [
+          { name: 'Legacy', url: 'https://testnet.binance.vision/api' },
+          { name: 'Demo', url: 'https://demo-api.binance.com/api' }
+        ];
+
+    let lastError = null;
+    for (const env of envs) {
+      try {
+        if (!this._precisions) this._precisions = {};
+        if (!this._precisions[bSymbol]) {
+          try {
+            const infoRes = await axios.get(`${env.url}/v1/exchangeInfo`, { timeout: 5000 });
+            for (const s of infoRes.data.symbols) {
+              this._precisions[s.symbol] = s.quantityPrecision;
+            }
+          } catch (e) {
+            console.warn(`[BinanceExecutor] Failed to fetch exchangeInfo: ${e.message}`);
+          }
+        }
+
+        const timeRes = await axios.get(`${env.url}/v1/time`, { timeout: 5000 });
+        const tickerRes = await axios.get(`${env.url}/v1/ticker/price?symbol=${bSymbol}`, { timeout: 5000 });
+        
+        const prec = this._precisions[bSymbol] !== undefined ? this._precisions[bSymbol] : (isFutures ? 3 : 5);
+        const rawQty = amountUSDT / parseFloat(tickerRes.data.price);
+        
+        // Truncate instead of round to avoid Insufficient Balance errors
+        const factor = Math.pow(10, prec);
+        const qty = (Math.floor(rawQty * factor) / factor).toFixed(prec);
+
+        const params = {
+          symbol: bSymbol,
+          side: side.toUpperCase(),
+          type: orderType.toUpperCase(),
+          quantity: qty,
+          timestamp: timeRes.data.serverTime,
+          recvWindow: 10000
+        };
+        if (orderType === 'limit' && price) { params.price = price; params.timeInForce = 'GTC'; }
+        
+        const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
+        const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
+        
+        console.log(`[BinanceExecutor] Placing ${env.name} ${isFutures?'Futures':'Spot'} Order: ${side} ${qty} ${bSymbol}`);
+        const res = await axios.post(`${env.url}/v1/order?${query}&signature=${signature}`, null, { 
+          headers: { 'X-MBX-APIKEY': this._apiKey, 'User-Agent': 'Mozilla/5.0' },
+          timeout: 10000
+        });
+        return res.data;
+      } catch (e) {
+        lastError = e.response?.data?.msg || e.message;
+        console.warn(`[BinanceExecutor] ${env.name} Order Fail: ${lastError}`);
+      }
+    }
+    return { error: lastError || 'Failed to place order' };
   }
 
   _normalizeSymbol(s) { return s.replace(':USDT', '').replace('USDTUSDT', 'USDT'); }
