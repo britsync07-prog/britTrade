@@ -56,7 +56,8 @@ class SignalEngine {
   async fetchOHLC(symbol, interval) {
     const bSymbol = symbol.replace('/', '').replace(':', '').replace('USDTUSDT', 'USDT');
     const limit = 100;
-    const res = await axios.get(`https://api.binance.com/api/v3/klines?symbol=${bSymbol}&interval=${interval}&limit=${limit}`);
+    // Use Futures API instead of Spot
+    const res = await axios.get(`https://fapi.binance.com/fapi/v1/klines?symbol=${bSymbol}&interval=${interval}&limit=${limit}`);
     
     const highs = [], lows = [], closes = [], volumes = [];
     res.data.forEach(k => {
@@ -91,7 +92,7 @@ class SignalEngine {
 
           let status = 'active';
           let pnl = 0;
-          let leverage = sig.strategyId === 3 ? 5 : 1;
+          let leverage = 5; // Default to 5x leverage for all futures strategies
 
           if (sig.side === 'buy' || sig.side === 'long') pnl = ((currentPrice - sig.price) / sig.price) * 100 * leverage;
           else pnl = ((sig.price - currentPrice) / sig.price) * 100 * leverage;
@@ -203,7 +204,7 @@ class SignalEngine {
             if (isEntry) { if (!activeSignal) shouldTrigger = true; } 
             else if (activeSignal) {
                 const activeSide = activeSignal.side.toLowerCase();
-                const leverage = id === 3 ? 5 : 1;
+                const leverage = 5;
                 const fees = leverage * 0.1; // 0.1% per trade (entry+exit approx)
                 const currentGrossPnl = (activeSide === 'buy' || activeSide === 'long') 
                     ? ((currentPrice - activeSignal.price) / activeSignal.price) * 100 * leverage 
@@ -219,7 +220,7 @@ class SignalEngine {
 
                if (!isEntry && activeSignal) {
                  const entryPrice = activeSignal.price || currentPrice;
-                 const leverage = id === 3 ? 5 : 1;
+                 const leverage = 5;
                  pnl = (activeSignal.side === 'buy' || activeSignal.side === 'long') ? ((currentPrice - entryPrice) / entryPrice) * 100 * leverage : ((entryPrice - currentPrice) / entryPrice) * 100 * leverage;
                  pnl = pnl - (leverage * 0.1); // Deduct 0.1% exchange fee
                  const liquidationThreshold = leverage > 1 ? -85 : -100;
@@ -231,7 +232,7 @@ class SignalEngine {
                const result = await db.run("INSERT INTO signals (strategyId, symbol, side, price, tp, sl, status, pnl, highestPrice, entryCount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [id, symbol, signalSide, currentPrice, initialTp, initialSl, finalStatus, pnl, currentPrice, 1]);
 
                if (isEntry) {
-                  const leverage = id === 3 ? 5 : 1;
+                  const leverage = 5;
                   // Start Paper Trade for this signal
                   await paperTradeService.openPaperTrade(id, result.lastID, symbol, signalSide, currentPrice, leverage);
                   await getTelegramService().broadcastSignal({ strategyId: id, strategyName: strategy.name, symbol, side: signalSide, price: currentPrice, tp: initialTp, sl: initialSl, stakeAmount: 10 });

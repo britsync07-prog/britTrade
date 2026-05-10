@@ -18,7 +18,7 @@ const services: Service[] = [
     number: "001",
     title: "Low Risk Strategy",
     description:
-      "Conservative spot trading focusing on BTC and ETH. Minimal drawdown with consistent long-term growth.",
+      "Low-leverage futures trading focusing on BTC and ETH. Minimal drawdown with consistent long-term growth.",
     icon: Shield,
     gradient: "from-emerald-500/50 to-emerald-800/50",
     price: "$25",
@@ -29,7 +29,7 @@ const services: Service[] = [
     number: "002",
     title: "Medium Risk Strategy",
     description:
-      "Dynamic altcoin rotation and mid-cap gems. Balanced approach for higher returns with managed volatility.",
+      "Dynamic futures rotation and mid-cap gems. Balanced approach for higher returns with managed volatility.",
     icon: Coins,
     gradient: "from-blue-500/50 to-blue-800/50",
     price: "$20",
@@ -40,7 +40,7 @@ const services: Service[] = [
     number: "003",
     title: "High Risk Strategy",
     description:
-      "Leveraged futures scalping and momentum trading. Engineered for aggressive growth in volatile markets.",
+      "High-leverage futures scalping and momentum trading. Engineered for aggressive growth in volatile markets.",
     icon: Rocket,
     gradient: "from-purple-500/50 to-purple-800/50",
     price: "$15",
@@ -51,7 +51,7 @@ const services: Service[] = [
     number: "004",
     title: "All Strategies Bundle",
     description:
-      "Complete access to all strategies, custom alerts, and priority AI signals. The ultimate trading toolkit.",
+      "Complete access to all futures strategies, custom alerts, and priority AI signals. The ultimate trading toolkit.",
     icon: Layers,
     gradient: "from-cyan-500/50 to-cyan-800/50",
     price: "$50",

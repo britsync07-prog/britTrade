@@ -76,7 +76,7 @@ class StrategyService {
       for (const sig of activeSignals) {
         const currentPrice = signalEngine.latestPrices[sig.symbol];
         if (currentPrice && sig.price) {
-          const leverage = sig.strategyId === 3 ? 5 : 1;
+          const leverage = 5; // Default to 5x leverage for all futures strategies
           let pnlPct = 0;
           if (sig.side === 'buy' || sig.side === 'long') {
             pnlPct = ((currentPrice - sig.price) / sig.price) * 100 * leverage;
@@ -162,7 +162,8 @@ class StrategyService {
       const intervalMap = { '5m': '5m', '15m': '15m', '1h': '1h', '4h': '4h', '1d': '1d' };
       const interval = intervalMap[timeframe] || '1h';
 
-      const res = await axios.get(`https://api.binance.com/api/v3/klines?symbol=${bSymbol}&interval=${interval}&limit=100`);
+      // Use Futures API instead of Spot
+      const res = await axios.get(`https://fapi.binance.com/fapi/v1/klines?symbol=${bSymbol}&interval=${interval}&limit=100`);
       return res.data.map(k => [k[0], parseFloat(k[1]), parseFloat(k[2]), parseFloat(k[3]), parseFloat(k[4])]);
     } catch (e) {
       return [];

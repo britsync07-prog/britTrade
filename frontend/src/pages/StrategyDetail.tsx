@@ -143,11 +143,9 @@ export default function StrategyDetail() {
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 Live Signal Mining Enabled
               </div>
-              {strategy.name === 'UltimateFuturesScalper' && (
-                <Badge variant="outline" className="bg-purple-500/10 text-purple-400 border-purple-500/20 px-2 py-0 rounded text-[9px] font-bold">
-                  5X LEVERAGE
-                </Badge>
-              )}
+              <Badge variant="outline" className="bg-purple-500/10 text-purple-400 border-purple-500/20 px-2 py-0 rounded text-[9px] font-bold">
+                5X LEVERAGE
+              </Badge>
             </div>
             <p className="text-slate-400 max-w-2xl mt-6 leading-relaxed text-sm">
               {strategy?.description || "High-performance automated trading strategy utilizing advanced deep learning models for predictive market analysis."}
@@ -416,8 +414,7 @@ function StrategyTradingViewChart({ symbol, strategyName }: { symbol: string, st
 }
 
 function SignalCard({ signal: s, currentPrice, strategyName }: { signal: any, currentPrice?: number, strategyName?: string }) {
-  const isFutures = strategyName === 'UltimateFuturesScalper';
-  const LEVERAGE = isFutures ? 5 : 1;
+  const LEVERAGE = 5;
   const margin = s.stakeAmount || 10;         // Capital at risk (initial margin)
   const positionSize = margin * LEVERAGE;       // Total position value controlled
   const entryPrice = Number(s.price);
@@ -432,13 +429,10 @@ function SignalCard({ signal: s, currentPrice, strategyName }: { signal: any, cu
     return price.toFixed(8);
   };
 
-  // --- LIQUIDATION PRICE ---
   // At 5x leverage you lose 100% of margin on a 20% adverse price move.
   // LONG  liq = entryPrice × (1 - 1/leverage) = entry × 0.80
   // SHORT liq = entryPrice × (1 + 1/leverage) = entry × 1.20
-  const liqPrice = isFutures
-    ? (isLong ? entryPrice * (1 - 1 / LEVERAGE) : entryPrice * (1 + 1 / LEVERAGE))
-    : null;
+  const liqPrice = (isLong ? entryPrice * (1 - 1 / LEVERAGE) : entryPrice * (1 + 1 / LEVERAGE));
 
   // --- PNL CALCULATION ---
   let pnlPct = Number(s.pnl) || 0;
@@ -452,7 +446,7 @@ function SignalCard({ signal: s, currentPrice, strategyName }: { signal: any, cu
 
   // Dollar P&L = Margin × (pnlPct / 100)
   const pnlUsd = margin * (pnlPct / 100);
-  const isLiquidated = isFutures && pnlPct <= -100;
+  const isLiquidated = pnlPct <= -100;
 
   const statusLabel = isLiquidated
     ? 'LIQUIDATED'
@@ -476,9 +470,7 @@ function SignalCard({ signal: s, currentPrice, strategyName }: { signal: any, cu
             <Badge className={`text-[8px] px-1.5 py-0 h-4 leading-none font-bold ${isLong ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
               {isLong ? 'LONG' : 'SHORT'}
             </Badge>
-            {isFutures && (
-              <span className="text-[8px] font-bold text-purple-400 tracking-widest bg-purple-400/5 px-1.5 py-0.5 rounded border border-purple-400/20">5X</span>
-            )}
+            <span className="text-[8px] font-bold text-purple-400 tracking-widest bg-purple-400/5 px-1.5 py-0.5 rounded border border-purple-400/20">5X</span>
           </div>
         </div>
         <div className="text-right">
@@ -490,25 +482,23 @@ function SignalCard({ signal: s, currentPrice, strategyName }: { signal: any, cu
       </div>
 
       {/* ── Futures Trade Breakdown ── */}
-      {isFutures && (
-        <div className="mx-4 mb-3 rounded-lg bg-purple-500/5 border border-purple-500/10 p-2.5 grid grid-cols-3 gap-2 text-center">
-          <div>
-            <div className="text-[7px] text-slate-500 uppercase font-black tracking-wider mb-0.5">Margin Used</div>
-            <div className="text-[10px] font-bold font-mono text-purple-300">${margin.toFixed(2)}</div>
-            <div className="text-[7px] text-slate-600 mt-0.5">your capital at risk</div>
-          </div>
-          <div className="border-x border-purple-500/10">
-            <div className="text-[7px] text-slate-500 uppercase font-black tracking-wider mb-0.5">Position Size</div>
-            <div className="text-[10px] font-bold font-mono text-white">${positionSize.toFixed(2)}</div>
-            <div className="text-[7px] text-slate-600 mt-0.5">margin × {LEVERAGE}x leverage</div>
-          </div>
-          <div>
-            <div className="text-[7px] text-rose-500/70 uppercase font-black tracking-wider mb-0.5">Liq. Price</div>
-            <div className="text-[10px] font-bold font-mono text-rose-400">${formatPrice(liqPrice)}</div>
-            <div className="text-[7px] text-slate-600 mt-0.5">{isLong ? '−20% move wipes margin' : '+20% move wipes margin'}</div>
-          </div>
+      <div className="mx-4 mb-3 rounded-lg bg-purple-500/5 border border-purple-500/10 p-2.5 grid grid-cols-3 gap-2 text-center">
+        <div>
+          <div className="text-[7px] text-slate-500 uppercase font-black tracking-wider mb-0.5">Margin Used</div>
+          <div className="text-[10px] font-bold font-mono text-purple-300">${margin.toFixed(2)}</div>
+          <div className="text-[7px] text-slate-600 mt-0.5">your capital at risk</div>
         </div>
-      )}
+        <div className="border-x border-purple-500/10">
+          <div className="text-[7px] text-slate-500 uppercase font-black tracking-wider mb-0.5">Position Size</div>
+          <div className="text-[10px] font-bold font-mono text-white">${positionSize.toFixed(2)}</div>
+          <div className="text-[7px] text-slate-600 mt-0.5">margin × {LEVERAGE}x leverage</div>
+        </div>
+        <div>
+          <div className="text-[7px] text-rose-500/70 uppercase font-black tracking-wider mb-0.5">Liq. Price</div>
+          <div className="text-[10px] font-bold font-mono text-rose-400">${formatPrice(liqPrice)}</div>
+          <div className="text-[7px] text-slate-600 mt-0.5">{isLong ? '−20% move wipes margin' : '+20% move wipes margin'}</div>
+        </div>
+      </div>
 
       {/* ── TP / SL / PnL ── */}
       <div className="border-t border-white/5 grid grid-cols-3 divide-x divide-white/5 bg-white/[0.01]">
@@ -542,7 +532,7 @@ function SignalCard({ signal: s, currentPrice, strategyName }: { signal: any, cu
             </div>
             <div className={`text-sm font-bold font-mono mt-0.5 ${pnlUsd >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
               {pnlUsd >= 0 ? '+' : '-'}${Math.abs(pnlUsd).toFixed(2)}
-              {isFutures && pnlUsd < 0 && <span className="text-slate-500 font-normal text-[10px] ml-1">(of ${margin.toFixed(2)} margin)</span>}
+              <span className="text-slate-500 font-normal text-[10px] ml-1">(of ${margin.toFixed(2)} margin)</span>
             </div>
           </div>
         )}
@@ -551,9 +541,7 @@ function SignalCard({ signal: s, currentPrice, strategyName }: { signal: any, cu
       {/* ── Footer ── */}
       <div className="flex items-center justify-between px-4 py-2 border-t border-white/5">
         <div className="text-[8px] text-slate-600 font-bold uppercase tracking-tight">
-          {isFutures
-            ? `MARGIN $${margin.toFixed(2)} · POS $${positionSize.toFixed(2)} · ${LEVERAGE}X`
-            : `STAKE: $${margin.toFixed(2)}`}
+          MARGIN ${margin.toFixed(2)} · POS ${positionSize.toFixed(2)} · {LEVERAGE}X
         </div>
         {s.status === 'active' && (
           <Badge className="bg-purple-500/20 text-purple-400 border-none px-1.5 py-0 h-4 text-[7px] font-black tracking-widest">LIVE</Badge>

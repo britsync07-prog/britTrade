@@ -74,7 +74,7 @@ export default function LiveTradingPanel() {
     setTesting(true); setTestResult(null);
     try {
       const res = await api.post('/admin/live-trading/config/test');
-      setTestResult({ ok: true, msg: `✅ Connected! Spot: $${res.data.balance.spotUSDT?.toFixed(2)} | Futures: $${res.data.balance.futuresUSDT?.toFixed(2)}` });
+      setTestResult({ ok: true, msg: `✅ Connected! Futures Balance: $${res.data.balance.futures?.toFixed(2) || '0.00'}` });
     } catch (err: any) {
       setTestResult({ ok: false, msg: err.response?.data?.error || 'Connection failed' });
     } finally { setTesting(false); }
@@ -168,9 +168,7 @@ export default function LiveTradingPanel() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
-        <StatCard icon={Wallet} label="Spot Balance" color="text-cyan-400"
-          value={balance.spot !== null ? `$${balance.spot.toFixed(2)}` : balance.error ? 'Error' : 'N/A'} />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         <StatCard icon={BarChart2} label="Futures Balance" color="text-purple-400"
           value={balance.futures !== null ? `$${balance.futures.toFixed(2)}` : 'N/A'} />
         <StatCard icon={Activity} label="Open Trades" color="text-yellow-400"

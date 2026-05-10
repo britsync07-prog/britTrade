@@ -7,7 +7,7 @@
 
 const ccxt = require('ccxt');
 
-const FUTURES_STRATEGIES = new Set([3]);
+const FUTURES_STRATEGIES = new Set([1, 2, 3]);
 
 class BinanceExecutor {
   constructor() {
@@ -63,34 +63,54 @@ class BinanceExecutor {
     ];
 
     let success = false;
+    let finalErrors = [];
+
     for (const env of envs) {
+      let envSpot = 0;
+      let envFutures = 0;
+      let spotOk = false;
+      let futOk = false;
+      let envErrors = [];
+
+      // Try Futures
       try {
-        // Futures
-        const ft = await axios.get(`${env.fut}/v1/time`);
+        const ft = await axios.get(`${env.fut}/v1/time`, { timeout: 5000 });
         const fp = { timestamp: ft.data.serverTime, recvWindow: 10000 };
         const fq = Object.keys(fp).sort().map(k => `${k}=${fp[k]}`).join('&');
         const fs = crypto.createHmac('sha256', Buffer.from(this._apiSecret, 'utf8')).update(Buffer.from(fq, 'utf8')).digest('hex');
-        const fr = await axios.get(`${env.fut}/v2/account?${fq}&signature=${fs}`, { headers });
+        const fr = await axios.get(`${env.fut}/v2/account?${fq}&signature=${fs}`, { headers, timeout: 5000 });
         
-        // Spot
-        const st = await axios.get(`${env.spot}/v3/time`);
+        fr.data.assets.forEach(a => { if (a.asset === 'USDT') envFutures = parseFloat(a.walletBalance); });
+        futOk = true;
+      } catch (e) {
+        envErrors.push(`Futures: ${e.response?.data?.msg || e.message}`);
+      }
+
+      // Try Spot
+      try {
+        const st = await axios.get(`${env.spot}/v3/time`, { timeout: 5000 });
         const sp = { timestamp: st.data.serverTime, recvWindow: 10000 };
         const sq = Object.keys(sp).sort().map(k => `${k}=${sp[k]}`).join('&');
         const ss = crypto.createHmac('sha256', Buffer.from(this._apiSecret, 'utf8')).update(Buffer.from(sq, 'utf8')).digest('hex');
-        const sr = await axios.get(`${env.spot}/v3/account?${sq}&signature=${ss}`, { headers });
+        const sr = await axios.get(`${env.spot}/v3/account?${sq}&signature=${ss}`, { headers, timeout: 5000 });
 
-        // Sum up
-        fr.data.assets.forEach(a => { if (a.asset === 'USDT') futures = parseFloat(a.walletBalance); });
-        sr.data.balances.forEach(b => { if (b.asset === 'USDT') spot = parseFloat(b.free) + parseFloat(b.locked); });
-        
-        success = true;
-        break; // Exit loop on success
+        sr.data.balances.forEach(b => { if (b.asset === 'USDT') envSpot = parseFloat(b.free) + parseFloat(b.locked); });
+        spotOk = true;
       } catch (e) {
-        errors.push(`${env.name}: ${e.response?.data?.msg || e.message}`);
+        envErrors.push(`Spot: ${e.response?.data?.msg || e.message}`);
+      }
+
+      if (spotOk || futOk) {
+        spot = envSpot;
+        futures = envFutures;
+        success = true;
+        break; 
+      } else {
+        finalErrors.push(`${env.name} -> [${envErrors.join(', ')}]`);
       }
     }
 
-    return success ? { spot, futures } : { error: errors.join(' | ') };
+    return success ? { spot, futures } : { error: finalErrors.join(' | ') };
   }
 
   async placeOrder(symbol, side, amountUSDT, orderType = 'market', price = null, strategyId = 1) {
