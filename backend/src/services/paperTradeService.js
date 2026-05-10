@@ -124,7 +124,13 @@ class PaperTradeService {
 
   async fetchCurrentPrice(symbol) {
     try {
-      const bSymbol = symbol.replace('/', '').replace(':', '').replace('USDTUSDT', 'USDT');
+      let bSymbol = symbol.replace('/', '').replace(':', '').replace('USDTUSDT', 'USDT');
+      // Handle special Binance Futures symbols
+      if (bSymbol === 'SHIBUSDT') bSymbol = '1000SHIBUSDT';
+      if (bSymbol === 'PEPEUSDT') bSymbol = '1000PEPEUSDT';
+      if (bSymbol === 'BONKUSDT') bSymbol = '1000BONKUSDT';
+      if (bSymbol === 'FLOKIUSDT') bSymbol = '1000FLOKIUSDT';
+
       // Use Futures API instead of Spot
       const res = await axios.get(`https://fapi.binance.com/fapi/v1/ticker/price?symbol=${bSymbol}`);
       return parseFloat(res.data.price);

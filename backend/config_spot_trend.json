@@ -16,12 +16,16 @@
     "exchange": {
         "name": "binance",
         "pair_whitelist": [
-            "XRP/USDT",
-            "LINK/USDT",
-            "BNB/USDT",
             "BTC/USDT",
+            "ETH/USDT",
+            "BNB/USDT",
             "SOL/USDT",
-            "ETH/USDT"
+            "XRP/USDT",
+            "ADA/USDT",
+            "LTC/USDT",
+            "LINK/USDT",
+            "MATIC/USDT",
+            "AVAX/USDT"
         ],
         "pair_blacklist": []
     },

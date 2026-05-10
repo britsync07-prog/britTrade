@@ -10,12 +10,23 @@
     "strategy_path": "backtest_mass/user_data/strategies/",
     "pairlists": [{"method": "StaticPairList"}],
     "exchange": {
-        "name": "bybit",
+        "name": "binance",
         "pair_whitelist": [
-            "BTC/USDT:USDT", "ETH/USDT:USDT", "BNB/USDT:USDT", "ADA/USDT:USDT", 
-            "XRP/USDT:USDT", "SOL/USDT:USDT", "LINK/USDT:USDT", "LTC/USDT:USDT",
-            "TRX/USDT:USDT", "XLM/USDT:USDT", "ETC/USDT:USDT", "MATIC/USDT:USDT",
-            "DOGE/USDT:USDT", "SHIB/USDT:USDT", "AVAX/USDT:USDT", "DOT/USDT:USDT"
+            "BTC/USDT",
+            "ETH/USDT",
+            "BNB/USDT",
+            "ADA/USDT", 
+            "XRP/USDT",
+            "SOL/USDT",
+            "LINK/USDT",
+            "LTC/USDT",
+            "TRX/USDT",
+            "XLM/USDT",
+            "ETC/USDT",
+            "MATIC/USDT",
+            "DOGE/USDT",
+            "AVAX/USDT",
+            "DOT/USDT"
         ]
     },
     "entry_pricing": {"price_side": "other", "use_order_book": false},

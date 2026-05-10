@@ -158,7 +158,14 @@ class StrategyService {
   async getChartHistory(symbol, timeframe = '1h') {
     try {
       const symbolMap = { 'BTC/USDT': 'BTCUSDT', 'ETH/USDT': 'ETHUSDT', 'SOL/USDT': 'SOLUSDT', 'ADA/USDT': 'ADAUSDT', 'XRP/USDT': 'XRPUSDT' };
-      const bSymbol = symbolMap[symbol] || 'BTCUSDT';
+      let bSymbol = symbolMap[symbol] || symbol.replace('/', '').replace(':', '').replace('USDTUSDT', 'USDT');
+      
+      // Handle special Binance Futures symbols
+      if (bSymbol === 'SHIBUSDT') bSymbol = '1000SHIBUSDT';
+      if (bSymbol === 'PEPEUSDT') bSymbol = '1000PEPEUSDT';
+      if (bSymbol === 'BONKUSDT') bSymbol = '1000BONKUSDT';
+      if (bSymbol === 'FLOKIUSDT') bSymbol = '1000FLOKIUSDT';
+
       const intervalMap = { '5m': '5m', '15m': '15m', '1h': '1h', '4h': '4h', '1d': '1d' };
       const interval = intervalMap[timeframe] || '1h';
 
