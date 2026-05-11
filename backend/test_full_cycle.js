@@ -21,6 +21,10 @@ async function testFullCycle() {
     max_open_orders: 10
   });
 
+  // CLEANUP: Close any old ETH/USDT trades for this strategy so they don't spoil the test
+  console.log('[Cleanup] Closing old test trades in DB...');
+  await liveTradeDb.run("UPDATE live_orders SET status='CLOSED' WHERE strategy_id=? AND symbol=? AND status IN ('OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED')", [STRATEGY_ID, SYMBOL]);
+
   // 3. Step A: SEND ENTRY SIGNAL
   const entrySignal = {
     strategyId: STRATEGY_ID,
