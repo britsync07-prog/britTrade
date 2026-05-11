@@ -11,17 +11,17 @@ const liveTradeDb = require('./src/liveTrading/liveTradeDb');
 
 async function test() {
   console.log('>>> Starting Live Trade Open-Only Test <<<');
-  
+
   // 1. Initialize DB and Orchestrator
   await liveTradeOrchestrator.initialize();
-  
+
   // 2. Ensure Strategy 3 is enabled and has $20 trade amount + 5x leverage
   console.log('Configuring Strategy 3...');
   await liveTradeDb.initLiveTradeDb();
   await liveTradeDb.updateStrategyConfig(3, {
     enabled: true,
-    trade_amount_usdt: 20,
-    allocated_capital: 1000,
+    trade_amount_usdt: 10,
+    allocated_capital: 100,
     leverage: 5
   });
 
