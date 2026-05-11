@@ -3,25 +3,25 @@
 /**
  * test_live_trade.js
  * =================
- * Test script to verify the live trading orchestrator logic.
+ * Test script to OPEN a trade and leave it open for dashboard testing.
  */
 
 const liveTradeOrchestrator = require('./src/liveTrading/liveTradeOrchestrator');
 const liveTradeDb = require('./src/liveTrading/liveTradeDb');
 
 async function test() {
-  console.log('>>> Starting Live Trade Test <<<');
+  console.log('>>> Starting Live Trade Open-Only Test <<<');
   
   // 1. Initialize DB and Orchestrator
   await liveTradeOrchestrator.initialize();
   
-  // 2. Ensure Strategy 3 is enabled and has $21 trade amount
-  console.log('Enabling Strategy 3 in DB...');
-  await liveTradeDb.initLiveTradeDb(); // run migrations
+  // 2. Ensure Strategy 3 is enabled and has $20 trade amount + 5x leverage
+  console.log('Configuring Strategy 3...');
+  await liveTradeDb.initLiveTradeDb();
   await liveTradeDb.updateStrategyConfig(3, {
     enabled: true,
-    trade_amount_usdt: 10,
-    allocated_capital: 500,
+    trade_amount_usdt: 20,
+    allocated_capital: 1000,
     leverage: 5
   });
 
@@ -30,31 +30,15 @@ async function test() {
     strategyId: 3,
     symbol: 'BTC/USDT',
     side: 'buy',
-    price: 60000,
-    signalId: 9999, // dummy
+    price: 81000,
+    signalId: Math.floor(Date.now() / 1000), // Unique ID
     isEntry: true
   };
 
-  console.log('\n--- Sending BUY Signal ---');
+  console.log('\n--- Sending BUY Signal (Position will stay OPEN) ---');
   await liveTradeOrchestrator.handleSignal(buySignal);
 
-  console.log('\nWaiting 5 seconds...');
-  await new Promise(r => setTimeout(r, 5000));
-
-  // 4. Mock a SELL signal for Strategy 3 (to test closing)
-  const sellSignal = {
-    strategyId: 3,
-    symbol: 'BTC/USDT',
-    side: 'sell',
-    price: 61000,
-    signalId: 10000, // dummy
-    isEntry: false
-  };
-
-  console.log('\n--- Sending SELL (Exit) Signal ---');
-  await liveTradeOrchestrator.handleSignal(sellSignal);
-
-  console.log('\n>>> Test Complete. Check your Binance Testnet / Live account (if configured) for orders. <<<');
+  console.log('\n>>> SUCCESS: Trade opened. Check your Admin Panel "Open Trades" now! <<<');
   process.exit(0);
 }
 
