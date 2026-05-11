@@ -155,12 +155,20 @@ class LiveTradeOrchestrator {
       let orderToClose = null;
 
       if (!isEntryOrder) {
-        const openForSymbol = openOrders.find(o => o.symbol === symbol);
+        // First try the specific strategy
+        let openForSymbol = openOrders.find(o => o.symbol === symbol);
+        
+        // Fallback: search ALL strategies for this symbol if not found
+        if (!openForSymbol) {
+          const allOpen = await liveTradeDb.getOrders(100);
+          openForSymbol = allOpen.find(o => o.symbol === symbol && ['OPEN', 'FILLED'].includes(o.status.toUpperCase()));
+        }
+
         if (openForSymbol) {
           finalAmount = openForSymbol.amount_usdt || tradeAmount;
           fixedQty = openForSymbol.amount; // Use original exact quantity
           orderToClose = openForSymbol;
-          log('info', `Closing existing trade (DB id=${openForSymbol.id}, Qty: ${fixedQty}, Original Margin: $${finalAmount})`);
+          log('info', `Closing existing trade (DB id=${openForSymbol.id}, Qty: ${fixedQty}, Strategy: ${openForSymbol.strategy_id})`);
         } else {
           log('info', `No open trade found in DB for ${symbol} — placing default exit order`);
         }
