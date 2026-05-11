@@ -220,12 +220,12 @@ class LiveTradeOrchestrator {
         price: parseFloat(order.price) || 0,
         avg_fill_price: parseFloat(order.average || order.price) || 0,
         testnet: config.testnet,
-        status: order.status || 'open',
+        status: isEntryOrder ? (order.status || 'OPEN') : 'CLOSED',
       });
 
       // 8. If we closed an existing order, mark it as closed in the DB
       if (orderToClose) {
-        await liveTradeDb.updateOrder(orderToClose.id, { status: 'closed' });
+        await liveTradeDb.updateOrder(orderToClose.id, { status: 'CLOSED' });
         log('info', `Marked DB trade ${orderToClose.id} as CLOSED`);
       }
 
