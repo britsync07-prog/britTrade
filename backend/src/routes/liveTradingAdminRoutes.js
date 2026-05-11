@@ -303,25 +303,27 @@ router.get('/dashboard', async (req, res) => {
 
     if (binanceExecutor.isReady()) {
       try {
-        const positions = await binanceExecutor.binance.futuresPositionRisk();
-        const accountInfo = await binanceExecutor.binance.futuresAccount();
+        const positions = await binanceExecutor.getPositions();
+        const accountInfo = await binanceExecutor.getAccount();
         
-        // 1. RECONCILE: Close positions in DB if they are 0 on Binance
-        const activeInDb = orders.filter(o => ['OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED'].includes((o.status || '').toUpperCase()));
-        for (const order of activeInDb) {
-          const sym = order.symbol.replace('/', '').replace(':', '');
-          const binancePos = positions.find(p => p.symbol === sym);
-          const amt = parseFloat(binancePos?.positionAmt || 0);
-          if (amt === 0) {
-            await liveTradeDb.updateOrder(order.id, { status: 'CLOSED' });
-            order.status = 'CLOSED';
+        if (!positions.error && !accountInfo.error) {
+          // 1. RECONCILE: Close positions in DB if they are 0 on Binance
+          const activeInDb = orders.filter(o => ['OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED'].includes((o.status || '').toUpperCase()));
+          for (const order of activeInDb) {
+            const sym = order.symbol.replace('/', '').replace(':', '');
+            const binancePos = positions.find(p => p.symbol === sym);
+            const amt = parseFloat(binancePos?.positionAmt || 0);
+            if (amt === 0) {
+              await liveTradeDb.updateOrder(order.id, { status: 'CLOSED' });
+              order.status = 'CLOSED';
+            }
           }
+
+          // 2. STATS: Pull real balance/pnl from account
+          totalLivePnlUSDT = parseFloat(accountInfo.totalUnrealizedProfit || 0);
+          futuresBalance = parseFloat(accountInfo.totalMarginBalance || 0);
         }
 
-        // 2. STATS: Pull real balance/pnl from account
-        totalLivePnlUSDT = parseFloat(accountInfo.totalUnrealizedProfit || 0);
-        futuresBalance = parseFloat(accountInfo.totalMarginBalance || 0);
-        
         const spot = await binanceExecutor.getBalance();
         spotBalance = spot.spot || 0;
 
@@ -332,7 +334,7 @@ router.get('/dashboard', async (req, res) => {
           if (!isActive) return { ...order, livePnlUSDT: null, livePnlPct: null };
 
           const sym = order.symbol.replace('/', '').replace(':', '');
-          const binancePos = positions.find(p => p.symbol === sym);
+          const binancePos = Array.isArray(positions) ? positions.find(p => p.symbol === sym) : null;
 
           if (binancePos && parseFloat(binancePos.positionAmt) !== 0) {
             const markPrice = parseFloat(binancePos.markPrice);

@@ -257,6 +257,89 @@ class BinanceExecutor {
   _normalizeSymbol(s) { return s.replace(':USDT', '').replace('USDTUSDT', 'USDT'); }
   _client(sid) { return FUTURES_STRATEGIES.has(Number(sid)) ? this._futuresClient : this._spotClient; }
   isReady() { return this._initialized; }
+
+  // Unified method to get all open positions from Binance
+  async getPositions() {
+    if (!this._initialized) return { error: 'Not initialized' };
+    
+    // Live mode (CCXT)
+    if (!this._testnet) {
+      try {
+        const positions = await this._futuresClient.fetchPositions();
+        return positions.map(p => ({
+          symbol: p.symbol.replace('/', '').replace(':', ''),
+          positionAmt: p.contracts,
+          unRealizedProfit: p.unrealizedPnl,
+          markPrice: p.markPrice,
+          entryPrice: p.entryPrice,
+          leverage: p.leverage
+        }));
+      } catch (e) { return { error: e.message }; }
+    }
+
+    // Testnet mode (Manual Axios)
+    const crypto = require('crypto');
+    const axios = require('axios');
+    const envs = [
+      { name: 'Legacy', url: 'https://testnet.binancefuture.com/fapi/v2' },
+      { name: 'Demo', url: 'https://demo-fapi.binance.com/fapi/v2' }
+    ];
+
+    for (const env of envs) {
+      try {
+        const timeRes = await axios.get(env.url.replace('/v2', '/v1') + '/time', { timeout: 5000 });
+        const params = { timestamp: timeRes.data.serverTime, recvWindow: 10000 };
+        const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
+        const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
+        
+        const res = await axios.get(`${env.url}/positionRisk?${query}&signature=${signature}`, { 
+          headers: { 'X-MBX-APIKEY': this._apiKey },
+          timeout: 5000 
+        });
+        if (Array.isArray(res.data)) return res.data;
+      } catch (e) { continue; }
+    }
+    return { error: 'Failed to fetch positions from all environments' };
+  }
+
+  // Unified method to get full account info from Binance
+  async getAccount() {
+    if (!this._initialized) return { error: 'Not initialized' };
+
+    if (!this._testnet) {
+      try {
+        const acc = await this._futuresClient.fetchBalance();
+        return {
+          totalUnrealizedProfit: acc.info.totalUnrealizedProfit || 0,
+          totalMarginBalance: acc.info.totalMarginBalance || 0
+        };
+      } catch (e) { return { error: e.message }; }
+    }
+
+    const crypto = require('crypto');
+    const axios = require('axios');
+    const envs = [
+      { name: 'Legacy', url: 'https://testnet.binancefuture.com/fapi/v2' },
+      { name: 'Demo', url: 'https://demo-fapi.binance.com/fapi/v2' }
+    ];
+
+    for (const env of envs) {
+      try {
+        const timeRes = await axios.get(env.url.replace('/v2', '/v1') + '/time', { timeout: 5000 });
+        const params = { timestamp: timeRes.data.serverTime, recvWindow: 10000 };
+        const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
+        const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
+        
+        const res = await axios.get(`${env.url}/account?${query}&signature=${signature}`, { 
+          headers: { 'X-MBX-APIKEY': this._apiKey },
+          timeout: 5000 
+        });
+        if (res.data) return res.data;
+      } catch (e) { continue; }
+    }
+    return { error: 'Failed to fetch account info from all environments' };
+  }
+
   async getOrder(symbol, orderId) {
     if (!this.binance) return { error: 'Not initialized' };
     try {
