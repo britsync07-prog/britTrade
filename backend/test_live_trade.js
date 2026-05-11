@@ -28,7 +28,7 @@ async function test() {
   // 3. Mock a BUY signal for Strategy 3
   const buySignal = {
     strategyId: 3,
-    symbol: 'BTC/USDT',
+    symbol: 'ETH/USDT',
     side: 'buy',
     price: 81000,
     signalId: Math.floor(Date.now() / 1000), // Unique ID
