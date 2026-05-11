@@ -133,8 +133,14 @@ export default function LiveTradingPanel() {
   );
 
   const { status, balance, summary, orders, strategyConfigs } = data!;
-  const openOrders = orders.filter(o => o.status === 'open');
-  const recentClosed = orders.filter(o => o.status !== 'open').slice(0, 20);
+  const openOrders = orders.filter(o => {
+    const s = (o.status || '').toUpperCase();
+    return ['OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED'].includes(s);
+  });
+  const recentClosed = orders.filter(o => {
+    const s = (o.status || '').toUpperCase();
+    return !['OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED'].includes(s);
+  }).slice(0, 20);
 
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
@@ -468,15 +474,19 @@ function StatCard({ icon: Icon, label, value, color }: { icon: any; label: strin
 }
 
 function StatusBadge({ status }: { status: string }) {
+  const s = (status || '').toLowerCase();
   const map: Record<string, string> = {
     open: 'bg-emerald-500/10 text-emerald-400',
+    new: 'bg-emerald-500/10 text-emerald-400',
     filled: 'bg-cyan-500/10 text-cyan-400',
+    partially_filled: 'bg-cyan-500/10 text-cyan-400',
     closed: 'bg-slate-500/10 text-slate-400',
     cancelled: 'bg-yellow-500/10 text-yellow-400',
     error: 'bg-red-500/10 text-red-400',
+    rejected: 'bg-red-500/10 text-red-400',
   };
   return (
-    <span className={`text-[10px] font-black uppercase px-2 py-1 rounded-lg ${map[status] || 'bg-white/5 text-slate-500'}`}>
+    <span className={`text-[10px] font-black uppercase px-2 py-1 rounded-lg ${map[s] || 'bg-white/5 text-slate-500'}`}>
       {status}
     </span>
   );
