@@ -39,13 +39,17 @@ async function testLimitExpiry() {
   console.log(`\n[2/3] Placing LIMIT BUY for ${SYMBOL} at $10,000...`);
   await liveTradeOrchestrator.handleSignal(entrySignal);
 
-  // Check DB to ensure it's "OPEN"
+  // Check DB to ensure it's "OPEN" or "NEW"
   const allOrders = await liveTradeDb.getOrders(10, 0);
-  const myOrder = allOrders.find(o => o.symbol === SYMBOL && (o.status === 'OPEN' || o.status === 'NEW'));
+  const myOrder = allOrders.find(o => 
+    o.symbol === SYMBOL && 
+    ['OPEN', 'NEW', 'new', 'open'].includes(o.status)
+  );
 
   if (myOrder) {
-    console.log(`✅ Order placed on Binance! ID: ${myOrder.binance_id}. Now waiting 130 seconds...`);
+    console.log(`✅ Order placed on Binance! ID: ${myOrder.binance_id} (Status: ${myOrder.status}). Now waiting 130 seconds...`);
   } else {
+    console.log('Last orders in DB:', allOrders.map(o => `${o.symbol}: ${o.status}`));
     console.error('❌ Order failed to place or was already closed.');
     process.exit(1);
   }
