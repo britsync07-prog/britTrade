@@ -22,7 +22,8 @@ async function test() {
     enabled: true,
     trade_amount_usdt: 10,
     allocated_capital: 100,
-    leverage: 5
+    leverage: 5,
+    max_open_trades: 100
   });
 
   // 3. Mock a BUY signal for Strategy 3
