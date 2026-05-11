@@ -332,41 +332,67 @@ router.get('/dashboard', async (req, res) => {
     // Per-strategy configs
     const strategyConfigs = await liveTradeDb.getAllStrategyConfigs();
 
-    // Compute live PnL for open orders using current Binance prices
-    const axios = require('axios');
-    const enrichedOrders = await Promise.all(orders.map(async (order) => {
-      const s = (order.status || '').toUpperCase();
-      const isActive = ['OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED'].includes(s);
+    // --- FETCH REAL-TIME DATA FROM BINANCE ---
+    let enrichedOrders = orders;
+    let totalLivePnlUSDT = 0;
+    let futuresBalance = 0;
+    let spotBalance = 0;
 
-      if (!isActive || !order.price || !order.amount_usdt) {
-        return { ...order, livePnlUSDT: null, livePnlPct: null };
-      }
+    if (binanceExecutor.isReady()) {
       try {
-        let sym = order.symbol.replace('/', '').replace(':', '').replace('USDTUSDT', 'USDT');
-        if (sym === 'SHIBUSDT') sym = '1000SHIBUSDT';
-        if (sym === 'PEPEUSDT') sym = '1000PEPEUSDT';
-        if (sym === 'BONKUSDT') sym = '1000BONKUSDT';
-        if (sym === 'FLOKIUSDT') sym = '1000FLOKIUSDT';
+        const positions = await binanceExecutor.binance.futuresPositionRisk();
+        const accountInfo = await binanceExecutor.binance.futuresAccount();
+        
+        // GROUND TRUTH FROM ACCOUNT INFO
+        totalLivePnlUSDT = parseFloat(accountInfo.totalUnrealizedProfit || 0);
+        futuresBalance = parseFloat(accountInfo.totalMarginBalance || 0); // Equity (Wallet + PnL)
+        
+        // Spot balance (separate call if needed, but keeping simple for now)
+        const spot = await binanceExecutor.getBalance();
+        spotBalance = spot.spot || 0;
 
-        const ticker = await axios.get(`https://fapi.binance.com/fapi/v1/ticker/price?symbol=${sym}`);
-        const currentPrice = parseFloat(ticker.data.price);
-        const entryPrice = order.avg_fill_price || order.price;
-        const leverage = strategyConfigs.find(s => s.strategy_id === order.strategy_id)?.leverage || 1;
+        enrichedOrders = orders.map(order => {
+          const s = (order.status || '').toUpperCase();
+          const isActive = ['OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED'].includes(s);
 
-        let pnlPct = 0;
-        if (order.side === 'buy') {
-          pnlPct = ((currentPrice - entryPrice) / entryPrice) * 100 * leverage;
-        } else {
-          pnlPct = ((entryPrice - currentPrice) / entryPrice) * 100 * leverage;
-        }
-        // PnL in USDT = notional (USDT) * pnl%/100 — clean formula
-        const pnlUSDT = order.amount_usdt * (pnlPct / 100);
+          if (!isActive) return { ...order, livePnlUSDT: null, livePnlPct: null };
 
-        return { ...order, currentPrice, livePnlUSDT: +pnlUSDT.toFixed(4), livePnlPct: +pnlPct.toFixed(2) };
-      } catch (_) {
-        return { ...order, livePnlUSDT: null, livePnlPct: null };
+          const sym = order.symbol.replace('/', '').replace(':', '');
+          const binancePos = positions.find(p => p.symbol === sym);
+
+          if (binancePos && parseFloat(binancePos.positionAmt) !== 0) {
+            // PULL REAL DATA FROM BINANCE
+            const unrealizedPnl = parseFloat(binancePos.unRealizedProfit);
+            const markPrice = parseFloat(binancePos.markPrice);
+            const entryPrice = parseFloat(binancePos.entryPrice);
+            const leverage = parseFloat(binancePos.leverage);
+            
+            // Calculate PnL % using Binance's mark/entry
+            let pnlPct = 0;
+            if (entryPrice > 0) {
+               if (order.side === 'buy') {
+                 pnlPct = ((markPrice - entryPrice) / entryPrice) * 100 * leverage;
+               } else {
+                 pnlPct = ((entryPrice - markPrice) / entryPrice) * 100 * leverage;
+               }
+            }
+
+            return {
+              ...order,
+              currentPrice: markPrice,
+              avg_fill_price: entryPrice, // Sync entry price with Binance
+              livePnlUSDT: +unrealizedPnl.toFixed(4),
+              livePnlPct: +pnlPct.toFixed(2)
+            };
+          } else {
+            // Position not found on Binance or is 0
+            return { ...order, livePnlUSDT: 0, livePnlPct: 0 };
+          }
+        });
+      } catch (e) {
+        console.error('Binance Data Fetch Failed:', e.message);
       }
-    }));
+    }
 
     // Summary stats
     const openOrders = enrichedOrders.filter(o => {
@@ -377,7 +403,6 @@ router.get('/dashboard', async (req, res) => {
       const s = (o.status || '').toUpperCase();
       return ['CLOSED', 'CANCELLED', 'ERROR', 'REJECTED', 'EXPIRED'].includes(s);
     });
-    const totalPnlUSDT = openOrders.reduce((acc, o) => acc + (o.livePnlUSDT || 0), 0);
 
     res.json({
       status: {
@@ -386,14 +411,18 @@ router.get('/dashboard', async (req, res) => {
         testnet: config?.testnet === 1,
         executorReady: binanceExecutor.isReady(),
       },
-      balance,
+      balance: {
+        spot: spotBalance,
+        futures: futuresBalance,
+        error: null
+      },
       strategyConfigs,
       orders: enrichedOrders,
       summary: {
         openCount: openOrders.length,
         closedCount: closedOrders.length,
         totalOrders: enrichedOrders.length,
-        totalLivePnlUSDT: +totalPnlUSDT.toFixed(4),
+        totalLivePnlUSDT: +totalLivePnlUSDT.toFixed(4),
       },
     });
   } catch (err) {
