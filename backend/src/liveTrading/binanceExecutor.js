@@ -135,7 +135,7 @@ class BinanceExecutor {
     return success ? { spot, futures } : { error: finalErrors.join(' | ') };
   }
 
-  async placeOrder(symbol, side, amountUSDT, orderType = 'market', price = null, strategyId = 1, leverage = 1) {
+  async placeOrder(symbol, side, amountUSDT, orderType = 'market', price = null, strategyId = 1, leverage = 1, fixedQty = null) {
     if (!this._testnet) {
        // Live mode logic using CCXT
        const client = this._client(strategyId);
@@ -143,7 +143,7 @@ class BinanceExecutor {
          const isFutures = FUTURES_STRATEGIES.has(Number(strategyId));
          if (isFutures && leverage > 1) await client.setLeverage(leverage, symbol);
          const ticker = await client.fetchTicker(symbol);
-         const qty = (amountUSDT * leverage) / ticker.last;
+         const qty = fixedQty || (amountUSDT * leverage) / ticker.last;
          const order = await client.createOrder(symbol, orderType, side, qty, price);
          return order;
        } catch (e) { return { error: e.message }; }
@@ -204,11 +204,12 @@ class BinanceExecutor {
         const tickerRes = await axios.get(`${env.url}/v1/ticker/price?symbol=${bSymbol}`, { timeout: 5000 });
         
         const prec = this._precisions[bSymbol] !== undefined ? this._precisions[bSymbol] : (isFutures ? 3 : 5);
-        const rawQty = (amountUSDT * leverage) / parseFloat(tickerRes.data.price);
-        
-        // Truncate instead of round to avoid Insufficient Balance errors
-        const factor = Math.pow(10, prec);
-        const qty = (Math.floor(rawQty * factor) / factor).toFixed(prec);
+        let qty = fixedQty;
+        if (!qty) {
+          const rawQty = (amountUSDT * leverage) / parseFloat(tickerRes.data.price);
+          const factor = Math.pow(10, prec);
+          qty = (Math.floor(rawQty * factor) / factor).toFixed(prec);
+        }
 
         const params = {
           symbol: bSymbol,

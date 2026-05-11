@@ -150,21 +150,22 @@ class LiveTradeOrchestrator {
 
       // 5c. Exit Logic: If this is an exit, find the amount to close
       let finalAmount = tradeAmount;
+      let fixedQty = null;
       let orderToClose = null;
 
       if (!isEntryOrder) {
-        // Find the most recent open/filled order for this symbol to close it
         const openForSymbol = openOrders.find(o => o.symbol === symbol);
         if (openForSymbol) {
           finalAmount = openForSymbol.amount_usdt || tradeAmount;
+          fixedQty = openForSymbol.amount; // Use original exact quantity
           orderToClose = openForSymbol;
-          log('info', `Closing existing trade (DB id=${openForSymbol.id}, Amount: $${finalAmount})`);
+          log('info', `Closing existing trade (DB id=${openForSymbol.id}, Qty: ${fixedQty}, Original Margin: $${finalAmount})`);
         } else {
           log('info', `No open trade found in DB for ${symbol} — placing default exit order`);
         }
       }
 
-      log('info', `Signal → ${symbol} ${side.toUpperCase()} | strategy=${strategyId} | entry=${isEntryOrder} | amount=$${finalAmount}`);
+      log('info', `Signal → ${symbol} ${side.toUpperCase()} | strategy=${strategyId} | entry=${isEntryOrder} | margin=$${finalAmount} | qty=${fixedQty || 'auto'}`);
 
       // 6. Place order
       const order = await binanceExecutor.placeOrder(
@@ -174,7 +175,8 @@ class LiveTradeOrchestrator {
         stratConfig.order_type || 'market',
         null,
         strategyId,
-        stratConfig.leverage || 1
+        stratConfig.leverage || 1,
+        fixedQty
       );
 
       if (order.error) {
