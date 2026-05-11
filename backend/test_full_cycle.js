@@ -15,10 +15,11 @@ async function testFullCycle() {
   console.log(`\n[1/4] Configuring Strategy ${STRATEGY_ID}...`);
   await liveTradeDb.updateStrategyConfig(STRATEGY_ID, {
     enabled: true,
-    trade_amount_usdt: 10,
+    trade_amount_usdt: 20,
     allocated_capital: 100,
     leverage: 5,
-    max_open_orders: 10
+    max_open_orders: 10,
+    order_type: 'limit' // <--- Set this to limit!
   });
 
   // CLEANUP: Close any old ETH/USDT trades for this strategy so they don't spoil the test
@@ -31,6 +32,7 @@ async function testFullCycle() {
     symbol: SYMBOL,
     side: 'buy',
     isEntry: true,
+    price: 2315.00, // <--- Tell the bot exactly what price you want
     signalId: 'TEST_ENTRY_' + Date.now()
   };
 

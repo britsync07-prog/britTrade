@@ -179,13 +179,16 @@ class LiveTradeOrchestrator {
 
       log('info', `Signal → ${symbol} ${side.toUpperCase()} | strategy=${strategyId} | entry=${isEntryOrder} | margin=$${finalAmount} | qty=${fixedQty || 'auto'}`);
 
-      // 6. Place order
+      // 6. Get Price for Limit Orders
+      const targetPrice = signal.price || signal.entry || signal.entry_price || null;
+
+      // 7. Place order
       const order = await binanceExecutor.placeOrder(
         symbol,
         orderSide,
         finalAmount,
         stratConfig.order_type || 'market',
-        null,
+        targetPrice, // Pass the price from the signal
         strategyId,
         stratConfig.leverage || 1,
         fixedQty
