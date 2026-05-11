@@ -49,6 +49,9 @@ class LiveTradeOrchestrator {
       await liveTradeDb.initLiveTradeDb();
       await this._bootExecutorFromDb();
 
+      // Start the background watcher for stale limit orders
+      this._startOrderWatcher();
+
       // Register as listener on the signal engine (lazy require avoids circular deps)
       const signalEngine = require('../services/signalEngine');
       signalEngine.registerSignalListener((signal) => {
@@ -64,6 +67,45 @@ class LiveTradeOrchestrator {
       console.error('[LiveTradeOrchestrator] Init error:', err.message);
       this._ready = true; // still mark ready so routes work
     }
+  }
+
+  /**
+   * Background task that runs every 30s to cancel stale limit orders.
+   */
+  _startOrderWatcher() {
+    setInterval(async () => {
+      try {
+        if (!this._ready) return;
+
+        // 1. Get all orders with OPEN or NEW status from DB
+        const allOrders = await liveTradeDb.getOrders(100, 0);
+        const openLimitOrders = allOrders.filter(o => 
+          (o.status === 'OPEN' || o.status === 'NEW' || o.status === 'open') && 
+          o.order_type === 'limit'
+        );
+
+        const now = Date.now();
+        const EXPIRY_MS = 120 * 1000; // 2 minutes
+
+        for (const order of openLimitOrders) {
+          const createdAt = new Date(order.created_at).getTime();
+          if (now - createdAt > EXPIRY_MS) {
+            console.log(`[OrderWatcher] ⏳ Order ${order.binance_id} expired. Cancelling...`);
+            
+            const cancelRes = await binanceExecutor.cancelOrder(order.symbol, order.binance_id);
+            
+            if (cancelRes.success) {
+              await liveTradeDb.updateOrder(order.id, { status: 'CANCELLED' });
+              liveTradeDb.addLog('info', `Auto-cancelled stale limit order: ${order.symbol} @ ${order.price}`, { strategy_id: order.strategy_id });
+            } else {
+              console.error(`[OrderWatcher] Failed to cancel order ${order.binance_id}:`, cancelRes.error);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[OrderWatcher] Error:', err.message);
+      }
+    }, 30000); // Check every 30 seconds
   }
 
   /** Read config from DB and initialize the executor if possible */

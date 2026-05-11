@@ -360,6 +360,70 @@ class BinanceExecutor {
     }
   }
 
+  // Cancel a specific order
+  async cancelOrder(symbol, orderId) {
+    if (!this._initialized) return { success: false, error: 'Not initialized' };
+    const bSymbol = symbol.replace('/', '').replace(':', '');
+
+    // Live mode (CCXT)
+    if (!this._testnet) {
+      try {
+        await this._futuresClient.cancelOrder(orderId, symbol);
+        return { success: true };
+      } catch (e) { return { success: false, error: e.message }; }
+    }
+
+    // Testnet mode (Manual Axios)
+    const crypto = require('crypto');
+    const axios = require('axios');
+    const envs = [
+      { name: 'Legacy', url: 'https://testnet.binancefuture.com/fapi/v1' },
+      { name: 'Demo', url: 'https://demo-fapi.binance.com/fapi/v1' }
+    ];
+
+    for (const env of envs) {
+      try {
+        const timeRes = await axios.get(env.url + '/time', { timeout: 5000 });
+        const params = {
+          symbol: bSymbol,
+          orderId: orderId,
+          timestamp: timeRes.data.serverTime,
+          recvWindow: 10000
+        };
+        const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
+        const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
+
+        await axios.delete(`${env.url}/order?${query}&signature=${signature}`, {
+          headers: { 'X-MBX-APIKEY': this._apiKey },
+          timeout: 5000
+        });
+        return { success: true };
+      } catch (e) {
+        // Continue to next env if 404/400
+      }
+    }
+    return { success: false, error: 'Order not found or already closed' };
+  }
+
+  // Cancel all open orders for all symbols (Futures)
+  async cancelAllOpenOrders() {
+    if (!this._initialized) return [];
+    
+    if (!this._testnet) {
+       try {
+         const orders = await this._futuresClient.fetchOpenOrders();
+         for (const o of orders) {
+           await this._futuresClient.cancelOrder(o.id, o.symbol);
+         }
+         return orders;
+       } catch (e) { return []; }
+    }
+
+    // Testnet doesn't have a reliable "cancel all" across both envs without symbol
+    // So we just return empty or implement per-symbol if needed.
+    return [];
+  }
+
   destroy() { this._initialized = false; }
 }
 
