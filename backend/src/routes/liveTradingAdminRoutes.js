@@ -196,6 +196,21 @@ router.get('/strategies', async (req, res) => {
   }
 });
 
+router.get('/orders/open', async (req, res) => {
+  try {
+    const { strategyId } = req.query;
+    let orders;
+    if (strategyId && strategyId !== 'all') {
+      orders = await liveTradeDb.getOpenOrders(Number(strategyId));
+    } else {
+      orders = await liveTradeDb.all("SELECT * FROM live_orders WHERE UPPER(status) IN ('OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED') ORDER BY created_at DESC");
+    }
+    res.json(orders);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ─── PUT /strategies/:id ──────────────────────────────────────────────────────
 
 router.put('/strategies/:id', async (req, res) => {
@@ -328,8 +343,8 @@ router.get('/dashboard', async (req, res) => {
     }));
 
     // Summary stats
-    const openOrders = enrichedOrders.filter(o => ['open', 'filled'].includes(o.status));
-    const closedOrders = enrichedOrders.filter(o => ['closed', 'cancelled', 'error'].includes(o.status));
+    const openOrders = enrichedOrders.filter(o => ['OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED'].includes(o.status.toUpperCase()));
+    const closedOrders = enrichedOrders.filter(o => ['CLOSED', 'CANCELLED', 'ERROR'].includes(o.status.toUpperCase()));
     const totalPnlUSDT = openOrders.reduce((acc, o) => acc + (o.livePnlUSDT || 0), 0);
 
     res.json({
