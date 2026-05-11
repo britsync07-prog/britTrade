@@ -47,16 +47,16 @@ async function testLimitExpiry() {
   );
 
   if (myOrder) {
-    console.log(`✅ Order placed on Binance! ID: ${myOrder.binance_id} (Status: ${myOrder.status}). Now waiting 130 seconds...`);
+    console.log(`✅ Order placed on Binance! ID: ${myOrder.binance_id} (Status: ${myOrder.status}). Now waiting 160 seconds for the 120s expiry...`);
   } else {
     console.log('Last orders in DB:', allOrders.map(o => `${o.symbol}: ${o.status}`));
     console.error('❌ Order failed to place or was already closed.');
     process.exit(1);
   }
 
-  // 4. Wait for 130 seconds (just over the 120s limit)
+  // 4. Wait for 160 seconds (enough to clear the 120s limit + 30s interval)
   // We check every 10 seconds to show progress
-  for (let i = 0; i < 13; i++) {
+  for (let i = 0; i < 16; i++) {
     process.stdout.write('.');
     await new Promise(r => setTimeout(r, 10000));
   }
