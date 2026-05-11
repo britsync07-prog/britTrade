@@ -121,6 +121,7 @@ class LiveTradeOrchestrator {
 
       // 4. Capital & Max open orders guard
       const openOrders = await liveTradeDb.getOpenOrders(strategyId);
+      console.log(`[LiveTradeOrchestrator] Found ${openOrders.length} active trades in DB for strategy ${strategyId}`);
       const totalMarginUsed = openOrders.reduce((sum, o) => sum + (o.amount_usdt || 0), 0);
       
       if (isEntry) {
