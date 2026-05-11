@@ -284,4 +284,6 @@ module.exports = {
   getOpenOrders,
   addLog,
   getLogs,
+  run,
+  all
 };
