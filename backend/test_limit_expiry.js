@@ -16,8 +16,8 @@ async function testLimitExpiry() {
   console.log(`\n[1/3] Configuring Strategy ${STRATEGY_ID} for LIMIT orders...`);
   await liveTradeDb.updateStrategyConfig(STRATEGY_ID, {
     enabled: true,
-    trade_amount_usdt: 20,
-    allocated_capital: 100,
+    trade_amount_usdt: 100, // Increased to ensure it hits $50 minimum even at $10k price
+    allocated_capital: 1000,
     leverage: 5,
     max_open_orders: 10,
     order_type: 'limit'
