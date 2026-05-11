@@ -312,7 +312,10 @@ router.get('/dashboard', async (req, res) => {
     // Compute live PnL for open orders using current Binance prices
     const axios = require('axios');
     const enrichedOrders = await Promise.all(orders.map(async (order) => {
-      if (order.status !== 'open' || !order.price || !order.amount_usdt) {
+      const s = (order.status || '').toUpperCase();
+      const isActive = ['OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED'].includes(s);
+
+      if (!isActive || !order.price || !order.amount_usdt) {
         return { ...order, livePnlUSDT: null, livePnlPct: null };
       }
       try {
