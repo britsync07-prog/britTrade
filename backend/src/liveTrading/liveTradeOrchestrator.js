@@ -97,13 +97,17 @@ class LiveTradeOrchestrator {
           if (age > EXPIRY_SECONDS) {
             console.log(`[OrderWatcher] ⏳ Order ${order.binance_id} expired. Cancelling...`);
             
-            const cancelRes = await binanceExecutor.cancelOrder(order.symbol, order.binance_id);
+            // Force binance_id to string and remove any ".0"
+            const cleanId = String(order.binance_id).split('.')[0];
+            const cancelRes = await binanceExecutor.cancelOrder(order.symbol, cleanId);
             
-            if (cancelRes.success) {
+            // If success OR if order is already gone, mark as CANCELLED in DB
+            if (cancelRes.success || cancelRes.error?.includes('Order not found')) {
               await liveTradeDb.updateOrder(order.id, { status: 'CANCELLED' });
               liveTradeDb.addLog('info', `Auto-cancelled stale limit order: ${order.symbol} @ ${order.price}`, { strategy_id: order.strategy_id });
+              console.log(`[OrderWatcher] ✅ Order ${cleanId} marked as CANCELLED in DB.`);
             } else {
-              console.error(`[OrderWatcher] Failed to cancel order ${order.binance_id}:`, cancelRes.error);
+              console.error(`[OrderWatcher] Failed to cancel order ${cleanId}:`, cancelRes.error);
             }
           }
         }
