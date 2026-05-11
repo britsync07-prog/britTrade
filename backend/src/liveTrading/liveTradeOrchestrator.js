@@ -135,11 +135,28 @@ class LiveTradeOrchestrator {
         }
       }
 
-      // 5. Map signal side to Binance order side
-      const { orderSide, isEntryOrder } = this._mapSide(side);
-      if (!orderSide) {
-        log('warn', `Unrecognized signal side: ${side}`);
-        return;
+      // 5. Determine Binance side intelligently
+      let isEntryOrder = signal.isEntry;
+      let orderSide = null;
+
+      // Find if we already have an active trade for this symbol/strategy
+      const openForSymbol = openOrders.find(o => o.symbol === symbol);
+
+      if (openForSymbol) {
+        // We have an active trade -> We MUST be exiting
+        isEntryOrder = false;
+        orderSide = (openForSymbol.side.toLowerCase() === 'buy') ? 'sell' : 'buy';
+        log('info', `Active trade found (${openForSymbol.side}). Exiting with a ${orderSide.toUpperCase()} order.`);
+      } else {
+        // No active trade -> This is an entry
+        isEntryOrder = true;
+        const s = (side || '').toLowerCase();
+        if (s === 'buy' || s === 'long') orderSide = 'buy';
+        else if (s === 'sell' || s === 'short') orderSide = 'sell';
+        else {
+          log('warn', `Unrecognized signal side for entry: ${side}`);
+          return;
+        }
       }
 
       // 5b. Minimum Notional Guard (Binance Futures Testnet needs ~$20)
@@ -154,24 +171,10 @@ class LiveTradeOrchestrator {
       let fixedQty = null;
       let orderToClose = null;
 
-      if (!isEntryOrder) {
-        // First try the specific strategy
-        let openForSymbol = openOrders.find(o => o.symbol === symbol);
-        
-        // Fallback: search ALL strategies for this symbol if not found
-        if (!openForSymbol) {
-          const allOpen = await liveTradeDb.getOrders(100);
-          openForSymbol = allOpen.find(o => o.symbol === symbol && ['OPEN', 'FILLED'].includes(o.status.toUpperCase()));
-        }
-
-        if (openForSymbol) {
-          finalAmount = openForSymbol.amount_usdt || tradeAmount;
-          fixedQty = openForSymbol.amount; // Use original exact quantity
-          orderToClose = openForSymbol;
-          log('info', `Closing existing trade (DB id=${openForSymbol.id}, Qty: ${fixedQty}, Strategy: ${openForSymbol.strategy_id})`);
-        } else {
-          log('info', `No open trade found in DB for ${symbol} — placing default exit order`);
-        }
+      if (!isEntryOrder && openForSymbol) {
+        finalAmount = openForSymbol.amount_usdt || tradeAmount;
+        fixedQty = openForSymbol.amount; // Use original exact quantity
+        orderToClose = openForSymbol;
       }
 
       log('info', `Signal → ${symbol} ${side.toUpperCase()} | strategy=${strategyId} | entry=${isEntryOrder} | margin=$${finalAmount} | qty=${fixedQty || 'auto'}`);
