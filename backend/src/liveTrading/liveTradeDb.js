@@ -249,7 +249,7 @@ async function getOrder(id) {
 
 async function getOpenOrders(strategyId) {
   return all(
-    "SELECT * FROM live_orders WHERE strategy_id=? AND UPPER(status) IN ('OPEN', 'FILLED') ORDER BY created_at DESC",
+    "SELECT * FROM live_orders WHERE strategy_id=? AND UPPER(status) IN ('OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED') ORDER BY created_at DESC",
     [strategyId]
   );
 }

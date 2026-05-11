@@ -343,8 +343,14 @@ router.get('/dashboard', async (req, res) => {
     }));
 
     // Summary stats
-    const openOrders = enrichedOrders.filter(o => ['OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED'].includes(o.status.toUpperCase()));
-    const closedOrders = enrichedOrders.filter(o => ['CLOSED', 'CANCELLED', 'ERROR'].includes(o.status.toUpperCase()));
+    const openOrders = enrichedOrders.filter(o => {
+      const s = (o.status || '').toUpperCase();
+      return ['OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED'].includes(s);
+    });
+    const closedOrders = enrichedOrders.filter(o => {
+      const s = (o.status || '').toUpperCase();
+      return ['CLOSED', 'CANCELLED', 'ERROR', 'REJECTED', 'EXPIRED'].includes(s);
+    });
     const totalPnlUSDT = openOrders.reduce((acc, o) => acc + (o.livePnlUSDT || 0), 0);
 
     res.json({
