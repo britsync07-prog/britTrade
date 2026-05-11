@@ -135,13 +135,15 @@ class BinanceExecutor {
     return success ? { spot, futures } : { error: finalErrors.join(' | ') };
   }
 
-  async placeOrder(symbol, side, amountUSDT, orderType = 'market', price = null, strategyId = 1) {
+  async placeOrder(symbol, side, amountUSDT, orderType = 'market', price = null, strategyId = 1, leverage = 1) {
     if (!this._testnet) {
        // Live mode logic using CCXT
        const client = this._client(strategyId);
        try {
+         const isFutures = FUTURES_STRATEGIES.has(Number(strategyId));
+         if (isFutures && leverage > 1) await client.setLeverage(leverage, symbol);
          const ticker = await client.fetchTicker(symbol);
-         const qty = amountUSDT / ticker.last;
+         const qty = (amountUSDT * leverage) / ticker.last;
          const order = await client.createOrder(symbol, orderType, side, qty, price);
          return order;
        } catch (e) { return { error: e.message }; }
@@ -187,10 +189,22 @@ class BinanceExecutor {
         }
 
         const timeRes = await axios.get(`${env.url}/v1/time`, { timeout: 5000 });
+        
+        // 1. Set Leverage for Futures
+        if (isFutures && leverage > 1) {
+          const lParams = { symbol: bSymbol, leverage, timestamp: timeRes.data.serverTime };
+          const lQuery = Object.keys(lParams).map(k => `${k}=${lParams[k]}`).join('&');
+          const lSig = crypto.createHmac('sha256', this._apiSecret).update(lQuery).digest('hex');
+          await axios.post(`${env.url}/v1/leverage?${lQuery}&signature=${lSig}`, null, {
+            headers: { 'X-MBX-APIKEY': this._apiKey },
+            timeout: 5000
+          }).catch(e => console.warn(`[BinanceExecutor] SetLeverage Fail: ${e.response?.data?.msg || e.message}`));
+        }
+
         const tickerRes = await axios.get(`${env.url}/v1/ticker/price?symbol=${bSymbol}`, { timeout: 5000 });
         
         const prec = this._precisions[bSymbol] !== undefined ? this._precisions[bSymbol] : (isFutures ? 3 : 5);
-        const rawQty = amountUSDT / parseFloat(tickerRes.data.price);
+        const rawQty = (amountUSDT * leverage) / parseFloat(tickerRes.data.price);
         
         // Truncate instead of round to avoid Insufficient Balance errors
         const factor = Math.pow(10, prec);
@@ -209,7 +223,7 @@ class BinanceExecutor {
         const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
         const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
         
-        console.log(`[BinanceExecutor] Placing ${env.name} ${isFutures?'Futures':'Spot'} Order: ${side} ${qty} ${bSymbol}`);
+        console.log(`[BinanceExecutor] Placing ${env.name} ${isFutures?'Futures':'Spot'} Order: ${side} ${qty} ${bSymbol} (Lev: ${leverage}x)`);
         const res = await axios.post(`${env.url}/v1/order?${query}&signature=${signature}`, null, { 
           headers: { 'X-MBX-APIKEY': this._apiKey, 'User-Agent': 'Mozilla/5.0' },
           timeout: 10000

@@ -173,7 +173,8 @@ class LiveTradeOrchestrator {
         finalAmount,
         stratConfig.order_type || 'market',
         null,
-        strategyId
+        strategyId,
+        stratConfig.leverage || 1
       );
 
       if (order.error) {

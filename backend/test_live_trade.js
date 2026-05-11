@@ -20,8 +20,8 @@ async function test() {
   await liveTradeDb.initLiveTradeDb(); // run migrations
   await liveTradeDb.updateStrategyConfig(3, {
     enabled: true,
-    trade_amount_usdt: 100,
-    allocated_capital: 1000,
+    trade_amount_usdt: 10,
+    allocated_capital: 500,
     leverage: 5
   });
 
