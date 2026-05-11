@@ -232,7 +232,16 @@ class BinanceExecutor {
 
         // Normalize response to standard format
         const raw = res.data;
-        const fillPrice = parseFloat(raw.avgPrice) || parseFloat(raw.price) || parseFloat(tickerRes.data.price);
+        let fillPrice = parseFloat(raw.avgPrice) || parseFloat(raw.price);
+        
+        // If price is missing (market orders), look at fills
+        if (!fillPrice && raw.fills && raw.fills.length > 0) {
+          const totalQty = raw.fills.reduce((acc, f) => acc + parseFloat(f.qty), 0);
+          const weightedSum = raw.fills.reduce((acc, f) => acc + (parseFloat(f.price) * parseFloat(f.qty)), 0);
+          fillPrice = weightedSum / totalQty;
+        }
+
+        if (!fillPrice) fillPrice = parseFloat(tickerRes.data.price);
         
         return {
           id: raw.orderId || raw.id,
