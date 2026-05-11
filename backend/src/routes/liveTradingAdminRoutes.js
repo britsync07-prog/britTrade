@@ -288,93 +288,61 @@ router.post('/kill-switch', async (req, res) => {
 });
 
 // ─── GET /dashboard ──────────────────────────────────────────────────────────
-// Returns everything needed for the admin live-trading panel in one call:
-//   balance, status, strategy configs, recent orders with live PnL
 
 router.get('/dashboard', async (req, res) => {
   try {
     const config = await liveTradeDb.getBinanceConfig();
-
-    // Balance — only fetch if executor is ready
-    let balance = { spot: null, futures: null, error: null };
-    if (binanceExecutor.isReady()) {
-      const b = await binanceExecutor.getBalance();
-      if (b.error) balance.error = b.error;
-      else { balance.spot = b.spot; balance.futures = b.futures; }
-    }
-
-    // Recent orders (last 100)
+    const strategyConfigs = await liveTradeDb.getAllStrategyConfigs();
     let orders = await liveTradeDb.getOrders(100, 0);
 
-    // --- RECONCILE WITH BINANCE ---
-    // If we have "open" orders but the position is gone on Binance, mark them closed.
-    if (binanceExecutor.isReady()) {
-      try {
-        const positions = await binanceExecutor.binance.futuresPositionRisk();
-        const activeInDb = orders.filter(o => ['OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED'].includes((o.status || '').toUpperCase()));
-        
-        for (const order of activeInDb) {
-          const sym = order.symbol.replace('/', '').replace(':', '');
-          const binancePos = positions.find(p => p.symbol === sym);
-          const amt = parseFloat(binancePos?.positionAmt || 0);
-          
-          if (amt === 0) {
-            // Position is closed on Binance, update our DB
-            await liveTradeDb.updateOrder(order.id, { status: 'CLOSED' });
-            order.status = 'CLOSED'; // Update local object for the response
-          }
-        }
-      } catch (e) {
-        console.error('Reconciliation failed:', e.message);
-      }
-    }
-
-    // Per-strategy configs
-    const strategyConfigs = await liveTradeDb.getAllStrategyConfigs();
-
-    // --- FETCH REAL-TIME DATA FROM BINANCE ---
-    let enrichedOrders = orders;
+    // Initial values
     let totalLivePnlUSDT = 0;
     let futuresBalance = 0;
     let spotBalance = 0;
+    let enrichedOrders = orders;
 
     if (binanceExecutor.isReady()) {
       try {
         const positions = await binanceExecutor.binance.futuresPositionRisk();
         const accountInfo = await binanceExecutor.binance.futuresAccount();
         
-        // GROUND TRUTH FROM ACCOUNT INFO
+        // 1. RECONCILE: Close positions in DB if they are 0 on Binance
+        const activeInDb = orders.filter(o => ['OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED'].includes((o.status || '').toUpperCase()));
+        for (const order of activeInDb) {
+          const sym = order.symbol.replace('/', '').replace(':', '');
+          const binancePos = positions.find(p => p.symbol === sym);
+          const amt = parseFloat(binancePos?.positionAmt || 0);
+          if (amt === 0) {
+            await liveTradeDb.updateOrder(order.id, { status: 'CLOSED' });
+            order.status = 'CLOSED';
+          }
+        }
+
+        // 2. STATS: Pull real balance/pnl from account
         totalLivePnlUSDT = parseFloat(accountInfo.totalUnrealizedProfit || 0);
-        futuresBalance = parseFloat(accountInfo.totalMarginBalance || 0); // Equity (Wallet + PnL)
+        futuresBalance = parseFloat(accountInfo.totalMarginBalance || 0);
         
-        // Spot balance (separate call if needed, but keeping simple for now)
         const spot = await binanceExecutor.getBalance();
         spotBalance = spot.spot || 0;
 
+        // 3. ENRICH: Add live data to active orders
         enrichedOrders = orders.map(order => {
           const s = (order.status || '').toUpperCase();
           const isActive = ['OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED'].includes(s);
-
           if (!isActive) return { ...order, livePnlUSDT: null, livePnlPct: null };
 
           const sym = order.symbol.replace('/', '').replace(':', '');
           const binancePos = positions.find(p => p.symbol === sym);
 
           if (binancePos && parseFloat(binancePos.positionAmt) !== 0) {
-            // PULL REAL DATA FROM BINANCE
-            const unrealizedPnl = parseFloat(binancePos.unRealizedProfit);
             const markPrice = parseFloat(binancePos.markPrice);
             const entryPrice = parseFloat(binancePos.entryPrice);
             const leverage = parseFloat(binancePos.leverage);
             
-            // Calculate PnL % using Binance's mark/entry
             let pnlPct = 0;
             if (entryPrice > 0) {
-               if (order.side === 'buy') {
-                 pnlPct = ((markPrice - entryPrice) / entryPrice) * 100 * leverage;
-               } else {
-                 pnlPct = ((entryPrice - markPrice) / entryPrice) * 100 * leverage;
-               }
+              if (order.side === 'buy') pnlPct = ((markPrice - entryPrice) / entryPrice) * 100 * leverage;
+              else pnlPct = ((entryPrice - markPrice) / entryPrice) * 100 * leverage;
             }
 
             return {
