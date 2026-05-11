@@ -141,13 +141,36 @@ class LiveTradeOrchestrator {
         return;
       }
 
-      log('info', `Signal → ${symbol} ${side.toUpperCase()} | strategy=${strategyId} | entry=${isEntryOrder}`);
+      // 5b. Minimum Notional Guard (Binance Futures Testnet needs ~$20)
+      let tradeAmount = stratConfig.trade_amount_usdt;
+      if (isEntryOrder && tradeAmount < 20 && config.testnet) {
+        log('warn', `Adjusting amount from $${tradeAmount} to $20 to meet Binance minimum notional`);
+        tradeAmount = 20;
+      }
+
+      // 5c. Exit Logic: If this is an exit, find the amount to close
+      let finalAmount = tradeAmount;
+      let orderToClose = null;
+
+      if (!isEntryOrder) {
+        // Find the most recent open/filled order for this symbol to close it
+        const openForSymbol = openOrders.find(o => o.symbol === symbol);
+        if (openForSymbol) {
+          finalAmount = openForSymbol.amount_usdt || tradeAmount;
+          orderToClose = openForSymbol;
+          log('info', `Closing existing trade (DB id=${openForSymbol.id}, Amount: $${finalAmount})`);
+        } else {
+          log('info', `No open trade found in DB for ${symbol} — placing default exit order`);
+        }
+      }
+
+      log('info', `Signal → ${symbol} ${side.toUpperCase()} | strategy=${strategyId} | entry=${isEntryOrder} | amount=$${finalAmount}`);
 
       // 6. Place order
       const order = await binanceExecutor.placeOrder(
         symbol,
         orderSide,
-        stratConfig.trade_amount_usdt,
+        finalAmount,
         stratConfig.order_type || 'market',
         null,
         strategyId
@@ -155,26 +178,17 @@ class LiveTradeOrchestrator {
 
       if (order.error) {
         log('error', `Order failed: ${order.error}`);
+        // ... (rest of error handling)
         this._consecutiveErrors++;
         if (this._consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
           log('error', `🚨 Kill-switch triggered after ${MAX_CONSECUTIVE_ERRORS} consecutive errors!`);
           await liveTradeDb.setGlobalEnabled(false);
           this._consecutiveErrors = 0;
         }
-        // Save failed order record
         await liveTradeDb.insertOrder({
-          strategy_id: strategyId,
-          signal_id: signalId,
-          binance_id: null,
-          client_oid: null,
-          symbol,
-          side: orderSide,
-          order_type: stratConfig.order_type || 'market',
-          amount_usdt: stratConfig.trade_amount_usdt,  // always USDT
-          amount: null,
-          price,
-          testnet: config.testnet,
-          status: 'error',
+          strategy_id: strategyId, signal_id: signalId, symbol, side: orderSide,
+          order_type: stratConfig.order_type || 'market', amount_usdt: finalAmount,
+          testnet: config.testnet, status: 'error', error_msg: order.error
         });
         return;
       }
@@ -189,15 +203,21 @@ class LiveTradeOrchestrator {
         symbol,
         side: orderSide,
         order_type: order.type || 'market',
-        amount_usdt: stratConfig.trade_amount_usdt,
+        amount_usdt: finalAmount,
         amount: order.amount,
         price: parseFloat(order.price) || 0,
         avg_fill_price: parseFloat(order.average || order.price) || 0,
         testnet: config.testnet,
         status: order.status || 'open',
-        });
+      });
 
-        log('info', `✅ Order saved | DB id=${orderId} | Binance id=${order.id} | ${symbol} ${orderSide} @ $${parseFloat(order.price).toFixed(4)}`);    } catch (err) {
+      // 8. If we closed an existing order, mark it as closed in the DB
+      if (orderToClose) {
+        await liveTradeDb.updateOrder(orderToClose.id, { status: 'closed' });
+        log('info', `Marked DB trade ${orderToClose.id} as CLOSED`);
+      }
+
+      log('info', `✅ Order saved | DB id=${orderId} | Binance id=${order.id} | ${symbol} ${orderSide} @ $${parseFloat(order.price).toFixed(4)}`);    } catch (err) {
       console.error('[LiveTradeOrchestrator] handleSignal error:', err.message);
       liveTradeDb.addLog('error', `Unexpected error in handleSignal: ${err.message}`, { strategy_id: strategyId, signal_id: signalId }).catch(() => {});
     }

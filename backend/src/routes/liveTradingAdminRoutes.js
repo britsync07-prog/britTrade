@@ -328,9 +328,9 @@ router.get('/dashboard', async (req, res) => {
     }));
 
     // Summary stats
-    const openOrders = enrichedOrders.filter(o => o.status === 'open');
-    const closedOrders = enrichedOrders.filter(o => ['closed', 'filled', 'cancelled', 'error'].includes(o.status));
-    const totalPnlUSDT = enrichedOrders.reduce((acc, o) => acc + (o.livePnlUSDT || 0), 0);
+    const openOrders = enrichedOrders.filter(o => ['open', 'filled'].includes(o.status));
+    const closedOrders = enrichedOrders.filter(o => ['closed', 'cancelled', 'error'].includes(o.status));
+    const totalPnlUSDT = openOrders.reduce((acc, o) => acc + (o.livePnlUSDT || 0), 0);
 
     res.json({
       status: {
