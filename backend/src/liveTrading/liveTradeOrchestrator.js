@@ -84,12 +84,17 @@ class LiveTradeOrchestrator {
           o.order_type === 'limit'
         );
 
-        const now = Date.now();
-        const EXPIRY_MS = 120 * 1000; // 2 minutes
+        const now = Math.floor(Date.now() / 1000);
+        const EXPIRY_SECONDS = 120; // 2 minutes
 
         for (const order of openLimitOrders) {
-          const createdAt = new Date(order.created_at).getTime();
-          if (now - createdAt > EXPIRY_MS) {
+          // Convert DB string timestamp to Unix seconds
+          const createdAt = Math.floor(new Date(order.created_at + ' UTC').getTime() / 1000);
+          const age = now - createdAt;
+
+          console.log(`[OrderWatcher] Checking ${order.symbol} (${order.binance_id}). Age: ${age}s`);
+
+          if (age > EXPIRY_SECONDS) {
             console.log(`[OrderWatcher] ⏳ Order ${order.binance_id} expired. Cancelling...`);
             
             const cancelRes = await binanceExecutor.cancelOrder(order.symbol, order.binance_id);
