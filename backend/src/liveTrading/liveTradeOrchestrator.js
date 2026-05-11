@@ -85,7 +85,7 @@ class LiveTradeOrchestrator {
         });
 
         const now = Math.floor(Date.now() / 1000);
-        const EXPIRY_SECONDS = 120; // 2 minutes
+        const EXPIRY_SECONDS = 300; // 2 minutes
 
         for (const order of openLimitOrders) {
           // Convert DB string timestamp to Unix seconds
