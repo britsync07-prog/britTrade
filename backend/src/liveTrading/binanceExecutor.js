@@ -257,6 +257,17 @@ class BinanceExecutor {
   _normalizeSymbol(s) { return s.replace(':USDT', '').replace('USDTUSDT', 'USDT'); }
   _client(sid) { return FUTURES_STRATEGIES.has(Number(sid)) ? this._futuresClient : this._spotClient; }
   isReady() { return this._initialized; }
+  async getOrder(symbol, orderId) {
+    if (!this.binance) return { error: 'Not initialized' };
+    try {
+      // Use futures version for now as we are testing futures
+      const order = await this.binance.futuresOrder(symbol.replace('/', '').replace(':', ''), orderId);
+      return order;
+    } catch (e) {
+      return { error: e.message };
+    }
+  }
+
   destroy() { this._initialized = false; }
 }
 
