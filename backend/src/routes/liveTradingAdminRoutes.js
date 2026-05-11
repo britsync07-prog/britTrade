@@ -313,7 +313,10 @@ router.get('/dashboard', async (req, res) => {
             const sym = order.symbol.replace('/', '').replace(':', '');
             const binancePos = positions.find(p => p.symbol === sym);
             const amt = parseFloat(binancePos?.positionAmt || 0);
-            if (amt === 0) {
+            const status = (order.status || '').toUpperCase();
+
+            // Only auto-close if it's NOT a pending limit order (NEW/new)
+            if (amt === 0 && status !== 'NEW') {
               await liveTradeDb.updateOrder(order.id, { status: 'CLOSED' });
               order.status = 'CLOSED';
             }
