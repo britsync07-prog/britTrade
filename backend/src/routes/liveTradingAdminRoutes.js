@@ -351,7 +351,7 @@ router.get('/dashboard', async (req, res) => {
               ...order,
               currentPrice: markPrice,
               avg_fill_price: entryPrice, // Sync entry price with Binance
-              livePnlUSDT: +unrealizedPnl.toFixed(4),
+              livePnlUSDT: +parseFloat(binancePos.unRealizedProfit || 0).toFixed(4),
               livePnlPct: +pnlPct.toFixed(2)
             };
           } else {
