@@ -79,10 +79,10 @@ class LiveTradeOrchestrator {
 
         // 1. Get all orders with OPEN or NEW status from DB
         const allOrders = await liveTradeDb.getOrders(100, 0);
-        const openLimitOrders = allOrders.filter(o => 
-          (o.status === 'OPEN' || o.status === 'NEW' || o.status === 'open') && 
-          o.order_type === 'limit'
-        );
+        const openLimitOrders = allOrders.filter(o => {
+          const s = (o.status || '').toUpperCase();
+          return (s === 'OPEN' || s === 'NEW' || s === 'PARTIALLY_FILLED') && o.order_type === 'limit';
+        });
 
         const now = Math.floor(Date.now() / 1000);
         const EXPIRY_SECONDS = 120; // 2 minutes
