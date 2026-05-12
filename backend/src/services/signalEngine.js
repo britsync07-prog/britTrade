@@ -169,6 +169,7 @@ class SignalEngine {
           let signalSide = null, currentPrice = 0, initialTp = 0, initialSl = 0;
           const data = await this.fetchOHLC(symbol, config.timeframe);
           currentPrice = data.price;
+          this.latestPrices[symbol] = currentPrice;
 
           if (strategy.name === 'TrendFollower') {
             const adxInfo = ADX.calculate({ high: data.highs, low: data.lows, close: data.closes, period: 14 });

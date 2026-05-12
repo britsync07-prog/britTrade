@@ -186,46 +186,78 @@ class LiveTradeOrchestrator {
         }
       }
 
-      // 5. Determine Binance side intelligently
+      // 5. Determine Binance side intelligently (using Binance as source of truth)
       let isEntryOrder = signal.isEntry;
       let orderSide = null;
+      let orderToClose = null;
+      let fixedQty = null;
+      let finalAmount = stratConfig.trade_amount_usdt;
 
-      // Find if we already have an active trade for this symbol/strategy
+      let hasPosition = false;
+      let positionAmt = 0;
+      let positionSide = null;
+
+      try {
+        const positionsRes = await binanceExecutor.getPositions();
+        if (Array.isArray(positionsRes)) {
+          // Normalize symbol for comparison (e.g. BTC/USDT -> BTCUSDT)
+          const bSymbol = symbol.replace('/', '').replace(':', '').replace('USDTUSDT', 'USDT');
+          const pos = positionsRes.find(p => p.symbol === bSymbol);
+          if (pos && Math.abs(parseFloat(pos.positionAmt)) > 0) {
+            hasPosition = true;
+            positionAmt = parseFloat(pos.positionAmt);
+            positionSide = positionAmt > 0 ? 'buy' : 'sell'; // buy=long, sell=short
+          }
+        }
+      } catch (e) {
+        log('warn', `Could not fetch positions from Binance: ${e.message}`);
+      }
+
+      // Find if we have a local record for this symbol/strategy
       const openForSymbol = openOrders.find(o => o.symbol === symbol);
 
-      if (openForSymbol) {
-        // We have an active trade -> We MUST be exiting
-        isEntryOrder = false;
-        orderSide = (openForSymbol.side.toLowerCase() === 'buy') ? 'sell' : 'buy';
-        log('info', `Active trade found (${openForSymbol.side}). Exiting with a ${orderSide.toUpperCase()} order.`);
-      } else {
-        // No active trade -> This is an entry
-        isEntryOrder = true;
-        const s = (side || '').toLowerCase();
-        if (s === 'buy' || s === 'long') orderSide = 'buy';
-        else if (s === 'sell' || s === 'short') orderSide = 'sell';
-        else {
-          log('warn', `Unrecognized signal side for entry: ${side}`);
+      if (hasPosition) {
+        if (!isEntryOrder) {
+          // Engine wants to EXIT, and we HAVE a position.
+          orderSide = positionSide === 'buy' ? 'sell' : 'buy';
+          fixedQty = Math.abs(positionAmt);
+          if (openForSymbol) {
+            orderToClose = openForSymbol;
+            finalAmount = openForSymbol.amount_usdt || finalAmount;
+          }
+          log('info', `Active position found on Binance (${positionSide} ${fixedQty}). Exiting with a ${orderSide.toUpperCase()} order.`);
+        } else {
+          // Engine wants to ENTER, but we ALREADY have a position.
+          log('info', `Active position already exists for ${symbol} (${positionSide}). Skipping redundant entry signal.`);
           return;
+        }
+      } else {
+        if (!isEntryOrder) {
+          // Engine wants to EXIT, but we have NO position on Binance.
+          // CRITICAL: We skip to prevent opening a naked short in the wrong direction.
+          log('warn', `Exit signal received for ${symbol}, but no open position found on Binance. Ignoring to prevent naked shorts.`);
+          if (openForSymbol) {
+            await liveTradeDb.updateOrder(openForSymbol.id, { status: 'CLOSED' });
+            log('info', `Cleaned up stale local DB entry for ${symbol}`);
+          }
+          return;
+        } else {
+          // Engine wants to ENTER, and we have NO position.
+          const s = (side || '').toLowerCase();
+          if (s === 'buy' || s === 'long') orderSide = 'buy';
+          else if (s === 'sell' || s === 'short') orderSide = 'sell';
+          else {
+            log('warn', `Unrecognized signal side for entry: ${side}`);
+            return;
+          }
+          log('info', `No active position found. Proceeding with new ${orderSide.toUpperCase()} entry.`);
         }
       }
 
       // 5b. Minimum Notional Guard (Binance Futures Testnet needs ~$20)
-      let tradeAmount = stratConfig.trade_amount_usdt;
-      if (isEntryOrder && tradeAmount < 20 && config.testnet) {
-        log('warn', `Adjusting amount from $${tradeAmount} to $20 to meet Binance minimum notional`);
-        tradeAmount = 20;
-      }
-
-      // 5c. Exit Logic: If this is an exit, find the amount to close
-      let finalAmount = tradeAmount;
-      let fixedQty = null;
-      let orderToClose = null;
-
-      if (!isEntryOrder && openForSymbol) {
-        finalAmount = openForSymbol.amount_usdt || tradeAmount;
-        fixedQty = openForSymbol.amount; // Use original exact quantity
-        orderToClose = openForSymbol;
+      if (isEntryOrder && finalAmount < 20 && config.testnet) {
+        log('warn', `Adjusting amount from $${finalAmount} to $20 to meet Binance minimum notional`);
+        finalAmount = 20;
       }
 
       log('info', `Signal → ${symbol} ${side.toUpperCase()} | strategy=${strategyId} | entry=${isEntryOrder} | margin=$${finalAmount} | qty=${fixedQty || 'auto'}`);

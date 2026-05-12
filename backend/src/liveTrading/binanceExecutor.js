@@ -276,8 +276,9 @@ class BinanceExecutor {
       try {
         const positions = await this._futuresClient.fetchPositions();
         return positions.map(p => ({
-          symbol: p.symbol.replace('/', '').replace(':', ''),
-          positionAmt: p.contracts,
+          symbol: p.symbol.replace('/', '').replace(':', '').replace('USDTUSDT', 'USDT'),
+          // Ensure positionAmt is signed (positive for Long, negative for Short)
+          positionAmt: parseFloat(p.info?.positionAmt || (p.side === 'long' ? p.contracts : -p.contracts)),
           unRealizedProfit: p.unrealizedPnl,
           markPrice: p.markPrice,
           entryPrice: p.entryPrice,
@@ -305,7 +306,18 @@ class BinanceExecutor {
           headers: { 'X-MBX-APIKEY': this._apiKey },
           timeout: 5000 
         });
-        if (Array.isArray(res.data)) return res.data;
+        
+        if (Array.isArray(res.data)) {
+          // Normalize Testnet response to match Live mode's standard structure
+          return res.data.map(p => ({
+            symbol: p.symbol,
+            positionAmt: parseFloat(p.positionAmt || p.positionAmount || 0),
+            unRealizedProfit: parseFloat(p.unRealizedProfit || 0),
+            markPrice: parseFloat(p.markPrice || 0),
+            entryPrice: parseFloat(p.entryPrice || 0),
+            leverage: parseInt(p.leverage || 1)
+          }));
+        }
       } catch (e) { continue; }
     }
     return { error: 'Failed to fetch positions from all environments' };
