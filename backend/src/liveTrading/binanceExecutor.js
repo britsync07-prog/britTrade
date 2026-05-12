@@ -355,7 +355,15 @@ class BinanceExecutor {
           headers: { 'X-MBX-APIKEY': this._apiKey },
           timeout: 5000 
         });
-        if (res.data) return res.data;
+        if (res.data) {
+          // Normalize Testnet response to match Live mode's standard structure
+          return {
+            totalUnrealizedProfit: parseFloat(res.data.totalUnrealizedProfit || 0),
+            totalMarginBalance: parseFloat(res.data.totalMarginBalance || 0),
+            availableBalance: parseFloat(res.data.availableBalance || 0),
+            raw: res.data
+          };
+        }
       } catch (e) { continue; }
     }
     return { error: 'Failed to fetch account info from all environments' };
