@@ -215,6 +215,11 @@ export default function Dashboard() {
                 Save API Keys
               </button>
             </div>
+            <div className="pt-1">
+              <Link to="/live-trading" className="inline-flex items-center gap-2 text-cyan-300 hover:text-cyan-200 text-xs font-black uppercase tracking-widest">
+                Open Full Live Trading Dashboard <ArrowRight size={14} />
+              </Link>
+            </div>
           </div>
         )}
 

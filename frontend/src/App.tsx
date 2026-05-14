@@ -9,6 +9,7 @@ import { PerformanceTicker } from './components/ui/PerformanceTicker';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import StrategyDetail from './pages/StrategyDetail';
+import UserLiveTrading from './pages/UserLiveTrading';
 import TradingViewChart from './components/ui/TradingViewChart';
 import AdminDashboard from './pages/AdminDashboard';
 import api from './services/api';
@@ -333,6 +334,10 @@ function AppContent() {
         <Route 
           path="/strategy/:id" 
           element={user ? <StrategyDetail /> : <Navigate to="/login" />} 
+        />
+        <Route 
+          path="/live-trading" 
+          element={user ? <UserLiveTrading /> : <Navigate to="/login" />} 
         />
         <Route 
           path="/admin" 

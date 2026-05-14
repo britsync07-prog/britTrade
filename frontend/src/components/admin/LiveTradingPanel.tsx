@@ -30,7 +30,7 @@ interface DashboardData {
 const STRATEGY_NAMES: Record<number, string> = { 1: 'GridMeanReversion', 2: 'TrendFollower', 3: 'FuturesScalper' };
 const STRATEGY_COLORS: Record<number, string> = { 1: 'text-cyan-400', 2: 'text-purple-400', 3: 'text-orange-400' };
 
-export default function LiveTradingPanel() {
+export default function LiveTradingPanel({ apiBase = '/admin/live-trading', showKillSwitch = true }: { apiBase?: string; showKillSwitch?: boolean }) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -49,7 +49,7 @@ export default function LiveTradingPanel() {
     if (!quiet) setLoading(true);
     else setRefreshing(true);
     try {
-      const res = await api.get('/admin/live-trading/dashboard');
+      const res = await api.get(`${apiBase}/dashboard`);
       setData(res.data);
     } catch (e) {
       console.error('Failed to load live trading dashboard', e);
@@ -57,7 +57,7 @@ export default function LiveTradingPanel() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [apiBase]);
 
   useEffect(() => {
     fetchDashboard();
@@ -70,7 +70,7 @@ export default function LiveTradingPanel() {
     setSaving(true);
     setTestResult(null);
     try {
-      await api.post('/admin/live-trading/config', { apiKey, apiSecret, testnet });
+      await api.post(`${apiBase}/config`, { apiKey, apiSecret, testnet });
       setApiKey(''); setApiSecret('');
       setShowConfig(false);
       fetchDashboard(true);
@@ -82,7 +82,7 @@ export default function LiveTradingPanel() {
   const handleTest = async () => {
     setTesting(true); setTestResult(null);
     try {
-      const res = await api.post('/admin/live-trading/config/test');
+      const res = await api.post(`${apiBase}/config/test`);
       setTestResult({ ok: true, msg: `✅ Connected! Futures Balance: $${res.data.balance.futures?.toFixed(2) || '0.00'}` });
     } catch (err: any) {
       setTestResult({ ok: false, msg: err.response?.data?.error || 'Connection failed' });
@@ -92,7 +92,7 @@ export default function LiveTradingPanel() {
   const handleToggle = async () => {
     if (!data) return;
     try {
-      await api.post('/admin/live-trading/toggle', { enabled: !data.status.enabled });
+      await api.post(`${apiBase}/toggle`, { enabled: !data.status.enabled });
       fetchDashboard(true);
     } catch (err: any) { alert(err.response?.data?.error || 'Toggle failed'); }
   };
@@ -100,7 +100,7 @@ export default function LiveTradingPanel() {
   const handleKillSwitch = async () => {
     if (!confirm('🚨 KILL SWITCH: Cancel all open orders and disable live trading?')) return;
     try {
-      const res = await api.post('/admin/live-trading/kill-switch');
+      const res = await api.post(`${apiBase}/kill-switch`);
       setKillMsg(res.data.message);
       fetchDashboard(true);
       setTimeout(() => setKillMsg(''), 5000);
@@ -109,14 +109,14 @@ export default function LiveTradingPanel() {
 
   const handleStrategyToggle = async (stratId: number, current: number) => {
     try {
-      await api.put(`/admin/live-trading/strategies/${stratId}`, { enabled: current === 0 });
+      await api.put(`${apiBase}/strategies/${stratId}`, { enabled: current === 0 });
       fetchDashboard(true);
     } catch (err: any) { alert(err.response?.data?.error || 'Update failed'); }
   };
 
   const handleUpdateStrategy = async (stratId: number) => {
     try {
-      await api.put(`/admin/live-trading/strategies/${stratId}`, {
+      await api.put(`${apiBase}/strategies/${stratId}`, {
         trade_amount_usdt: editValues.amount,
         leverage: editValues.leverage,
         allocated_capital: editValues.capital
@@ -173,7 +173,7 @@ export default function LiveTradingPanel() {
           )}
         </div>
         <div className="flex items-center gap-3">
-          {status.configured && (
+          {status.configured && showKillSwitch && (
             <button onClick={handleKillSwitch}
               className="px-4 py-2 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2">
               <ShieldOff className="w-4 h-4" /> Kill Switch

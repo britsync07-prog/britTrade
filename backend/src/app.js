@@ -112,6 +112,20 @@ app.post('/live-trading/config', authMiddleware, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+app.post('/live-trading/config/test', authMiddleware, async (req, res, next) => {
+  try {
+    const cfg = await liveTradeDb.getUserBinanceConfig(req.userId);
+    if (!cfg) return res.status(400).json({ error: 'No Binance credentials saved' });
+    const apiKey = decrypt(cfg.api_key_enc);
+    const apiSecret = decrypt(cfg.api_sec_enc);
+    if (!apiKey || !apiSecret) return res.status(400).json({ error: 'Could not decrypt saved credentials' });
+    await binanceExecutor.init(apiKey, apiSecret, cfg.testnet === 1);
+    const balance = await binanceExecutor.getBalance();
+    if (balance.error) return res.status(400).json({ error: `Connection test failed: ${balance.error}` });
+    res.json({ success: true, testnet: cfg.testnet === 1, balance });
+  } catch (e) { next(e); }
+});
+
 app.post('/live-trading/toggle', authMiddleware, async (req, res, next) => {
   try {
     const config = await liveTradeDb.getUserBinanceConfig(req.userId);
@@ -125,6 +139,140 @@ app.post('/live-trading/toggle', authMiddleware, async (req, res, next) => {
     await liveTradeDb.addLog('info', `Live trading ${enabled ? 'ENABLED' : 'DISABLED'} by user ${req.userId}`, { user_id: req.userId });
 
     res.json({ enabled, message: `Live trading ${enabled ? 'enabled' : 'disabled'}` });
+  } catch (e) { next(e); }
+});
+
+app.get('/live-trading/strategies', authMiddleware, async (req, res, next) => {
+  try {
+    const cfgs = await liveTradeDb.getUserStrategyConfigs(req.userId);
+    res.json(cfgs);
+  } catch (e) { next(e); }
+});
+
+app.put('/live-trading/strategies/:id', authMiddleware, async (req, res, next) => {
+  try {
+    const strategyId = parseInt(req.params.id, 10);
+    if (isNaN(strategyId)) return res.status(400).json({ error: 'Invalid strategy id' });
+
+    const { enabled, order_type, trade_amount_usdt, leverage, max_open_orders, allocated_capital } = req.body;
+    const updates = {};
+    if (typeof enabled === 'boolean') updates.enabled = enabled ? 1 : 0;
+    if (order_type) updates.order_type = order_type;
+    if (trade_amount_usdt != null) updates.trade_amount_usdt = parseFloat(trade_amount_usdt);
+    if (allocated_capital != null) updates.allocated_capital = parseFloat(allocated_capital);
+    if (leverage != null) updates.leverage = parseInt(leverage, 10);
+    if (max_open_orders != null) updates.max_open_orders = parseInt(max_open_orders, 10);
+
+    await liveTradeDb.updateUserStrategyConfig(req.userId, strategyId, updates);
+    const updated = await liveTradeDb.getUserStrategyConfig(req.userId, strategyId);
+    res.json(updated);
+  } catch (e) { next(e); }
+});
+
+app.get('/live-trading/orders', authMiddleware, async (req, res, next) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+    const offset = parseInt(req.query.offset, 10) || 0;
+    const orders = await liveTradeDb.getOrdersByUser(req.userId, limit, offset);
+    res.json({ orders, limit, offset });
+  } catch (e) { next(e); }
+});
+
+app.get('/live-trading/logs', authMiddleware, async (req, res, next) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500);
+    const logs = await liveTradeDb.getLogsByUser(req.userId, limit);
+    res.json(logs);
+  } catch (e) { next(e); }
+});
+
+app.get('/live-trading/dashboard', authMiddleware, async (req, res, next) => {
+  try {
+    const config = await liveTradeDb.getUserBinanceConfig(req.userId);
+    const strategyConfigs = await liveTradeDb.getUserStrategyConfigs(req.userId);
+    let orders = await liveTradeDb.getOrdersByUser(req.userId, 100, 0);
+
+    let totalLivePnlUSDT = 0;
+    let futuresBalance = 0;
+    let spotBalance = 0;
+    let enrichedOrders = orders;
+
+    if (config) {
+      const apiKey = decrypt(config.api_key_enc);
+      const apiSecret = decrypt(config.api_sec_enc);
+      if (apiKey && apiSecret) {
+        await binanceExecutor.init(apiKey, apiSecret, config.testnet === 1);
+        try {
+          const positions = await binanceExecutor.getPositions();
+          const accountInfo = await binanceExecutor.getAccount();
+
+          if (!positions.error && !accountInfo.error) {
+            const activeInDb = orders.filter(o => ['OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED'].includes((o.status || '').toUpperCase()));
+            for (const order of activeInDb) {
+              const sym = order.symbol.replace('/', '').replace(':', '');
+              const binancePos = positions.find(p => p.symbol === sym);
+              const amt = parseFloat(binancePos?.positionAmt || 0);
+              if (amt === 0 && (order.status || '').toUpperCase() !== 'NEW') {
+                await liveTradeDb.updateOrder(order.id, { status: 'CLOSED' });
+                order.status = 'CLOSED';
+              }
+            }
+            totalLivePnlUSDT = parseFloat(accountInfo.totalUnrealizedProfit || 0);
+            futuresBalance = parseFloat(accountInfo.totalMarginBalance || 0);
+          }
+
+          const spot = await binanceExecutor.getBalance();
+          spotBalance = spot.spot || 0;
+
+          enrichedOrders = orders.map(order => {
+            const s = (order.status || '').toUpperCase();
+            const isActive = ['OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED'].includes(s);
+            if (!isActive) return { ...order, livePnlUSDT: null, livePnlPct: null };
+            const sym = order.symbol.replace('/', '').replace(':', '');
+            const binancePos = Array.isArray(positions) ? positions.find(p => p.symbol === sym) : null;
+            if (binancePos && parseFloat(binancePos.positionAmt) !== 0) {
+              const markPrice = parseFloat(binancePos.markPrice);
+              const entryPrice = parseFloat(binancePos.entryPrice);
+              const leverage = parseFloat(binancePos.leverage);
+              let pnlPct = 0;
+              if (entryPrice > 0) {
+                if (order.side === 'buy') pnlPct = ((markPrice - entryPrice) / entryPrice) * 100 * leverage;
+                else pnlPct = ((entryPrice - markPrice) / entryPrice) * 100 * leverage;
+              }
+              return {
+                ...order,
+                currentPrice: markPrice,
+                avg_fill_price: entryPrice,
+                livePnlUSDT: +parseFloat(binancePos.unRealizedProfit || 0).toFixed(4),
+                livePnlPct: +pnlPct.toFixed(2),
+              };
+            }
+            return { ...order, livePnlUSDT: 0, livePnlPct: 0 };
+          });
+        } catch (_) {}
+      }
+    }
+
+    const openOrders = enrichedOrders.filter(o => ['OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED'].includes((o.status || '').toUpperCase()));
+    const closedOrders = enrichedOrders.filter(o => ['CLOSED', 'CANCELLED', 'ERROR', 'REJECTED', 'EXPIRED'].includes((o.status || '').toUpperCase()));
+
+    res.json({
+      status: {
+        configured: !!config,
+        enabled: config?.enabled === 1,
+        testnet: config?.testnet === 1,
+        executorReady: !!config,
+      },
+      balance: { spot: spotBalance, futures: futuresBalance, error: null },
+      strategyConfigs,
+      orders: enrichedOrders,
+      summary: {
+        openCount: openOrders.length,
+        closedCount: closedOrders.length,
+        totalOrders: enrichedOrders.length,
+        totalLivePnlUSDT: +totalLivePnlUSDT.toFixed(4),
+      },
+    });
   } catch (e) { next(e); }
 });
 

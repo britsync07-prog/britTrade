@@ -102,6 +102,21 @@ async function initLiveTradeDb() {
     )
   `);
 
+  await run(`
+    CREATE TABLE IF NOT EXISTS user_live_trade_configs (
+      user_id           INTEGER NOT NULL,
+      strategy_id       INTEGER NOT NULL,
+      enabled           INTEGER DEFAULT 0,
+      order_type        TEXT DEFAULT 'market',
+      trade_amount_usdt REAL DEFAULT 10.0,
+      allocated_capital REAL DEFAULT 100.0,
+      leverage          INTEGER DEFAULT 5,
+      max_open_orders   INTEGER DEFAULT 5,
+      updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, strategy_id)
+    )
+  `);
+
   // Migration: add allocated_capital if missing
   const configCols = await all("PRAGMA table_info(live_trade_configs)");
   if (!configCols.some(c => c.name === 'allocated_capital')) {
@@ -297,6 +312,13 @@ async function getOrders(limit = 50, offset = 0) {
   );
 }
 
+async function getOrdersByUser(userId, limit = 50, offset = 0) {
+  return all(
+    'SELECT * FROM live_orders WHERE user_id=? ORDER BY created_at DESC LIMIT ? OFFSET ?',
+    [userId, limit, offset]
+  );
+}
+
 async function getOrder(id) {
   return get('SELECT * FROM live_orders WHERE id=?', [id]);
 }
@@ -326,6 +348,50 @@ async function getLogs(limit = 100) {
   return all('SELECT * FROM live_trade_log ORDER BY created_at DESC LIMIT ?', [limit]);
 }
 
+async function getLogsByUser(userId, limit = 100) {
+  return all('SELECT * FROM live_trade_log WHERE user_id=? ORDER BY created_at DESC LIMIT ?', [userId, limit]);
+}
+
+async function ensureUserStrategyConfigs(userId) {
+  const strategies = [
+    { id: 1, leverage: 5, amount: 10.0, capital: 100.0 },
+    { id: 2, leverage: 5, amount: 10.0, capital: 100.0 },
+    { id: 3, leverage: 5, amount: 10.0, capital: 100.0 },
+  ];
+  for (const s of strategies) {
+    await run(
+      `INSERT OR IGNORE INTO user_live_trade_configs
+      (user_id, strategy_id, enabled, order_type, trade_amount_usdt, leverage, allocated_capital, max_open_orders)
+      VALUES (?, ?, 0, 'market', ?, ?, ?, 5)`,
+      [userId, s.id, s.amount, s.leverage, s.capital]
+    );
+  }
+}
+
+async function getUserStrategyConfigs(userId) {
+  await ensureUserStrategyConfigs(userId);
+  return all('SELECT * FROM user_live_trade_configs WHERE user_id=? ORDER BY strategy_id', [userId]);
+}
+
+async function getUserStrategyConfig(userId, strategyId) {
+  await ensureUserStrategyConfigs(userId);
+  return get('SELECT * FROM user_live_trade_configs WHERE user_id=? AND strategy_id=?', [userId, strategyId]);
+}
+
+async function updateUserStrategyConfig(userId, strategyId, fields) {
+  await ensureUserStrategyConfigs(userId);
+  const allowed = ['enabled', 'order_type', 'trade_amount_usdt', 'leverage', 'max_open_orders', 'allocated_capital'];
+  const sets = [];
+  const vals = [];
+  for (const [k, v] of Object.entries(fields)) {
+    if (allowed.includes(k)) { sets.push(`${k}=?`); vals.push(v); }
+  }
+  if (!sets.length) return;
+  sets.push('updated_at=CURRENT_TIMESTAMP');
+  vals.push(userId, strategyId);
+  return run(`UPDATE user_live_trade_configs SET ${sets.join(',')} WHERE user_id=? AND strategy_id=?`, vals);
+}
+
 module.exports = {
   initLiveTradeDb,
   getBinanceConfig,
@@ -340,14 +406,20 @@ module.exports = {
   getAllStrategyConfigs,
   getStrategyConfig,
   updateStrategyConfig,
+  ensureUserStrategyConfigs,
+  getUserStrategyConfigs,
+  getUserStrategyConfig,
+  updateUserStrategyConfig,
   insertOrder,
   updateOrder,
   getOrders,
+  getOrdersByUser,
   getOrder,
   getOpenOrders,
   getOpenOrdersByUser,
   addLog,
   getLogs,
+  getLogsByUser,
   run,
   all
 };

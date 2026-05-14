@@ -147,9 +147,6 @@ class LiveTradeOrchestrator {
 
     const { strategyId, symbol, side, price, signalId, isEntry } = signal;
     try {
-      const stratConfig = await liveTradeDb.getStrategyConfig(strategyId);
-      if (!stratConfig || !stratConfig.enabled) return;
-
       const subscribers = await db.query(
         'SELECT userId FROM subscriptions WHERE strategyId = ? AND useSignal = 1',
         [strategyId]
@@ -177,6 +174,8 @@ class LiveTradeOrchestrator {
         }
 
         await binanceExecutor.init(apiKey, apiSecret, userCfg.testnet === 1);
+        const stratConfig = await liveTradeDb.getUserStrategyConfig(userId, strategyId);
+        if (!stratConfig || !stratConfig.enabled) continue;
 
         const openOrders = await liveTradeDb.getOpenOrdersByUser(strategyId, userId);
         const totalMarginUsed = openOrders.reduce((sum, o) => sum + (o.amount_usdt || 0), 0);
