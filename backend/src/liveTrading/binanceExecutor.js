@@ -137,16 +137,21 @@ class BinanceExecutor {
 
   async placeOrder(symbol, side, amountUSDT, orderType = 'market', price = null, strategyId = 1, leverage = 1, fixedQty = null) {
     if (!this._testnet) {
-       // Live mode logic using CCXT
-       const client = this._client(strategyId);
-       try {
-         const isFutures = FUTURES_STRATEGIES.has(Number(strategyId));
-         if (isFutures && leverage > 1) await client.setLeverage(leverage, symbol);
-         const ticker = await client.fetchTicker(symbol);
-         const qty = fixedQty || (amountUSDT * leverage) / ticker.last;
-         const order = await client.createOrder(symbol, orderType, side, qty, price);
-         return order;
-       } catch (e) { return { error: e.message }; }
+      // Live mode logic using CCXT
+      const client = this._client(strategyId);
+      try {
+        const isFutures = FUTURES_STRATEGIES.has(Number(strategyId));
+        const liveSymbol = await this._resolveLiveSymbol(client, symbol, isFutures);
+        if (isFutures && leverage > 1) await client.setLeverage(leverage, liveSymbol);
+        const ticker = await client.fetchTicker(liveSymbol);
+        const rawQty = fixedQty || (amountUSDT * leverage) / ticker.last;
+        const qty = Number(client.amountToPrecision(liveSymbol, rawQty));
+        const normalizedPrice = orderType === 'limit' && price != null
+          ? Number(client.priceToPrecision(liveSymbol, price))
+          : undefined;
+        const order = await client.createOrder(liveSymbol, orderType, side, qty, normalizedPrice);
+        return order;
+      } catch (e) { return { error: e.message }; }
     }
 
     // Testnet/Demo mode manual logic
@@ -267,6 +272,20 @@ class BinanceExecutor {
   _client(sid) { return FUTURES_STRATEGIES.has(Number(sid)) ? this._futuresClient : this._spotClient; }
   isReady() { return this._initialized; }
 
+  async _resolveLiveSymbol(client, symbol, isFutures) {
+    await client.loadMarkets();
+    if (client.markets[symbol]) return symbol;
+    if (isFutures && symbol.endsWith('/USDT')) {
+      const futuresSymbol = `${symbol}:USDT`;
+      if (client.markets[futuresSymbol]) return futuresSymbol;
+    }
+    const normalizedInput = symbol.replace(':USDT', '').replace('USDTUSDT', 'USDT').toUpperCase();
+    const found = Object.values(client.markets).find(
+      (m) => (m.id || '').toUpperCase() === normalizedInput || (m.symbol || '').replace(':USDT', '').toUpperCase() === normalizedInput
+    );
+    return found?.symbol || symbol;
+  }
+
   // Unified method to get all open positions from Binance
   async getPositions() {
     if (!this._initialized) return { error: 'Not initialized' };
@@ -370,10 +389,9 @@ class BinanceExecutor {
   }
 
   async getOrder(symbol, orderId) {
-    if (!this.binance) return { error: 'Not initialized' };
+    if (!this._initialized) return { error: 'Not initialized' };
     try {
-      // Use futures version for now as we are testing futures
-      const order = await this.binance.futuresOrder(symbol.replace('/', '').replace(':', ''), orderId);
+      const order = await this._futuresClient.fetchOrder(orderId, symbol);
       return order;
     } catch (e) {
       return { error: e.message };

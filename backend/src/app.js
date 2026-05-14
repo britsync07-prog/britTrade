@@ -17,6 +17,8 @@ const authRoutes = require('./routes/authRoutes');
 const cookieParser = require('cookie-parser');
 const liveTradingAdminRoutes = require('./routes/liveTradingAdminRoutes');
 const liveTradeOrchestrator = require('./liveTrading/liveTradeOrchestrator');
+const liveTradeDb = require('./liveTrading/liveTradeDb');
+const binanceExecutor = require('./liveTrading/binanceExecutor');
 
 const PORT = process.env.PORT || 7286;
 const app = express();
@@ -71,6 +73,45 @@ app.use('/payments', paymentRoutes);
 app.use('/admin/support', authMiddleware, supportRoutes);
 app.use('/admin/live-trading', liveTradingAdminRoutes);
 app.use('/admin', adminRoutes);
+
+// --- User Live Trading Controls (all authenticated users) ---
+app.get('/live-trading/status', authMiddleware, async (req, res, next) => {
+  try {
+    const config = await liveTradeDb.getBinanceConfig();
+    res.json({
+      configured: !!config,
+      enabled: config?.enabled === 1,
+      testnet: config?.testnet === 1,
+      executorReady: binanceExecutor.isReady(),
+    });
+  } catch (e) { next(e); }
+});
+
+app.post('/live-trading/toggle', authMiddleware, async (req, res, next) => {
+  try {
+    const config = await liveTradeDb.getBinanceConfig();
+    if (!config) {
+      return res.status(400).json({ error: 'Live trading is not configured by admin yet.' });
+    }
+
+    const { enabled } = req.body;
+    if (typeof enabled !== 'boolean') {
+      return res.status(400).json({ error: '"enabled" (boolean) is required' });
+    }
+
+    if (enabled && !binanceExecutor.isReady()) {
+      await liveTradeOrchestrator.reinitExecutor();
+      if (!binanceExecutor.isReady()) {
+        return res.status(400).json({ error: 'Executor is not ready with current Binance credentials' });
+      }
+    }
+
+    await liveTradeDb.setGlobalEnabled(enabled);
+    await liveTradeDb.addLog('info', `Live trading globally ${enabled ? 'ENABLED' : 'DISABLED'} by user ${req.userId}`);
+
+    res.json({ enabled, message: `Live trading ${enabled ? 'enabled' : 'disabled'}` });
+  } catch (e) { next(e); }
+});
 
 // --- Strategy Management ---
 app.get('/strategies/prices', authMiddleware, async (req, res, next) => {

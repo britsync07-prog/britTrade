@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Activity, Zap, TrendingUp, BarChart, LogOut, ShieldAlert, Send, ArrowRight } from 'lucide-react';
+import { Activity, Zap, TrendingUp, BarChart, LogOut, ShieldAlert, Send, ArrowRight, Power, PowerOff } from 'lucide-react';
 import api from '../services/api';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
@@ -15,6 +15,8 @@ export default function Dashboard() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [liveStatus, setLiveStatus] = useState<{ configured: boolean; enabled: boolean; testnet: boolean } | null>(null);
+  const [liveBusy, setLiveBusy] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -32,6 +34,8 @@ export default function Dashboard() {
         setStrategies(Array.isArray(stratsRes.data) ? stratsRes.data : []);
         setSubscribed(Array.isArray(subRes.data) ? subRes.data : []);
         setUser(userRes.data);
+        const liveRes = await api.get('/live-trading/status');
+        setLiveStatus(liveRes.data);
       } catch (e: any) {
         console.error('Error fetching dashboard data:', e);
         setError(e.message || 'Failed to connect to server');
@@ -69,6 +73,19 @@ export default function Dashboard() {
     return sum + ((winRate / 100) * closed);
   }, 0);
   const dashboardWinRate = totalClosedSignals > 0 ? `${((weightedWins / totalClosedSignals) * 100).toFixed(1)}%` : '0.0%';
+
+  const handleLiveToggle = async () => {
+    if (!liveStatus || !liveStatus.configured || liveBusy) return;
+    setLiveBusy(true);
+    try {
+      const res = await api.post('/live-trading/toggle', { enabled: !liveStatus.enabled });
+      setLiveStatus({ ...liveStatus, enabled: !!res.data?.enabled });
+    } catch (e: any) {
+      alert(e?.response?.data?.error || 'Failed to toggle live trading');
+    } finally {
+      setLiveBusy(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-cyber-dark text-slate-200 pb-20 relative overflow-hidden">
@@ -117,6 +134,34 @@ export default function Dashboard() {
              </div>
           </div>
         </header>
+
+        {liveStatus && (
+          <div className="glass-card px-6 py-5 flex flex-wrap items-center justify-between gap-4 border-white/10">
+            <div className="flex items-center gap-3">
+              <span className={`w-2 h-2 rounded-full ${liveStatus.enabled ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+              <div className="text-sm font-bold text-white">
+                Live Trading: {liveStatus.enabled ? 'ON' : 'OFF'}
+              </div>
+              {liveStatus.testnet && (
+                <span className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-full bg-yellow-500/10 border border-yellow-500/20 text-yellow-400">Testnet</span>
+              )}
+              {!liveStatus.configured && (
+                <span className="text-[11px] text-red-400">Admin Binance API setup is required first.</span>
+              )}
+            </div>
+            <button
+              onClick={handleLiveToggle}
+              disabled={!liveStatus.configured || liveBusy}
+              className={`px-5 h-11 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 border ${
+                liveStatus.enabled
+                  ? 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
+                  : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
+              } disabled:opacity-50`}
+            >
+              {liveStatus.enabled ? <><PowerOff size={14} /> Disable</> : <><Power size={14} /> Enable</>}
+            </button>
+          </div>
+        )}
 
         {/* Global Stats Overview */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
