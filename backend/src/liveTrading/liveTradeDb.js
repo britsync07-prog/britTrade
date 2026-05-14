@@ -75,6 +75,19 @@ async function initLiveTradeDb() {
     )
   `);
 
+  // Per-user Binance credentials + on/off switch
+  await run(`
+    CREATE TABLE IF NOT EXISTS user_binance_config (
+      user_id      INTEGER PRIMARY KEY,
+      api_key_enc  TEXT NOT NULL,
+      api_sec_enc  TEXT NOT NULL,
+      testnet      INTEGER DEFAULT 1,
+      enabled      INTEGER DEFAULT 0,
+      created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at   DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   // Per-strategy live trade settings
   await run(`
     CREATE TABLE IF NOT EXISTS live_trade_configs (
@@ -113,6 +126,7 @@ async function initLiveTradeDb() {
   await run(`
     CREATE TABLE IF NOT EXISTS live_orders (
       id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id        INTEGER,
       strategy_id    INTEGER,
       signal_id      INTEGER,
       binance_id     TEXT,
@@ -136,6 +150,9 @@ async function initLiveTradeDb() {
 
   // Migration: add amount_usdt if missing from older schema
   const orderCols = await all("PRAGMA table_info(live_orders)");
+  if (!orderCols.some(c => c.name === 'user_id')) {
+    await run('ALTER TABLE live_orders ADD COLUMN user_id INTEGER');
+  }
   if (!orderCols.some(c => c.name === 'amount_usdt')) {
     await run('ALTER TABLE live_orders ADD COLUMN amount_usdt REAL');
   }
@@ -144,6 +161,7 @@ async function initLiveTradeDb() {
   await run(`
     CREATE TABLE IF NOT EXISTS live_trade_log (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id     INTEGER,
       level       TEXT DEFAULT 'info',
       strategy_id INTEGER,
       signal_id   INTEGER,
@@ -152,6 +170,11 @@ async function initLiveTradeDb() {
       created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
+
+  const logCols = await all("PRAGMA table_info(live_trade_log)");
+  if (!logCols.some(c => c.name === 'user_id')) {
+    await run('ALTER TABLE live_trade_log ADD COLUMN user_id INTEGER');
+  }
 
   console.log('[LiveTradeDb] ✅ live_trading.db initialized');
 }
@@ -184,6 +207,36 @@ async function deleteBinanceConfig() {
   return run('DELETE FROM binance_config WHERE id=1');
 }
 
+async function getUserBinanceConfig(userId) {
+  return get('SELECT * FROM user_binance_config WHERE user_id=?', [userId]);
+}
+
+async function getEnabledUserBinanceConfigs() {
+  return all('SELECT * FROM user_binance_config WHERE enabled=1');
+}
+
+async function saveUserBinanceConfig(userId, apiKeyEnc, apiSecEnc, testnet = true) {
+  const existing = await getUserBinanceConfig(userId);
+  if (existing) {
+    return run(
+      'UPDATE user_binance_config SET api_key_enc=?, api_sec_enc=?, testnet=?, updated_at=CURRENT_TIMESTAMP WHERE user_id=?',
+      [apiKeyEnc, apiSecEnc, testnet ? 1 : 0, userId]
+    );
+  }
+  return run(
+    'INSERT INTO user_binance_config (user_id, api_key_enc, api_sec_enc, testnet) VALUES (?, ?, ?, ?)',
+    [userId, apiKeyEnc, apiSecEnc, testnet ? 1 : 0]
+  );
+}
+
+async function setUserEnabled(userId, enabled) {
+  return run('UPDATE user_binance_config SET enabled=?, updated_at=CURRENT_TIMESTAMP WHERE user_id=?', [enabled ? 1 : 0, userId]);
+}
+
+async function deleteUserBinanceConfig(userId) {
+  return run('DELETE FROM user_binance_config WHERE user_id=?', [userId]);
+}
+
 // ─── Strategy config helpers ──────────────────────────────────────────────────
 
 async function getAllStrategyConfigs() {
@@ -211,14 +264,15 @@ async function updateStrategyConfig(strategyId, fields) {
 
 async function insertOrder(data) {
   const {
+    user_id = null,
     strategy_id, signal_id, binance_id, client_oid, symbol, side,
     order_type = 'market', amount_usdt, amount, price, avg_fill_price = null, testnet = 1, status = 'open'
   } = data;
   const res = await run(
     `INSERT INTO live_orders
-      (strategy_id, signal_id, binance_id, client_oid, symbol, side, order_type, amount_usdt, amount, price, avg_fill_price, testnet, status)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    [strategy_id, signal_id, binance_id, client_oid, symbol, side, order_type, amount_usdt ?? null, amount ?? null, price, avg_fill_price, testnet ? 1 : 0, status]
+      (user_id, strategy_id, signal_id, binance_id, client_oid, symbol, side, order_type, amount_usdt, amount, price, avg_fill_price, testnet, status)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [user_id, strategy_id, signal_id, binance_id, client_oid, symbol, side, order_type, amount_usdt ?? null, amount ?? null, price, avg_fill_price, testnet ? 1 : 0, status]
   );
   return res.lastID;
 }
@@ -248,19 +302,23 @@ async function getOrder(id) {
 }
 
 async function getOpenOrders(strategyId) {
+  return all("SELECT * FROM live_orders WHERE strategy_id=? AND UPPER(status) IN ('OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED') ORDER BY created_at DESC", [strategyId]);
+}
+
+async function getOpenOrdersByUser(strategyId, userId) {
   return all(
-    "SELECT * FROM live_orders WHERE strategy_id=? AND UPPER(status) IN ('OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED') ORDER BY created_at DESC",
-    [strategyId]
+    "SELECT * FROM live_orders WHERE strategy_id=? AND user_id=? AND UPPER(status) IN ('OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED') ORDER BY created_at DESC",
+    [strategyId, userId]
   );
 }
 
 // ─── Log helpers ──────────────────────────────────────────────────────────────
 
 async function addLog(level, message, extras = {}) {
-  const { strategy_id = null, signal_id = null, order_id = null } = extras;
+  const { user_id = null, strategy_id = null, signal_id = null, order_id = null } = extras;
   return run(
-    'INSERT INTO live_trade_log (level, strategy_id, signal_id, order_id, message) VALUES (?,?,?,?,?)',
-    [level, strategy_id, signal_id, order_id, message]
+    'INSERT INTO live_trade_log (user_id, level, strategy_id, signal_id, order_id, message) VALUES (?,?,?,?,?,?)',
+    [user_id, level, strategy_id, signal_id, order_id, message]
   );
 }
 
@@ -274,6 +332,11 @@ module.exports = {
   saveBinanceConfig,
   setGlobalEnabled,
   deleteBinanceConfig,
+  getUserBinanceConfig,
+  getEnabledUserBinanceConfigs,
+  saveUserBinanceConfig,
+  setUserEnabled,
+  deleteUserBinanceConfig,
   getAllStrategyConfigs,
   getStrategyConfig,
   updateStrategyConfig,
@@ -282,6 +345,7 @@ module.exports = {
   getOrders,
   getOrder,
   getOpenOrders,
+  getOpenOrdersByUser,
   addLog,
   getLogs,
   run,

@@ -29,6 +29,7 @@
 const liveTradeDb = require('./liveTradeDb');
 const binanceExecutor = require('./binanceExecutor');
 const { decrypt } = require('./encryptionUtils');
+const db = require('../db');
 
 const MAX_CONSECUTIVE_ERRORS = 5;
 
@@ -145,180 +146,134 @@ class LiveTradeOrchestrator {
     if (!this._ready) return;
 
     const { strategyId, symbol, side, price, signalId, isEntry } = signal;
-    const log = (level, msg) => {
-      console.log(`[LiveTrading][${level.toUpperCase()}] ${msg}`);
-      liveTradeDb.addLog(level, msg, { strategy_id: strategyId, signal_id: signalId }).catch(() => {});
-    };
-
     try {
-      // 1. Global enabled check
-      const config = await liveTradeDb.getBinanceConfig();
-      if (!config || !config.enabled) {
-        return; // Live trading globally off — silently skip
-      }
-
-      // 2. Executor ready?
-      if (!binanceExecutor.isReady()) {
-        log('warn', `Signal received but executor not ready. Reinitializing...`);
-        await this._bootExecutorFromDb();
-        if (!binanceExecutor.isReady()) return;
-      }
-
-      // 3. Per-strategy config check
       const stratConfig = await liveTradeDb.getStrategyConfig(strategyId);
-      if (!stratConfig || !stratConfig.enabled) {
-        return; // Strategy not enabled for live trading
-      }
+      if (!stratConfig || !stratConfig.enabled) return;
 
-      // 4. Capital & Max open orders guard
-      const openOrders = await liveTradeDb.getOpenOrders(strategyId);
-      console.log(`[LiveTradeOrchestrator] Found ${openOrders.length} active trades in DB for strategy ${strategyId}`);
-      const totalMarginUsed = openOrders.reduce((sum, o) => sum + (o.amount_usdt || 0), 0);
-      
-      if (isEntry) {
-        if (openOrders.length >= (stratConfig.max_open_orders || 5)) {
-          log('info', `Max open orders reached (${openOrders.length}) — skipping entry`);
-          return;
+      const subscribers = await db.query(
+        'SELECT userId FROM subscriptions WHERE strategyId = ? AND useSignal = 1',
+        [strategyId]
+      );
+      if (!subscribers.length) return;
+
+      const enabledUserCfgs = await liveTradeDb.getEnabledUserBinanceConfigs();
+      const enabledByUser = new Map(enabledUserCfgs.map(c => [Number(c.user_id), c]));
+
+      for (const sub of subscribers) {
+        const userId = Number(sub.userId);
+        const userCfg = enabledByUser.get(userId);
+        if (!userCfg) continue;
+
+        const log = (level, msg) => {
+          console.log(`[LiveTrading][U${userId}][${level.toUpperCase()}] ${msg}`);
+          liveTradeDb.addLog(level, msg, { user_id: userId, strategy_id: strategyId, signal_id: signalId }).catch(() => {});
+        };
+
+        const apiKey = decrypt(userCfg.api_key_enc);
+        const apiSecret = decrypt(userCfg.api_sec_enc);
+        if (!apiKey || !apiSecret) {
+          log('warn', 'Could not decrypt user Binance credentials');
+          continue;
         }
-        if ((totalMarginUsed + stratConfig.trade_amount_usdt) > (stratConfig.allocated_capital || 100)) {
-          log('info', `Insufficient allocated capital (Used: $${totalMarginUsed.toFixed(2)} / Limit: $${stratConfig.allocated_capital}) — skipping entry`);
-          return;
+
+        await binanceExecutor.init(apiKey, apiSecret, userCfg.testnet === 1);
+
+        const openOrders = await liveTradeDb.getOpenOrdersByUser(strategyId, userId);
+        const totalMarginUsed = openOrders.reduce((sum, o) => sum + (o.amount_usdt || 0), 0);
+        if (isEntry) {
+          if (openOrders.length >= (stratConfig.max_open_orders || 5)) continue;
+          if ((totalMarginUsed + stratConfig.trade_amount_usdt) > (stratConfig.allocated_capital || 100)) continue;
         }
-      }
 
-      // 5. Determine Binance side intelligently (using Binance as source of truth)
-      let isEntryOrder = signal.isEntry;
-      let orderSide = null;
-      let orderToClose = null;
-      let fixedQty = null;
-      let finalAmount = stratConfig.trade_amount_usdt;
+        let isEntryOrder = signal.isEntry;
+        let orderSide = null;
+        let orderToClose = null;
+        let fixedQty = null;
+        let finalAmount = stratConfig.trade_amount_usdt;
+        let hasPosition = false;
+        let positionAmt = 0;
+        let positionSide = null;
 
-      let hasPosition = false;
-      let positionAmt = 0;
-      let positionSide = null;
-
-      try {
-        const positionsRes = await binanceExecutor.getPositions();
-        if (Array.isArray(positionsRes)) {
-          // Normalize symbol for comparison (e.g. BTC/USDT -> BTCUSDT)
-          const bSymbol = symbol.replace('/', '').replace(':', '').replace('USDTUSDT', 'USDT');
-          const pos = positionsRes.find(p => p.symbol === bSymbol);
-          if (pos && Math.abs(parseFloat(pos.positionAmt)) > 0) {
-            hasPosition = true;
-            positionAmt = parseFloat(pos.positionAmt);
-            positionSide = positionAmt > 0 ? 'buy' : 'sell'; // buy=long, sell=short
+        try {
+          const positionsRes = await binanceExecutor.getPositions();
+          if (Array.isArray(positionsRes)) {
+            const bSymbol = symbol.replace('/', '').replace(':', '').replace('USDTUSDT', 'USDT');
+            const pos = positionsRes.find(p => p.symbol === bSymbol);
+            if (pos && Math.abs(parseFloat(pos.positionAmt)) > 0) {
+              hasPosition = true;
+              positionAmt = parseFloat(pos.positionAmt);
+              positionSide = positionAmt > 0 ? 'buy' : 'sell';
+            }
           }
-        }
-      } catch (e) {
-        log('warn', `Could not fetch positions from Binance: ${e.message}`);
-      }
+        } catch (_) {}
 
-      // Find if we have a local record for this symbol/strategy
-      const openForSymbol = openOrders.find(o => o.symbol === symbol);
-
-      if (hasPosition) {
-        if (!isEntryOrder) {
-          // Engine wants to EXIT, and we HAVE a position.
-          orderSide = positionSide === 'buy' ? 'sell' : 'buy';
-          fixedQty = Math.abs(positionAmt);
-          if (openForSymbol) {
-            orderToClose = openForSymbol;
-            finalAmount = openForSymbol.amount_usdt || finalAmount;
+        const openForSymbol = openOrders.find(o => o.symbol === symbol);
+        if (hasPosition) {
+          if (!isEntryOrder) {
+            orderSide = positionSide === 'buy' ? 'sell' : 'buy';
+            fixedQty = Math.abs(positionAmt);
+            if (openForSymbol) {
+              orderToClose = openForSymbol;
+              finalAmount = openForSymbol.amount_usdt || finalAmount;
+            }
+          } else {
+            continue;
           }
-          log('info', `Active position found on Binance (${positionSide} ${fixedQty}). Exiting with a ${orderSide.toUpperCase()} order.`);
+        } else if (!isEntryOrder) {
+          if (openForSymbol) await liveTradeDb.updateOrder(openForSymbol.id, { status: 'CLOSED' });
+          continue;
         } else {
-          // Engine wants to ENTER, but we ALREADY have a position.
-          log('info', `Active position already exists for ${symbol} (${positionSide}). Skipping redundant entry signal.`);
-          return;
-        }
-      } else {
-        if (!isEntryOrder) {
-          // Engine wants to EXIT, but we have NO position on Binance.
-          // CRITICAL: We skip to prevent opening a naked short in the wrong direction.
-          log('warn', `Exit signal received for ${symbol}, but no open position found on Binance. Ignoring to prevent naked shorts.`);
-          if (openForSymbol) {
-            await liveTradeDb.updateOrder(openForSymbol.id, { status: 'CLOSED' });
-            log('info', `Cleaned up stale local DB entry for ${symbol}`);
-          }
-          return;
-        } else {
-          // Engine wants to ENTER, and we have NO position.
           const s = (side || '').toLowerCase();
           if (s === 'buy' || s === 'long') orderSide = 'buy';
           else if (s === 'sell' || s === 'short') orderSide = 'sell';
-          else {
-            log('warn', `Unrecognized signal side for entry: ${side}`);
-            return;
-          }
-          log('info', `No active position found. Proceeding with new ${orderSide.toUpperCase()} entry.`);
+          else continue;
         }
-      }
 
-      // 5b. Minimum Notional Guard (Binance Futures Testnet needs ~$20)
-      if (isEntryOrder && finalAmount < 20 && config.testnet) {
-        log('warn', `Adjusting amount from $${finalAmount} to $20 to meet Binance minimum notional`);
-        finalAmount = 20;
-      }
+        if (isEntryOrder && finalAmount < 20 && userCfg.testnet) finalAmount = 20;
+        const targetPrice = signal.price || signal.entry || signal.entry_price || null;
 
-      log('info', `Signal → ${symbol} ${side.toUpperCase()} | strategy=${strategyId} | entry=${isEntryOrder} | margin=$${finalAmount} | qty=${fixedQty || 'auto'}`);
+        const order = await binanceExecutor.placeOrder(
+          symbol,
+          orderSide,
+          finalAmount,
+          stratConfig.order_type || 'market',
+          targetPrice,
+          strategyId,
+          stratConfig.leverage || 1,
+          fixedQty
+        );
 
-      // 6. Get Price for Limit Orders
-      const targetPrice = signal.price || signal.entry || signal.entry_price || null;
-
-      // 7. Place order
-      const order = await binanceExecutor.placeOrder(
-        symbol,
-        orderSide,
-        finalAmount,
-        stratConfig.order_type || 'market',
-        targetPrice, // Pass the price from the signal
-        strategyId,
-        stratConfig.leverage || 1,
-        fixedQty
-      );
-
-      if (order.error) {
-        log('error', `Order failed: ${order.error}`);
-        // ... (rest of error handling)
-        this._consecutiveErrors++;
-        if (this._consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-          log('error', `🚨 Kill-switch triggered after ${MAX_CONSECUTIVE_ERRORS} consecutive errors!`);
-          await liveTradeDb.setGlobalEnabled(false);
-          this._consecutiveErrors = 0;
+        if (order.error) {
+          log('error', `Order failed: ${order.error}`);
+          await liveTradeDb.insertOrder({
+            user_id: userId, strategy_id: strategyId, signal_id: signalId, symbol, side: orderSide,
+            order_type: stratConfig.order_type || 'market', amount_usdt: finalAmount,
+            testnet: userCfg.testnet, status: 'error', error_msg: order.error
+          });
+          continue;
         }
-        await liveTradeDb.insertOrder({
-          strategy_id: strategyId, signal_id: signalId, symbol, side: orderSide,
-          order_type: stratConfig.order_type || 'market', amount_usdt: finalAmount,
-          testnet: config.testnet, status: 'error', error_msg: order.error
+
+        const orderId = await liveTradeDb.insertOrder({
+          user_id: userId,
+          strategy_id: strategyId,
+          signal_id: signalId,
+          binance_id: order.id,
+          client_oid: order.clientOrderId || null,
+          symbol,
+          side: orderSide,
+          order_type: order.type || 'market',
+          amount_usdt: finalAmount,
+          amount: order.amount,
+          price: parseFloat(order.price) || 0,
+          avg_fill_price: parseFloat(order.average || order.price) || 0,
+          testnet: userCfg.testnet,
+          status: isEntryOrder ? (order.status || 'OPEN') : 'CLOSED',
         });
-        return;
+
+        if (orderToClose) await liveTradeDb.updateOrder(orderToClose.id, { status: 'CLOSED' });
+        log('info', `Order saved | DB id=${orderId} | Binance id=${order.id}`);
       }
-
-      // 7. Success — reset error counter and save order
-      this._consecutiveErrors = 0;
-      const orderId = await liveTradeDb.insertOrder({
-        strategy_id: strategyId,
-        signal_id: signalId,
-        binance_id: order.id,
-        client_oid: order.clientOrderId || null,
-        symbol,
-        side: orderSide,
-        order_type: order.type || 'market',
-        amount_usdt: finalAmount,
-        amount: order.amount,
-        price: parseFloat(order.price) || 0,
-        avg_fill_price: parseFloat(order.average || order.price) || 0,
-        testnet: config.testnet,
-        status: isEntryOrder ? (order.status || 'OPEN') : 'CLOSED',
-      });
-
-      // 8. If we closed an existing order, mark it as closed in the DB
-      if (orderToClose) {
-        await liveTradeDb.updateOrder(orderToClose.id, { status: 'CLOSED' });
-        log('info', `Marked DB trade ${orderToClose.id} as CLOSED`);
-      }
-
-      log('info', `✅ Order saved | DB id=${orderId} | Binance id=${order.id} | ${symbol} ${orderSide} @ $${parseFloat(order.price).toFixed(4)}`);    } catch (err) {
+    } catch (err) {
       console.error('[LiveTradeOrchestrator] handleSignal error:', err.message);
       liveTradeDb.addLog('error', `Unexpected error in handleSignal: ${err.message}`, { strategy_id: strategyId, signal_id: signalId }).catch(() => {});
     }

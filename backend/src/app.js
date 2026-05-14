@@ -19,6 +19,7 @@ const liveTradingAdminRoutes = require('./routes/liveTradingAdminRoutes');
 const liveTradeOrchestrator = require('./liveTrading/liveTradeOrchestrator');
 const liveTradeDb = require('./liveTrading/liveTradeDb');
 const binanceExecutor = require('./liveTrading/binanceExecutor');
+const { encrypt, decrypt, maskKey } = require('./liveTrading/encryptionUtils');
 
 const PORT = process.env.PORT || 7286;
 const app = express();
@@ -77,37 +78,51 @@ app.use('/admin', adminRoutes);
 // --- User Live Trading Controls (all authenticated users) ---
 app.get('/live-trading/status', authMiddleware, async (req, res, next) => {
   try {
-    const config = await liveTradeDb.getBinanceConfig();
+    const config = await liveTradeDb.getUserBinanceConfig(req.userId);
     res.json({
       configured: !!config,
       enabled: config?.enabled === 1,
       testnet: config?.testnet === 1,
-      executorReady: binanceExecutor.isReady(),
+      apiKeyMasked: config ? maskKey(decrypt(config.api_key_enc)) : null,
     });
+  } catch (e) { next(e); }
+});
+
+app.post('/live-trading/config', authMiddleware, async (req, res, next) => {
+  try {
+    const { apiKey, apiSecret, testnet = true } = req.body;
+    if (!apiKey || !apiSecret) {
+      return res.status(400).json({ error: 'apiKey and apiSecret are required' });
+    }
+    const cleanKey = String(apiKey).replace(/\s/g, '');
+    const cleanSecret = String(apiSecret).replace(/\s/g, '');
+    const apiKeyEnc = encrypt(cleanKey);
+    const apiSecEnc = encrypt(cleanSecret);
+
+    await liveTradeDb.saveUserBinanceConfig(req.userId, apiKeyEnc, apiSecEnc, !!testnet);
+
+    // Validate credentials immediately
+    await binanceExecutor.init(cleanKey, cleanSecret, !!testnet);
+    const bal = await binanceExecutor.getBalance();
+    if (bal.error) {
+      return res.status(400).json({ error: `Credential test failed: ${bal.error}` });
+    }
+
+    res.json({ message: 'Binance credentials saved', testnet: !!testnet, apiKeyMasked: maskKey(cleanKey) });
   } catch (e) { next(e); }
 });
 
 app.post('/live-trading/toggle', authMiddleware, async (req, res, next) => {
   try {
-    const config = await liveTradeDb.getBinanceConfig();
-    if (!config) {
-      return res.status(400).json({ error: 'Live trading is not configured by admin yet.' });
-    }
-
+    const config = await liveTradeDb.getUserBinanceConfig(req.userId);
+    if (!config) return res.status(400).json({ error: 'Save your Binance API key and secret first.' });
     const { enabled } = req.body;
     if (typeof enabled !== 'boolean') {
       return res.status(400).json({ error: '"enabled" (boolean) is required' });
     }
 
-    if (enabled && !binanceExecutor.isReady()) {
-      await liveTradeOrchestrator.reinitExecutor();
-      if (!binanceExecutor.isReady()) {
-        return res.status(400).json({ error: 'Executor is not ready with current Binance credentials' });
-      }
-    }
-
-    await liveTradeDb.setGlobalEnabled(enabled);
-    await liveTradeDb.addLog('info', `Live trading globally ${enabled ? 'ENABLED' : 'DISABLED'} by user ${req.userId}`);
+    await liveTradeDb.setUserEnabled(req.userId, enabled);
+    await liveTradeDb.addLog('info', `Live trading ${enabled ? 'ENABLED' : 'DISABLED'} by user ${req.userId}`, { user_id: req.userId });
 
     res.json({ enabled, message: `Live trading ${enabled ? 'enabled' : 'disabled'}` });
   } catch (e) { next(e); }

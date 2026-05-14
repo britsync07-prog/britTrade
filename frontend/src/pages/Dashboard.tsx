@@ -15,8 +15,11 @@ export default function Dashboard() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [liveStatus, setLiveStatus] = useState<{ configured: boolean; enabled: boolean; testnet: boolean } | null>(null);
+  const [liveStatus, setLiveStatus] = useState<{ configured: boolean; enabled: boolean; testnet: boolean; apiKeyMasked?: string | null } | null>(null);
   const [liveBusy, setLiveBusy] = useState(false);
+  const [apiKey, setApiKey] = useState('');
+  const [apiSecret, setApiSecret] = useState('');
+  const [testnetMode, setTestnetMode] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -87,6 +90,25 @@ export default function Dashboard() {
     }
   };
 
+  const handleSaveLiveConfig = async () => {
+    if (!apiKey || !apiSecret) {
+      alert('Please provide Binance API key and secret');
+      return;
+    }
+    setLiveBusy(true);
+    try {
+      await api.post('/live-trading/config', { apiKey, apiSecret, testnet: testnetMode });
+      const liveRes = await api.get('/live-trading/status');
+      setLiveStatus(liveRes.data);
+      setApiKey('');
+      setApiSecret('');
+    } catch (e: any) {
+      alert(e?.response?.data?.error || 'Failed to save Binance credentials');
+    } finally {
+      setLiveBusy(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-cyber-dark text-slate-200 pb-20 relative overflow-hidden">
       {/* Background Ambience */}
@@ -136,8 +158,9 @@ export default function Dashboard() {
         </header>
 
         {liveStatus && (
-          <div className="glass-card px-6 py-5 flex flex-wrap items-center justify-between gap-4 border-white/10">
-            <div className="flex items-center gap-3">
+          <div className="glass-card px-6 py-5 space-y-4 border-white/10">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
               <span className={`w-2 h-2 rounded-full ${liveStatus.enabled ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
               <div className="text-sm font-bold text-white">
                 Live Trading: {liveStatus.enabled ? 'ON' : 'OFF'}
@@ -145,8 +168,8 @@ export default function Dashboard() {
               {liveStatus.testnet && (
                 <span className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-full bg-yellow-500/10 border border-yellow-500/20 text-yellow-400">Testnet</span>
               )}
-              {!liveStatus.configured && (
-                <span className="text-[11px] text-red-400">Admin Binance API setup is required first.</span>
+              {liveStatus.configured && liveStatus.apiKeyMasked && (
+                <span className="text-[11px] text-slate-400">Key: {liveStatus.apiKeyMasked}</span>
               )}
             </div>
             <button
@@ -160,6 +183,38 @@ export default function Dashboard() {
             >
               {liveStatus.enabled ? <><PowerOff size={14} /> Disable</> : <><Power size={14} /> Enable</>}
             </button>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
+              <input
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="Your Binance API Key"
+                className="lg:col-span-1 bg-white/5 border border-white/10 rounded-xl px-4 h-11 text-white text-sm placeholder:text-slate-500"
+              />
+              <input
+                type="password"
+                value={apiSecret}
+                onChange={(e) => setApiSecret(e.target.value)}
+                placeholder="Your Binance API Secret"
+                className="lg:col-span-1 bg-white/5 border border-white/10 rounded-xl px-4 h-11 text-white text-sm placeholder:text-slate-500"
+              />
+              <button
+                type="button"
+                onClick={() => setTestnetMode(v => !v)}
+                className={`lg:col-span-1 h-11 rounded-xl text-xs font-black uppercase tracking-widest border ${testnetMode ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'}`}
+              >
+                {testnetMode ? 'Testnet' : 'Live (Real Money)'}
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveLiveConfig}
+                disabled={liveBusy}
+                className="lg:col-span-1 h-11 rounded-xl text-xs font-black uppercase tracking-widest border bg-cyan-500/20 text-cyan-300 border-cyan-500/30 disabled:opacity-50"
+              >
+                Save API Keys
+              </button>
+            </div>
           </div>
         )}
 
