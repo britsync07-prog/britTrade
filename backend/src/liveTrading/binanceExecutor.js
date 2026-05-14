@@ -465,4 +465,6 @@ class BinanceExecutor {
   destroy() { this._initialized = false; }
 }
 
-module.exports = new BinanceExecutor();
+const sharedExecutor = new BinanceExecutor();
+module.exports = sharedExecutor;
+module.exports.BinanceExecutor = BinanceExecutor;

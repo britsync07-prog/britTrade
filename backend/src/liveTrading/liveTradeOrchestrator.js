@@ -28,6 +28,7 @@
 
 const liveTradeDb = require('./liveTradeDb');
 const binanceExecutor = require('./binanceExecutor');
+const { BinanceExecutor } = require('./binanceExecutor');
 const { decrypt } = require('./encryptionUtils');
 const db = require('../db');
 
@@ -173,7 +174,8 @@ class LiveTradeOrchestrator {
           continue;
         }
 
-        await binanceExecutor.init(apiKey, apiSecret, userCfg.testnet === 1);
+        const userExecutor = new BinanceExecutor();
+        await userExecutor.init(apiKey, apiSecret, userCfg.testnet === 1);
         const stratConfig = await liveTradeDb.getUserStrategyConfig(userId, strategyId);
         if (!stratConfig || !stratConfig.enabled) continue;
 
@@ -194,7 +196,7 @@ class LiveTradeOrchestrator {
         let positionSide = null;
 
         try {
-          const positionsRes = await binanceExecutor.getPositions();
+          const positionsRes = await userExecutor.getPositions();
           if (Array.isArray(positionsRes)) {
             const bSymbol = symbol.replace('/', '').replace(':', '').replace('USDTUSDT', 'USDT');
             const pos = positionsRes.find(p => p.symbol === bSymbol);
@@ -231,7 +233,7 @@ class LiveTradeOrchestrator {
         if (isEntryOrder && finalAmount < 20 && userCfg.testnet) finalAmount = 20;
         const targetPrice = signal.price || signal.entry || signal.entry_price || null;
 
-        const order = await binanceExecutor.placeOrder(
+        const order = await userExecutor.placeOrder(
           symbol,
           orderSide,
           finalAmount,

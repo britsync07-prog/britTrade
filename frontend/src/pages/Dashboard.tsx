@@ -139,6 +139,16 @@ export default function Dashboard() {
                 </div>
              </div>
 
+             <Link to="/live-trading" className="glass-card px-6 py-4 flex items-center gap-4 border-emerald-500/20 hover:border-emerald-500/40 transition-all cursor-pointer group">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center group-hover:bg-emerald-500/20 transition-colors">
+                  <Power className="text-emerald-400 w-6 h-6" />
+                </div>
+                <div>
+                   <div className="text-[10px] font-black uppercase tracking-widest text-emerald-500/70">User Panel</div>
+                   <div className="text-lg font-bold text-white">Live Trading</div>
+                </div>
+             </Link>
+
              {user?.role === 'admin' && (
                <div className="glass-card px-6 py-4 flex items-center gap-4 border-red-500/20 hover:border-red-500/40 transition-all cursor-pointer group" onClick={() => window.location.href = '/admin'}>
                   <div className="w-12 h-12 rounded-2xl bg-red-500/10 flex items-center justify-center group-hover:bg-red-500/20 transition-colors">

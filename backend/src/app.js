@@ -18,7 +18,7 @@ const cookieParser = require('cookie-parser');
 const liveTradingAdminRoutes = require('./routes/liveTradingAdminRoutes');
 const liveTradeOrchestrator = require('./liveTrading/liveTradeOrchestrator');
 const liveTradeDb = require('./liveTrading/liveTradeDb');
-const binanceExecutor = require('./liveTrading/binanceExecutor');
+const { BinanceExecutor } = require('./liveTrading/binanceExecutor');
 const { encrypt, decrypt, maskKey } = require('./liveTrading/encryptionUtils');
 
 const PORT = process.env.PORT || 7286;
@@ -102,8 +102,9 @@ app.post('/live-trading/config', authMiddleware, async (req, res, next) => {
     await liveTradeDb.saveUserBinanceConfig(req.userId, apiKeyEnc, apiSecEnc, !!testnet);
 
     // Validate credentials immediately
-    await binanceExecutor.init(cleanKey, cleanSecret, !!testnet);
-    const bal = await binanceExecutor.getBalance();
+    const userExecutor = new BinanceExecutor();
+    await userExecutor.init(cleanKey, cleanSecret, !!testnet);
+    const bal = await userExecutor.getBalance();
     if (bal.error) {
       return res.status(400).json({ error: `Credential test failed: ${bal.error}` });
     }
@@ -119,8 +120,9 @@ app.post('/live-trading/config/test', authMiddleware, async (req, res, next) => 
     const apiKey = decrypt(cfg.api_key_enc);
     const apiSecret = decrypt(cfg.api_sec_enc);
     if (!apiKey || !apiSecret) return res.status(400).json({ error: 'Could not decrypt saved credentials' });
-    await binanceExecutor.init(apiKey, apiSecret, cfg.testnet === 1);
-    const balance = await binanceExecutor.getBalance();
+    const userExecutor = new BinanceExecutor();
+    await userExecutor.init(apiKey, apiSecret, cfg.testnet === 1);
+    const balance = await userExecutor.getBalance();
     if (balance.error) return res.status(400).json({ error: `Connection test failed: ${balance.error}` });
     res.json({ success: true, testnet: cfg.testnet === 1, balance });
   } catch (e) { next(e); }
@@ -201,10 +203,11 @@ app.get('/live-trading/dashboard', authMiddleware, async (req, res, next) => {
       const apiKey = decrypt(config.api_key_enc);
       const apiSecret = decrypt(config.api_sec_enc);
       if (apiKey && apiSecret) {
-        await binanceExecutor.init(apiKey, apiSecret, config.testnet === 1);
+        const userExecutor = new BinanceExecutor();
+        await userExecutor.init(apiKey, apiSecret, config.testnet === 1);
         try {
-          const positions = await binanceExecutor.getPositions();
-          const accountInfo = await binanceExecutor.getAccount();
+          const positions = await userExecutor.getPositions();
+          const accountInfo = await userExecutor.getAccount();
 
           if (!positions.error && !accountInfo.error) {
             const activeInDb = orders.filter(o => ['OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED'].includes((o.status || '').toUpperCase()));
@@ -221,7 +224,7 @@ app.get('/live-trading/dashboard', authMiddleware, async (req, res, next) => {
             futuresBalance = parseFloat(accountInfo.totalMarginBalance || 0);
           }
 
-          const spot = await binanceExecutor.getBalance();
+          const spot = await userExecutor.getBalance();
           spotBalance = spot.spot || 0;
 
           enrichedOrders = orders.map(order => {
