@@ -13,6 +13,8 @@ import UserLiveTrading from './pages/UserLiveTrading';
 import TradingViewChart from './components/ui/TradingViewChart';
 import AdminDashboard from './pages/AdminDashboard';
 import api from './services/api';
+import { Navbar } from './components/layout/Navbar';
+import { Footer } from './components/layout/Footer';
 
 const services: Service[] = [
   {
@@ -232,19 +234,7 @@ function LandingPage({ user }: { user: any }) {
 
   return (
     <div className="min-h-screen bg-[#020617] selection:bg-cyan-500/30">
-      <nav className="fixed top-0 w-full z-50 border-b border-white/5 bg-slate-950/50 backdrop-blur-md">
-        <div className="container mx-auto px-6 py-2 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <Activity className="text-cyan-400 w-8 h-8" />
-            <span className="text-xl font-bold tracking-tighter text-white">BRIT<span className="text-cyan-400">TRADE</span></span>
-          </div>
-          <div className="flex items-center gap-6">
-            <a href="#pricing" className="text-sm font-bold text-cyan-400 hover:text-cyan-300 transition-colors uppercase tracking-widest">Pricing</a>
-            <a href="/login" className="text-sm font-medium text-slate-300 hover:text-white transition-colors">Log In</a>
-            <a href="/login?signup=true" className="px-4 py-2 bg-white text-black rounded-lg text-sm font-bold hover:bg-slate-200 transition-colors">Get Started</a>
-          </div>
-        </div>
-      </nav>
+      <Navbar />
 
       <main className="pt-[56px]">
         <SignalBroadcast />
@@ -298,14 +288,17 @@ function LandingPage({ user }: { user: any }) {
         </section>
       </main>
 
-      <footer className="py-12 border-t border-white/5">
-        <div className="container mx-auto px-6 text-center text-slate-500 text-sm">
-          &copy; 2024 BritTrade AI Solutions. All rights reserved.
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }
+
+import Terms from './pages/legal/Terms';
+import Privacy from './pages/legal/Privacy';
+import Disclaimer from './pages/legal/Disclaimer';
+import Refunds from './pages/legal/Refunds';
+import FAQ from './pages/FAQ';
+import About from './pages/About';
 
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -323,6 +316,12 @@ function AppContent() {
     <Router>
       <Routes>
         <Route path="/" element={<LandingPage user={user} />} />
+        <Route path="/terms" element={<Terms />} />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/disclaimer" element={<Disclaimer />} />
+        <Route path="/refunds" element={<Refunds />} />
+        <Route path="/faq" element={<FAQ />} />
+        <Route path="/about" element={<About />} />
         <Route 
           path="/login" 
           element={!user ? <Login /> : <Navigate to="/dashboard" />} 
