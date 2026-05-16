@@ -231,8 +231,13 @@ class LiveTradeOrchestrator {
         }
 
         if (isEntryOrder && finalAmount < 20 && userCfg.testnet) finalAmount = 20;
+        
+        // 6. Get Price for Limit Orders
         const targetPrice = signal.price || signal.entry || signal.entry_price || null;
 
+        log('info', `Signal → ${symbol} ${side.toUpperCase()} | strategy=${strategyId} | entry=${isEntryOrder} | margin=$${finalAmount} | price=${targetPrice || 'market'} | qty=${fixedQty || 'auto'}`);
+
+        // 7. Place order
         const order = await userExecutor.placeOrder(
           symbol,
           orderSide,
