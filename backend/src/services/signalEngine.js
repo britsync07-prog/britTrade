@@ -2,6 +2,7 @@ const db = require('../db');
 const axios = require('axios');
 const { RSI, BollingerBands, ADX, ATR } = require('technicalindicators');
 const paperTradeService = require('./paperTradeService');
+const { normalizeSymbol } = require('../liveTrading/symbolUtils');
 
 let telegramService = null;
 function getTelegramService() {
@@ -54,12 +55,7 @@ class SignalEngine {
   }
 
   async fetchOHLC(symbol, interval) {
-    let bSymbol = symbol.replace('/', '').replace(':', '').replace('USDTUSDT', 'USDT');
-    // Handle special Binance Futures symbols
-    if (bSymbol === 'SHIBUSDT') bSymbol = '1000SHIBUSDT';
-    if (bSymbol === 'PEPEUSDT') bSymbol = '1000PEPEUSDT';
-    if (bSymbol === 'BONKUSDT') bSymbol = '1000BONKUSDT';
-    if (bSymbol === 'FLOKIUSDT') bSymbol = '1000FLOKIUSDT';
+    const bSymbol = normalizeSymbol(symbol, true);
 
     const limit = 100;
     // Use Futures API instead of Spot
@@ -188,7 +184,9 @@ class SignalEngine {
                 signalSide = 'buy'; initialTp = currentPrice * 1.01; initialSl = currentPrice * 0.85; 
               } else if (currentPrice > bb[bb.length - 1].middle) signalSide = 'sell';
             }
-          } else if (strategy.name === 'UltimateFuturesScalper') {
+          }
+
+ else if (strategy.name === 'UltimateFuturesScalper') {
             const rsi = RSI.calculate({ period: 14, values: data.closes });
             if (rsi.length > 0) {
               const activeSignal = await db.get("SELECT side FROM signals WHERE strategyId = ? AND symbol = ? AND status = 'active' LIMIT 1", [id, symbol]);

@@ -93,7 +93,7 @@ async function initLiveTradeDb() {
     CREATE TABLE IF NOT EXISTS live_trade_configs (
       strategy_id       INTEGER PRIMARY KEY,
       enabled           INTEGER DEFAULT 0,
-      order_type        TEXT DEFAULT 'market',
+      order_type        TEXT DEFAULT 'limit',
       trade_amount_usdt REAL DEFAULT 10.0,
       allocated_capital REAL DEFAULT 100.0,
       leverage          INTEGER DEFAULT 5,
@@ -107,7 +107,7 @@ async function initLiveTradeDb() {
       user_id           INTEGER NOT NULL,
       strategy_id       INTEGER NOT NULL,
       enabled           INTEGER DEFAULT 0,
-      order_type        TEXT DEFAULT 'market',
+      order_type        TEXT DEFAULT 'limit',
       trade_amount_usdt REAL DEFAULT 10.0,
       allocated_capital REAL DEFAULT 100.0,
       leverage          INTEGER DEFAULT 5,
@@ -133,7 +133,7 @@ async function initLiveTradeDb() {
     await run(`
       INSERT OR IGNORE INTO live_trade_configs
         (strategy_id, enabled, order_type, trade_amount_usdt, leverage, allocated_capital)
-      VALUES (?, 0, 'market', ?, ?, ?)
+      VALUES (?, 0, 'limit', ?, ?, ?)
     `, [s.id, s.amount, s.leverage, s.capital]);
   }
 
@@ -362,7 +362,7 @@ async function ensureUserStrategyConfigs(userId) {
     await run(
       `INSERT OR IGNORE INTO user_live_trade_configs
       (user_id, strategy_id, enabled, order_type, trade_amount_usdt, leverage, allocated_capital, max_open_orders)
-      VALUES (?, ?, 0, 'market', ?, ?, ?, 5)`,
+      VALUES (?, ?, 0, 'limit', ?, ?, ?, 5)`,
       [userId, s.id, s.amount, s.leverage, s.capital]
     );
   }

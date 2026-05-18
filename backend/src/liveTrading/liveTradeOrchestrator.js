@@ -30,6 +30,7 @@ const liveTradeDb = require('./liveTradeDb');
 const binanceExecutor = require('./binanceExecutor');
 const { BinanceExecutor } = require('./binanceExecutor');
 const { decrypt } = require('./encryptionUtils');
+const { normalizeSymbol } = require('./symbolUtils');
 const db = require('../db');
 
 const MAX_CONSECUTIVE_ERRORS = 5;
@@ -198,8 +199,8 @@ class LiveTradeOrchestrator {
         try {
           const positionsRes = await userExecutor.getPositions();
           if (Array.isArray(positionsRes)) {
-            const bSymbol = symbol.replace('/', '').replace(':', '').replace('USDTUSDT', 'USDT');
-            const pos = positionsRes.find(p => p.symbol === bSymbol);
+            const bSymbol = normalizeSymbol(symbol, true);
+            const pos = positionsRes.find(p => normalizeSymbol(p.symbol, true) === bSymbol);
             if (pos && Math.abs(parseFloat(pos.positionAmt)) > 0) {
               hasPosition = true;
               positionAmt = parseFloat(pos.positionAmt);
@@ -208,9 +209,10 @@ class LiveTradeOrchestrator {
           }
         } catch (_) {}
 
-        const openForSymbol = openOrders.find(o => o.symbol === symbol);
+        const openForSymbol = openOrders.find(o => normalizeSymbol(o.symbol, true) === normalizeSymbol(symbol, true));
         if (hasPosition) {
           if (!isEntryOrder) {
+            // Closing a position
             orderSide = positionSide === 'buy' ? 'sell' : 'buy';
             fixedQty = Math.abs(positionAmt);
             if (openForSymbol) {
@@ -218,12 +220,15 @@ class LiveTradeOrchestrator {
               finalAmount = openForSymbol.amount_usdt || finalAmount;
             }
           } else {
+            // Already have a position, skip entry
             continue;
           }
         } else if (!isEntryOrder) {
+          // Exit signal but no position found
           if (openForSymbol) await liveTradeDb.updateOrder(openForSymbol.id, { status: 'CLOSED' });
           continue;
         } else {
+          // Entry signal, no position
           const s = (side || '').toLowerCase();
           if (s === 'buy' || s === 'long') orderSide = 'buy';
           else if (s === 'sell' || s === 'short') orderSide = 'sell';

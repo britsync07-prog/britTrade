@@ -6,6 +6,7 @@
  */
 
 const ccxt = require('ccxt');
+const { normalizeSymbol } = require('./symbolUtils');
 
 const FUTURES_STRATEGIES = new Set([1, 2, 3]);
 
@@ -27,14 +28,24 @@ class BinanceExecutor {
       apiKey: this._apiKey,
       secret: this._apiSecret,
       enableRateLimit: true,
-      timeout: 15000,
+      timeout: 20000,
+      options: {
+        adjustForTimeDifference: true,
+        recvWindow: 10000
+      },
       headers: {
         'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.36'
       }
     };
 
-    this._spotClient = new ccxt.binance({ ...baseConfig, options: { defaultType: 'spot' } });
-    this._futuresClient = new ccxt.binance({ ...baseConfig, options: { defaultType: 'future' } });
+    this._spotClient = new ccxt.binance({ 
+      ...baseConfig, 
+      options: { ...baseConfig.options, defaultType: 'spot' } 
+    });
+    this._futuresClient = new ccxt.binance({ 
+      ...baseConfig, 
+      options: { ...baseConfig.options, defaultType: 'future' } 
+    });
 
     this._initialized = true;
     console.log(`[BinanceExecutor] Initialized — ${testnet ? 'TESTNET (Auto-Detect)' : 'LIVE'}`);
@@ -160,13 +171,7 @@ class BinanceExecutor {
     const isFutures = FUTURES_STRATEGIES.has(Number(strategyId));
     
     // Normalize symbol for Binance API
-    let bSymbol = symbol.replace('/', '').replace(':', '').replace('USDTUSDT', 'USDT');
-    if (isFutures) {
-      if (bSymbol === 'SHIBUSDT') bSymbol = '1000SHIBUSDT';
-      if (bSymbol === 'PEPEUSDT') bSymbol = '1000PEPEUSDT';
-      if (bSymbol === 'BONKUSDT') bSymbol = '1000BONKUSDT';
-      if (bSymbol === 'FLOKIUSDT') bSymbol = '1000FLOKIUSDT';
-    }
+    const bSymbol = normalizeSymbol(symbol, isFutures);
 
     const envs = isFutures 
       ? [
@@ -295,7 +300,7 @@ class BinanceExecutor {
       try {
         const positions = await this._futuresClient.fetchPositions();
         return positions.map(p => ({
-          symbol: p.symbol.replace('/', '').replace(':', '').replace('USDTUSDT', 'USDT'),
+          symbol: normalizeSymbol(p.symbol, true),
           // Ensure positionAmt is signed (positive for Long, negative for Short)
           positionAmt: parseFloat(p.info?.positionAmt || (p.side === 'long' ? p.contracts : -p.contracts)),
           unRealizedProfit: p.unrealizedPnl,
@@ -401,7 +406,7 @@ class BinanceExecutor {
   // Cancel a specific order
   async cancelOrder(symbol, orderId) {
     if (!this._initialized) return { success: false, error: 'Not initialized' };
-    const bSymbol = symbol.replace('/', '').replace(':', '');
+    const bSymbol = normalizeSymbol(symbol, true);
 
     // Live mode (CCXT)
     if (!this._testnet) {
