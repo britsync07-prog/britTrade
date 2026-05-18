@@ -346,6 +346,12 @@ app.get('/strategies/:id/signals', authMiddleware, async (req, res, next) => {
 
 
 // --- Public API for Landing Page ---
+app.get('/public/status', (req, res) => {
+  res.json({
+    maintenanceMode: process.env.MAINTENANCE_MODE === 'true'
+  });
+});
+
 app.get('/public/signals/broadcast', async (req, res, next) => {
   try {
     const signals = await db.query(
