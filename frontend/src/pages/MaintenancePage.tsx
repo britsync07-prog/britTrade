@@ -12,7 +12,7 @@ const MaintenancePage: React.FC = () => {
         Under <span className="text-cyan-400">Maintenance</span>
       </h1>
       <p className="text-slate-400 max-w-2xl text-lg md:text-xl leading-relaxed font-medium">
-        we are makeing the website better for you .so that you can get real profitable trade profit. it wont take much time . keep up with us. thanks fro you patince. website will properly tomorrow .
+        We are enhancing our systems to ensure you get the most profitable trading signals. It won't take long, and we'll be back properly tomorrow. Thanks for your patience!
       </p>
       <div className="mt-12 text-[10px] uppercase tracking-[0.2em] text-cyan-500/50 font-bold">
         BritTrade AI Solutions
