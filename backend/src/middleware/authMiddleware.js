@@ -26,6 +26,10 @@ const protect = async (req, res, next) => {
       return res.status(403).json({ message: 'Account suspended' });
     }
 
+    if (process.env.MAINTENANCE_MODE === 'true' && user.role !== 'admin') {
+      return res.status(503).json({ message: 'Maintenance mode is active. Please try again later.' });
+    }
+
     req.user = user;
     req.userId = user.id;
     req.userRole = user.role;
