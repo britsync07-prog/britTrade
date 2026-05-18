@@ -12,6 +12,7 @@ import StrategyDetail from './pages/StrategyDetail';
 import UserLiveTrading from './pages/UserLiveTrading';
 import TradingViewChart from './components/ui/TradingViewChart';
 import AdminDashboard from './pages/AdminDashboard';
+import MaintenancePage from './pages/MaintenancePage';
 import api from './services/api';
 
 const services: Service[] = [
@@ -312,32 +313,48 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 
 function AppContent() {
   const { user, loading } = useAuth();
+  const [maintenanceMode, setMaintenanceMode] = useState<boolean | null>(null);
 
-  if (loading) return (
+  useEffect(() => {
+    const fetchStatus = async () => {
+      try {
+        const { data } = await api.get('/public/status');
+        setMaintenanceMode(data.maintenanceMode);
+      } catch (err) {
+        console.error('Failed to fetch status', err);
+        setMaintenanceMode(false);
+      }
+    };
+    fetchStatus();
+  }, []);
+
+  if (loading || maintenanceMode === null) return (
     <div className="min-h-screen bg-[#020617] flex items-center justify-center">
       <Activity className="w-12 h-12 text-cyan-400 animate-pulse" />
     </div>
   );
 
+  const isMaintenanceActive = maintenanceMode && user?.role !== 'admin';
+
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<LandingPage user={user} />} />
+        <Route path="/" element={isMaintenanceActive ? <MaintenancePage /> : <LandingPage user={user} />} />
         <Route 
           path="/login" 
           element={!user ? <Login /> : <Navigate to="/dashboard" />} 
         />
         <Route 
           path="/dashboard/*" 
-          element={user ? <Dashboard /> : <Navigate to="/login" />} 
+          element={isMaintenanceActive ? <MaintenancePage /> : (user ? <Dashboard /> : <Navigate to="/login" />)} 
         />
         <Route 
           path="/strategy/:id" 
-          element={user ? <StrategyDetail /> : <Navigate to="/login" />} 
+          element={isMaintenanceActive ? <MaintenancePage /> : (user ? <StrategyDetail /> : <Navigate to="/login" />)} 
         />
         <Route 
           path="/live-trading" 
-          element={user ? <UserLiveTrading /> : <Navigate to="/login" />} 
+          element={isMaintenanceActive ? <MaintenancePage /> : (user ? <UserLiveTrading /> : <Navigate to="/login" />)} 
         />
         <Route 
           path="/admin" 
