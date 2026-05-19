@@ -111,23 +111,30 @@ router.delete('/config', async (req, res) => {
 
 router.post('/config/test', async (req, res) => {
   try {
-    if (!binanceExecutor.isReady()) {
-      // Try to boot from DB first
+    const { api_key, api_secret, testnet } = req.body;
+    
+    let executorToTest = binanceExecutor;
+    
+    // If they provided keys to test, create a temporary executor
+    if (api_key && api_secret) {
+      const { BinanceExecutor } = require('../liveTrading/binanceExecutor');
+      executorToTest = new BinanceExecutor();
+      await executorToTest.init(api_key, api_secret, testnet);
+    } else if (!executorToTest.isReady()) {
       await liveTradeOrchestrator.reinitExecutor();
-      if (!binanceExecutor.isReady()) {
-        return res.status(400).json({ error: 'No Binance credentials configured' });
+      if (!executorToTest.isReady()) {
+        return res.status(400).json({ error: 'No Binance credentials configured to test' });
       }
     }
 
-    const balance = await binanceExecutor.getBalance();
+    const balance = await executorToTest.getBalance();
     if (balance.error) {
       return res.status(400).json({ error: `Connection test failed: ${balance.error}` });
     }
 
-    const config = await liveTradeDb.getBinanceConfig();
     res.json({
       success: true,
-      testnet: config?.testnet === 1,
+      testnet: !!testnet,
       balance: {
         spot: balance.spot,
         futures: balance.futures,
