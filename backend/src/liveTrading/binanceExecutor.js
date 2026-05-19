@@ -2,178 +2,38 @@
 
 /**
  * binanceExecutor.js
- * Final Auto-Detect Logic: Tries both Legacy and Demo endpoints
+ * Robust manual signing implementation using Axios for both Live and Testnet.
+ * Removes CCXT dependency due to dapi.binance.com timeouts on USDT futures.
  */
 
-const ccxt = require('ccxt');
+const crypto = require('crypto');
+const axios = require('axios');
 const { normalizeSymbol } = require('./symbolUtils');
 
 const FUTURES_STRATEGIES = new Set([1, 2, 3]);
 
 class BinanceExecutor {
   constructor() {
-    this._spotClient = null;
-    this._futuresClient = null;
     this._testnet = true;
     this._initialized = false;
-    this._marketsPromise = null;
+    this._precisions = {};
   }
 
   async init(apiKey, apiSecret, testnet = true) {
     this._testnet = testnet;
     this._apiKey = (apiKey || '').trim();
     this._apiSecret = (apiSecret || '').trim();
-
-    const baseConfig = {
-      apiKey: this._apiKey,
-      secret: this._apiSecret,
-      enableRateLimit: true,
-      timeout: 20000,
-      options: {
-        adjustForTimeDifference: true,
-        recvWindow: 10000
-      },
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.36'
-      }
-    };
-
-    this._spotClient = new ccxt.binance({ 
-      ...baseConfig, 
-      options: { ...baseConfig.options, defaultType: 'spot' } 
-    });
-    this._futuresClient = new ccxt.binance({ 
-      ...baseConfig, 
-      options: { ...baseConfig.options, defaultType: 'future' } 
-    });
-
     this._initialized = true;
-    console.log(`[BinanceExecutor] Initialized — ${testnet ? 'TESTNET (Auto-Detect)' : 'LIVE'}`);
+    console.log(`[BinanceExecutor] Initialized — ${testnet ? 'TESTNET (Axios)' : 'LIVE (Axios)'}`);
   }
 
-  async getBalance() {
-    if (!this._initialized) return { error: 'Executor not initialized' };
-
-    let spot = 0, futures = 0, errors = [];
-    
-    // For Live mode, use CCXT
+  _getEnvs(isFutures) {
     if (!this._testnet) {
-      try {
-        const s = await this._spotClient.fetchBalance();
-        spot = s.USDT?.total ?? 0;
-        const f = await this._futuresClient.fetchBalance();
-        futures = f.USDT?.total ?? 0;
-        return { spot, futures };
-      } catch (e) { 
-        console.error('[BinanceExecutor] Live Balance Error:', e.message);
-        return { error: e.message }; 
-      }
+      return isFutures 
+        ? [{ name: 'Live', url: 'https://fapi.binance.com/fapi' }]
+        : [{ name: 'Live', url: 'https://api.binance.com/api' }];
     }
-
-    // For Testnet/Demo mode, use manual signing (CCXT is unreliable for Demo Mode)
-    const crypto = require('crypto');
-    const axios = require('axios');
-    const headers = { 'X-MBX-APIKEY': this._apiKey, 'User-Agent': 'Mozilla/5.0' };
-
-    // Environments to try
-    const envs = [
-      { 
-        name: 'Legacy', 
-        spot: 'https://testnet.binance.vision/api/v3', 
-        fut: 'https://testnet.binancefuture.com/fapi/v2' 
-      },
-      { 
-        name: 'Demo', 
-        spot: 'https://demo-api.binance.com/api/v3', 
-        fut: 'https://demo-fapi.binance.com/fapi/v2' 
-      }
-    ];
-
-    let success = false;
-    let finalErrors = [];
-
-    for (const env of envs) {
-      let envSpot = 0;
-      let envFutures = 0;
-      let spotOk = false;
-      let futOk = false;
-      let envErrors = [];
-
-      // Try Futures
-      try {
-        const timeRes = await axios.get(env.fut.replace('/v2', '/v1') + '/time', { timeout: 5000 });
-        const params = { timestamp: timeRes.data.serverTime, recvWindow: 10000 };
-        const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
-        const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
-        
-        const res = await axios.get(`${env.fut}/account?${query}&signature=${signature}`, { headers, timeout: 5000 });
-        
-        if (res.data.assets) {
-          res.data.assets.forEach(a => { if (a.asset === 'USDT') envFutures = parseFloat(a.walletBalance); });
-          futOk = true;
-        }
-      } catch (e) {
-        envErrors.push(`Futures: ${e.response?.data?.msg || e.message}`);
-      }
-
-      // Try Spot
-      try {
-        const timeRes = await axios.get(env.spot + '/time', { timeout: 5000 });
-        const params = { timestamp: timeRes.data.serverTime, recvWindow: 10000 };
-        const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
-        const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
-
-        const res = await axios.get(`${env.spot}/account?${query}&signature=${signature}`, { headers, timeout: 5000 });
-
-        if (res.data.balances) {
-          res.data.balances.forEach(b => { if (b.asset === 'USDT') envSpot = parseFloat(b.free) + parseFloat(b.locked); });
-          spotOk = true;
-        }
-      } catch (e) {
-        envErrors.push(`Spot: ${e.response?.data?.msg || e.message}`);
-      }
-
-      if (spotOk || futOk) {
-        spot = envSpot;
-        futures = envFutures;
-        success = true;
-        break; 
-      } else {
-        finalErrors.push(`${env.name} -> [${envErrors.join(', ')}]`);
-      }
-    }
-
-    return success ? { spot, futures } : { error: finalErrors.join(' | ') };
-  }
-
-  async placeOrder(symbol, side, amountUSDT, orderType = 'market', price = null, strategyId = 1, leverage = 1, fixedQty = null) {
-    if (!this._testnet) {
-      // Live mode logic using CCXT
-      const client = this._client(strategyId);
-      try {
-        const isFutures = FUTURES_STRATEGIES.has(Number(strategyId));
-        const liveSymbol = await this._resolveLiveSymbol(client, symbol, isFutures);
-        if (isFutures && leverage > 1) await client.setLeverage(leverage, liveSymbol);
-        const ticker = await client.fetchTicker(liveSymbol);
-        const rawQty = fixedQty || (amountUSDT * leverage) / ticker.last;
-        const qty = Number(client.amountToPrecision(liveSymbol, rawQty));
-        const normalizedPrice = orderType === 'limit' && price != null
-          ? Number(client.priceToPrecision(liveSymbol, price))
-          : undefined;
-        const order = await client.createOrder(liveSymbol, orderType, side, qty, normalizedPrice);
-        return order;
-      } catch (e) { return { error: e.message }; }
-    }
-
-    // Testnet/Demo mode manual logic
-    const crypto = require('crypto');
-    const axios = require('axios');
-    const isFutures = FUTURES_STRATEGIES.has(Number(strategyId));
-    
-    // Normalize symbol for Binance API
-    const bSymbol = normalizeSymbol(symbol, isFutures);
-
-    const envs = isFutures 
+    return isFutures 
       ? [
           { name: 'Legacy', url: 'https://testnet.binancefuture.com/fapi' },
           { name: 'Demo', url: 'https://demo-fapi.binance.com/fapi' }
@@ -182,14 +42,81 @@ class BinanceExecutor {
           { name: 'Legacy', url: 'https://testnet.binance.vision/api' },
           { name: 'Demo', url: 'https://demo-api.binance.com/api' }
         ];
+  }
+
+  async getBalance() {
+    if (!this._initialized) return { error: 'Executor not initialized' };
+
+    let spot = 0, futures = 0;
+    const headers = { 'X-MBX-APIKEY': this._apiKey, 'User-Agent': 'Mozilla/5.0' };
+    let finalErrors = [];
+
+    const futEnvs = this._getEnvs(true);
+    const spotEnvs = this._getEnvs(false);
+    
+    let futOk = false;
+    for (const env of futEnvs) {
+      try {
+        const timeUrl = this._testnet ? env.url.replace('/v2', '/v1').replace('/fapi', '/fapi/v1') : `${env.url}/v1`;
+        const timeRes = await axios.get(`${timeUrl}/time`, { timeout: 5000 });
+        const params = { timestamp: timeRes.data.serverTime, recvWindow: 10000 };
+        const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
+        const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
+        
+        const accUrl = this._testnet ? env.url.replace('/v1', '/v2') : `${env.url}/v2`; 
+        const res = await axios.get(`${accUrl}/account?${query}&signature=${signature}`, { headers, timeout: 5000 });
+        
+        if (res.data.assets) {
+          res.data.assets.forEach(a => { if (a.asset === 'USDT') futures = parseFloat(a.walletBalance || a.availableBalance || 0); });
+          futOk = true;
+          break;
+        }
+      } catch (e) {
+        finalErrors.push(`Futures ${env.name}: ${e.response?.data?.msg || e.message}`);
+      }
+    }
+
+    let spotOk = false;
+    for (const env of spotEnvs) {
+      try {
+        const timeUrl = this._testnet ? env.url.replace('/v3', '/v1').replace('/api', '/api/v3') : `${env.url}/v3`;
+        const timeRes = await axios.get(`${timeUrl}/time`, { timeout: 5000 });
+        const params = { timestamp: timeRes.data.serverTime, recvWindow: 10000 };
+        const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
+        const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
+
+        const accUrl = this._testnet ? env.url : `${env.url}/v3`;
+        const res = await axios.get(`${accUrl}/account?${query}&signature=${signature}`, { headers, timeout: 5000 });
+
+        if (res.data.balances) {
+          res.data.balances.forEach(b => { if (b.asset === 'USDT') spot = parseFloat(b.free) + parseFloat(b.locked); });
+          spotOk = true;
+          break;
+        }
+      } catch (e) {
+        finalErrors.push(`Spot ${env.name}: ${e.response?.data?.msg || e.message}`);
+      }
+    }
+
+    if (spotOk || futOk) {
+      return { spot, futures };
+    }
+    return { error: finalErrors.join(' | ') };
+  }
+
+  async placeOrder(symbol, side, amountUSDT, orderType = 'market', price = null, strategyId = 1, leverage = 1, fixedQty = null) {
+    if (!this._initialized) return { error: 'Executor not initialized' };
+    const isFutures = FUTURES_STRATEGIES.has(Number(strategyId));
+    const bSymbol = normalizeSymbol(symbol, isFutures);
+    const envs = this._getEnvs(isFutures);
 
     let lastError = null;
     for (const env of envs) {
       try {
-        if (!this._precisions) this._precisions = {};
         if (!this._precisions[bSymbol]) {
           try {
-            const infoRes = await axios.get(`${env.url}/v1/exchangeInfo`, { timeout: 5000 });
+            const infoUrl = this._testnet ? env.url.replace('/fapi', '/fapi/v1') : `${env.url}/v1`;
+            const infoRes = await axios.get(`${infoUrl}/exchangeInfo`, { timeout: 5000 });
             for (const s of infoRes.data.symbols) {
               this._precisions[s.symbol] = s.quantityPrecision;
             }
@@ -198,25 +125,32 @@ class BinanceExecutor {
           }
         }
 
-        const timeRes = await axios.get(`${env.url}/v1/time`, { timeout: 5000 });
+        const timeUrl = this._testnet ? env.url.replace('/v2', '/v1') : `${env.url}/v1`;
+        const timeRes = await axios.get(`${timeUrl}/time`, { timeout: 5000 });
         
-        // 1. Set Leverage for Futures
+        // Set Leverage for Futures
         if (isFutures && leverage > 1) {
           const lParams = { symbol: bSymbol, leverage, timestamp: timeRes.data.serverTime };
           const lQuery = Object.keys(lParams).map(k => `${k}=${lParams[k]}`).join('&');
           const lSig = crypto.createHmac('sha256', this._apiSecret).update(lQuery).digest('hex');
-          await axios.post(`${env.url}/v1/leverage?${lQuery}&signature=${lSig}`, null, {
+          await axios.post(`${timeUrl}/leverage?${lQuery}&signature=${lSig}`, null, {
             headers: { 'X-MBX-APIKEY': this._apiKey },
             timeout: 5000
           }).catch(e => console.warn(`[BinanceExecutor] SetLeverage Fail: ${e.response?.data?.msg || e.message}`));
         }
 
-        const tickerRes = await axios.get(`${env.url}/v1/ticker/price?symbol=${bSymbol}`, { timeout: 5000 });
+        let tickerRes;
+        try {
+          tickerRes = await axios.get(`${timeUrl}/ticker/price?symbol=${bSymbol}`, { timeout: 5000 });
+        } catch(e) {
+          tickerRes = { data: { price: price || 0 } }; 
+        }
         
+        const currentPrice = parseFloat(tickerRes.data.price);
         const prec = this._precisions[bSymbol] !== undefined ? this._precisions[bSymbol] : (isFutures ? 3 : 5);
         let qty = fixedQty;
-        if (!qty) {
-          const rawQty = (amountUSDT * leverage) / parseFloat(tickerRes.data.price);
+        if (!qty && currentPrice > 0) {
+          const rawQty = (amountUSDT * leverage) / currentPrice;
           const factor = Math.pow(10, prec);
           qty = (Math.floor(rawQty * factor) / factor).toFixed(prec);
         }
@@ -235,23 +169,21 @@ class BinanceExecutor {
         const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
         
         console.log(`[BinanceExecutor] Placing ${env.name} ${isFutures?'Futures':'Spot'} Order: ${side} ${qty} ${bSymbol} (Lev: ${leverage}x)`);
-        const res = await axios.post(`${env.url}/v1/order?${query}&signature=${signature}`, null, { 
+        const res = await axios.post(`${timeUrl}/order?${query}&signature=${signature}`, null, { 
           headers: { 'X-MBX-APIKEY': this._apiKey, 'User-Agent': 'Mozilla/5.0' },
           timeout: 10000
         });
 
-        // Normalize response to standard format
         const raw = res.data;
         let fillPrice = parseFloat(raw.avgPrice) || parseFloat(raw.price);
         
-        // If price is missing (market orders), look at fills
         if (!fillPrice && raw.fills && raw.fills.length > 0) {
           const totalQty = raw.fills.reduce((acc, f) => acc + parseFloat(f.qty), 0);
           const weightedSum = raw.fills.reduce((acc, f) => acc + (parseFloat(f.price) * parseFloat(f.qty)), 0);
           fillPrice = weightedSum / totalQty;
         }
 
-        if (!fillPrice) fillPrice = parseFloat(tickerRes.data.price);
+        if (!fillPrice) fillPrice = currentPrice;
         
         return {
           id: raw.orderId || raw.id,
@@ -273,66 +205,26 @@ class BinanceExecutor {
     return { error: lastError || 'Failed to place order' };
   }
 
-  _normalizeSymbol(s) { return s.replace(':USDT', '').replace('USDTUSDT', 'USDT'); }
-  _client(sid) { return FUTURES_STRATEGIES.has(Number(sid)) ? this._futuresClient : this._spotClient; }
   isReady() { return this._initialized; }
 
-  async _resolveLiveSymbol(client, symbol, isFutures) {
-    await client.loadMarkets();
-    if (client.markets[symbol]) return symbol;
-    if (isFutures && symbol.endsWith('/USDT')) {
-      const futuresSymbol = `${symbol}:USDT`;
-      if (client.markets[futuresSymbol]) return futuresSymbol;
-    }
-    const normalizedInput = symbol.replace(':USDT', '').replace('USDTUSDT', 'USDT').toUpperCase();
-    const found = Object.values(client.markets).find(
-      (m) => (m.id || '').toUpperCase() === normalizedInput || (m.symbol || '').replace(':USDT', '').toUpperCase() === normalizedInput
-    );
-    return found?.symbol || symbol;
-  }
-
-  // Unified method to get all open positions from Binance
   async getPositions() {
     if (!this._initialized) return { error: 'Not initialized' };
-    
-    // Live mode (CCXT)
-    if (!this._testnet) {
-      try {
-        const positions = await this._futuresClient.fetchPositions();
-        return positions.map(p => ({
-          symbol: normalizeSymbol(p.symbol, true),
-          // Ensure positionAmt is signed (positive for Long, negative for Short)
-          positionAmt: parseFloat(p.info?.positionAmt || (p.side === 'long' ? p.contracts : -p.contracts)),
-          unRealizedProfit: p.unrealizedPnl,
-          markPrice: p.markPrice,
-          entryPrice: p.entryPrice,
-          leverage: p.leverage
-        }));
-      } catch (e) { return { error: e.message }; }
-    }
-
-    // Testnet mode (Manual Axios)
-    const crypto = require('crypto');
-    const axios = require('axios');
-    const envs = [
-      { name: 'Legacy', url: 'https://testnet.binancefuture.com/fapi/v2' },
-      { name: 'Demo', url: 'https://demo-fapi.binance.com/fapi/v2' }
-    ];
-
+    const envs = this._getEnvs(true);
     for (const env of envs) {
       try {
-        const timeRes = await axios.get(env.url.replace('/v2', '/v1') + '/time', { timeout: 5000 });
+        const timeUrl = this._testnet ? env.url.replace('/v2', '/v1') : `${env.url}/v1`;
+        const timeRes = await axios.get(`${timeUrl}/time`, { timeout: 5000 });
         const params = { timestamp: timeRes.data.serverTime, recvWindow: 10000 };
         const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
         const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
         
-        const res = await axios.get(`${env.url}/positionRisk?${query}&signature=${signature}`, { 
+        const accUrl = this._testnet ? env.url : `${env.url}/v2`;
+        const res = await axios.get(`${accUrl}/positionRisk?${query}&signature=${signature}`, { 
           headers: { 'X-MBX-APIKEY': this._apiKey },
           timeout: 5000 
         });
         
         if (Array.isArray(res.data)) {
-          // Normalize Testnet response to match Live mode's standard structure
           return res.data.map(p => ({
             symbol: p.symbol,
             positionAmt: parseFloat(p.positionAmt || p.positionAmount || 0),
@@ -347,40 +239,23 @@ class BinanceExecutor {
     return { error: 'Failed to fetch positions from all environments' };
   }
 
-  // Unified method to get full account info from Binance
   async getAccount() {
     if (!this._initialized) return { error: 'Not initialized' };
-
-    if (!this._testnet) {
-      try {
-        const acc = await this._futuresClient.fetchBalance();
-        return {
-          totalUnrealizedProfit: acc.info.totalUnrealizedProfit || 0,
-          totalMarginBalance: acc.info.totalMarginBalance || 0
-        };
-      } catch (e) { return { error: e.message }; }
-    }
-
-    const crypto = require('crypto');
-    const axios = require('axios');
-    const envs = [
-      { name: 'Legacy', url: 'https://testnet.binancefuture.com/fapi/v2' },
-      { name: 'Demo', url: 'https://demo-fapi.binance.com/fapi/v2' }
-    ];
-
+    const envs = this._getEnvs(true);
     for (const env of envs) {
       try {
-        const timeRes = await axios.get(env.url.replace('/v2', '/v1') + '/time', { timeout: 5000 });
+        const timeUrl = this._testnet ? env.url.replace('/v2', '/v1') : `${env.url}/v1`;
+        const timeRes = await axios.get(`${timeUrl}/time`, { timeout: 5000 });
         const params = { timestamp: timeRes.data.serverTime, recvWindow: 10000 };
         const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
         const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
         
-        const res = await axios.get(`${env.url}/account?${query}&signature=${signature}`, { 
+        const accUrl = this._testnet ? env.url : `${env.url}/v2`;
+        const res = await axios.get(`${accUrl}/account?${query}&signature=${signature}`, { 
           headers: { 'X-MBX-APIKEY': this._apiKey },
           timeout: 5000 
         });
         if (res.data) {
-          // Normalize Testnet response to match Live mode's standard structure
           return {
             totalUnrealizedProfit: parseFloat(res.data.totalUnrealizedProfit || 0),
             totalMarginBalance: parseFloat(res.data.totalMarginBalance || 0),
@@ -395,38 +270,13 @@ class BinanceExecutor {
 
   async getOrder(symbol, orderId) {
     if (!this._initialized) return { error: 'Not initialized' };
-    try {
-      const order = await this._futuresClient.fetchOrder(orderId, symbol);
-      return order;
-    } catch (e) {
-      return { error: e.message };
-    }
-  }
-
-  // Cancel a specific order
-  async cancelOrder(symbol, orderId) {
-    if (!this._initialized) return { success: false, error: 'Not initialized' };
     const bSymbol = normalizeSymbol(symbol, true);
-
-    // Live mode (CCXT)
-    if (!this._testnet) {
-      try {
-        await this._futuresClient.cancelOrder(orderId, symbol);
-        return { success: true };
-      } catch (e) { return { success: false, error: e.message }; }
-    }
-
-    // Testnet mode (Manual Axios)
-    const crypto = require('crypto');
-    const axios = require('axios');
-    const envs = [
-      { name: 'Legacy', url: 'https://testnet.binancefuture.com/fapi/v1' },
-      { name: 'Demo', url: 'https://demo-fapi.binance.com/fapi/v1' }
-    ];
+    const envs = this._getEnvs(true);
 
     for (const env of envs) {
       try {
-        const timeRes = await axios.get(env.url + '/time', { timeout: 5000 });
+        const timeUrl = this._testnet ? env.url.replace('/v2', '/v1') : `${env.url}/v1`;
+        const timeRes = await axios.get(`${timeUrl}/time`, { timeout: 5000 });
         const params = {
           symbol: bSymbol,
           orderId: orderId,
@@ -436,34 +286,75 @@ class BinanceExecutor {
         const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
         const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
 
-        await axios.delete(`${env.url}/order?${query}&signature=${signature}`, {
+        const accUrl = this._testnet ? env.url.replace('/v2', '/v1') : `${env.url}/v1`;
+        const res = await axios.get(`${accUrl}/order?${query}&signature=${signature}`, {
+          headers: { 'X-MBX-APIKEY': this._apiKey },
+          timeout: 5000
+        });
+        return res.data;
+      } catch (e) { }
+    }
+    return { error: 'Order not found' };
+  }
+
+  async cancelOrder(symbol, orderId) {
+    if (!this._initialized) return { success: false, error: 'Not initialized' };
+    const bSymbol = normalizeSymbol(symbol, true);
+    const envs = this._getEnvs(true);
+
+    for (const env of envs) {
+      try {
+        const timeUrl = this._testnet ? env.url.replace('/v2', '/v1') : `${env.url}/v1`;
+        const timeRes = await axios.get(`${timeUrl}/time`, { timeout: 5000 });
+        const params = {
+          symbol: bSymbol,
+          orderId: orderId,
+          timestamp: timeRes.data.serverTime,
+          recvWindow: 10000
+        };
+        const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
+        const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
+
+        const accUrl = this._testnet ? env.url.replace('/v2', '/v1') : `${env.url}/v1`;
+        await axios.delete(`${accUrl}/order?${query}&signature=${signature}`, {
           headers: { 'X-MBX-APIKEY': this._apiKey },
           timeout: 5000
         });
         return { success: true };
-      } catch (e) {
-        // Continue to next env if 404/400
-      }
+      } catch (e) { }
     }
     return { success: false, error: 'Order not found or already closed' };
   }
 
-  // Cancel all open orders for all symbols (Futures)
   async cancelAllOpenOrders() {
     if (!this._initialized) return [];
     
-    if (!this._testnet) {
-       try {
-         const orders = await this._futuresClient.fetchOpenOrders();
-         for (const o of orders) {
-           await this._futuresClient.cancelOrder(o.id, o.symbol);
-         }
-         return orders;
-       } catch (e) { return []; }
-    }
+    const envs = this._getEnvs(true);
+    for (const env of envs) {
+      try {
+        const timeUrl = this._testnet ? env.url.replace('/v2', '/v1') : `${env.url}/v1`;
+        const timeRes = await axios.get(`${timeUrl}/time`, { timeout: 5000 });
+        
+        // Fetch open orders
+        const params = { timestamp: timeRes.data.serverTime, recvWindow: 10000 };
+        const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
+        const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
 
-    // Testnet doesn't have a reliable "cancel all" across both envs without symbol
-    // So we just return empty or implement per-symbol if needed.
+        const accUrl = this._testnet ? env.url.replace('/v2', '/v1') : `${env.url}/v1`;
+        const res = await axios.get(`${accUrl}/openOrders?${query}&signature=${signature}`, {
+          headers: { 'X-MBX-APIKEY': this._apiKey },
+          timeout: 5000
+        });
+        
+        // Cancel each one manually since allOpenOrders requires symbol on Binance
+        if (Array.isArray(res.data)) {
+           for (const order of res.data) {
+              await this.cancelOrder(order.symbol, order.orderId);
+           }
+        }
+        return [];
+      } catch (e) { }
+    }
     return [];
   }
 
