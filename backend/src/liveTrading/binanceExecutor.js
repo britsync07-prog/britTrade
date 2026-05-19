@@ -57,14 +57,12 @@ class BinanceExecutor {
     let futOk = false;
     for (const env of futEnvs) {
       try {
-        const timeUrl = this._testnet ? env.url.replace('/v2', '/v1').replace('/fapi', '/fapi/v1') : `${env.url}/v1`;
-        const timeRes = await axios.get(`${timeUrl}/time`, { timeout: 5000 });
+        const timeRes = await axios.get(`${env.url}/v1/time`, { timeout: 5000 });
         const params = { timestamp: timeRes.data.serverTime, recvWindow: 10000 };
         const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
         const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
         
-        const accUrl = this._testnet ? env.url.replace('/v1', '/v2') : `${env.url}/v2`; 
-        const res = await axios.get(`${accUrl}/account?${query}&signature=${signature}`, { headers, timeout: 5000 });
+        const res = await axios.get(`${env.url}/v2/account?${query}&signature=${signature}`, { headers, timeout: 5000 });
         
         if (res.data.assets) {
           res.data.assets.forEach(a => { if (a.asset === 'USDT') futures = parseFloat(a.walletBalance || a.availableBalance || 0); });
@@ -79,14 +77,12 @@ class BinanceExecutor {
     let spotOk = false;
     for (const env of spotEnvs) {
       try {
-        const timeUrl = this._testnet ? env.url.replace('/v3', '/v1').replace('/api', '/api/v3') : `${env.url}/v3`;
-        const timeRes = await axios.get(`${timeUrl}/time`, { timeout: 5000 });
+        const timeRes = await axios.get(`${env.url}/v3/time`, { timeout: 5000 });
         const params = { timestamp: timeRes.data.serverTime, recvWindow: 10000 };
         const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
         const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
 
-        const accUrl = this._testnet ? env.url : `${env.url}/v3`;
-        const res = await axios.get(`${accUrl}/account?${query}&signature=${signature}`, { headers, timeout: 5000 });
+        const res = await axios.get(`${env.url}/v3/account?${query}&signature=${signature}`, { headers, timeout: 5000 });
 
         if (res.data.balances) {
           res.data.balances.forEach(b => { if (b.asset === 'USDT') spot = parseFloat(b.free) + parseFloat(b.locked); });
@@ -115,25 +111,25 @@ class BinanceExecutor {
       try {
         if (!this._precisions[bSymbol]) {
           try {
-            const infoUrl = this._testnet ? env.url.replace('/fapi', '/fapi/v1') : `${env.url}/v1`;
+            const infoUrl = isFutures ? `${env.url}/v1` : `${env.url}/v3`;
             const infoRes = await axios.get(`${infoUrl}/exchangeInfo`, { timeout: 5000 });
             for (const s of infoRes.data.symbols) {
-              this._precisions[s.symbol] = s.quantityPrecision;
+              this._precisions[s.symbol] = s.quantityPrecision || s.baseAssetPrecision;
             }
           } catch (e) {
             console.warn(`[BinanceExecutor] Failed to fetch exchangeInfo: ${e.message}`);
           }
         }
 
-        const timeUrl = this._testnet ? env.url.replace('/v2', '/v1') : `${env.url}/v1`;
-        const timeRes = await axios.get(`${timeUrl}/time`, { timeout: 5000 });
+        const baseUrl = isFutures ? `${env.url}/v1` : `${env.url}/v3`;
+        const timeRes = await axios.get(`${baseUrl}/time`, { timeout: 5000 });
         
         // Set Leverage for Futures
         if (isFutures && leverage > 1) {
           const lParams = { symbol: bSymbol, leverage, timestamp: timeRes.data.serverTime };
           const lQuery = Object.keys(lParams).map(k => `${k}=${lParams[k]}`).join('&');
           const lSig = crypto.createHmac('sha256', this._apiSecret).update(lQuery).digest('hex');
-          await axios.post(`${timeUrl}/leverage?${lQuery}&signature=${lSig}`, null, {
+          await axios.post(`${baseUrl}/leverage?${lQuery}&signature=${lSig}`, null, {
             headers: { 'X-MBX-APIKEY': this._apiKey },
             timeout: 5000
           }).catch(e => console.warn(`[BinanceExecutor] SetLeverage Fail: ${e.response?.data?.msg || e.message}`));
@@ -141,7 +137,7 @@ class BinanceExecutor {
 
         let tickerRes;
         try {
-          tickerRes = await axios.get(`${timeUrl}/ticker/price?symbol=${bSymbol}`, { timeout: 5000 });
+          tickerRes = await axios.get(`${baseUrl}/ticker/price?symbol=${bSymbol}`, { timeout: 5000 });
         } catch(e) {
           tickerRes = { data: { price: price || 0 } }; 
         }
@@ -169,7 +165,7 @@ class BinanceExecutor {
         const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
         
         console.log(`[BinanceExecutor] Placing ${env.name} ${isFutures?'Futures':'Spot'} Order: ${side} ${qty} ${bSymbol} (Lev: ${leverage}x)`);
-        const res = await axios.post(`${timeUrl}/order?${query}&signature=${signature}`, null, { 
+        const res = await axios.post(`${baseUrl}/order?${query}&signature=${signature}`, null, { 
           headers: { 'X-MBX-APIKEY': this._apiKey, 'User-Agent': 'Mozilla/5.0' },
           timeout: 10000
         });
@@ -212,14 +208,12 @@ class BinanceExecutor {
     const envs = this._getEnvs(true);
     for (const env of envs) {
       try {
-        const timeUrl = this._testnet ? env.url.replace('/v2', '/v1') : `${env.url}/v1`;
-        const timeRes = await axios.get(`${timeUrl}/time`, { timeout: 5000 });
+        const timeRes = await axios.get(`${env.url}/v1/time`, { timeout: 5000 });
         const params = { timestamp: timeRes.data.serverTime, recvWindow: 10000 };
         const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
         const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
         
-        const accUrl = this._testnet ? env.url : `${env.url}/v2`;
-        const res = await axios.get(`${accUrl}/positionRisk?${query}&signature=${signature}`, { 
+        const res = await axios.get(`${env.url}/v2/positionRisk?${query}&signature=${signature}`, { 
           headers: { 'X-MBX-APIKEY': this._apiKey },
           timeout: 5000 
         });
@@ -244,14 +238,12 @@ class BinanceExecutor {
     const envs = this._getEnvs(true);
     for (const env of envs) {
       try {
-        const timeUrl = this._testnet ? env.url.replace('/v2', '/v1') : `${env.url}/v1`;
-        const timeRes = await axios.get(`${timeUrl}/time`, { timeout: 5000 });
+        const timeRes = await axios.get(`${env.url}/v1/time`, { timeout: 5000 });
         const params = { timestamp: timeRes.data.serverTime, recvWindow: 10000 };
         const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
         const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
         
-        const accUrl = this._testnet ? env.url : `${env.url}/v2`;
-        const res = await axios.get(`${accUrl}/account?${query}&signature=${signature}`, { 
+        const res = await axios.get(`${env.url}/v2/account?${query}&signature=${signature}`, { 
           headers: { 'X-MBX-APIKEY': this._apiKey },
           timeout: 5000 
         });
@@ -275,8 +267,7 @@ class BinanceExecutor {
 
     for (const env of envs) {
       try {
-        const timeUrl = this._testnet ? env.url.replace('/v2', '/v1') : `${env.url}/v1`;
-        const timeRes = await axios.get(`${timeUrl}/time`, { timeout: 5000 });
+        const timeRes = await axios.get(`${env.url}/v1/time`, { timeout: 5000 });
         const params = {
           symbol: bSymbol,
           orderId: orderId,
@@ -286,8 +277,7 @@ class BinanceExecutor {
         const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
         const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
 
-        const accUrl = this._testnet ? env.url.replace('/v2', '/v1') : `${env.url}/v1`;
-        const res = await axios.get(`${accUrl}/order?${query}&signature=${signature}`, {
+        const res = await axios.get(`${env.url}/v1/order?${query}&signature=${signature}`, {
           headers: { 'X-MBX-APIKEY': this._apiKey },
           timeout: 5000
         });
@@ -304,8 +294,7 @@ class BinanceExecutor {
 
     for (const env of envs) {
       try {
-        const timeUrl = this._testnet ? env.url.replace('/v2', '/v1') : `${env.url}/v1`;
-        const timeRes = await axios.get(`${timeUrl}/time`, { timeout: 5000 });
+        const timeRes = await axios.get(`${env.url}/v1/time`, { timeout: 5000 });
         const params = {
           symbol: bSymbol,
           orderId: orderId,
@@ -315,8 +304,7 @@ class BinanceExecutor {
         const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
         const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
 
-        const accUrl = this._testnet ? env.url.replace('/v2', '/v1') : `${env.url}/v1`;
-        await axios.delete(`${accUrl}/order?${query}&signature=${signature}`, {
+        await axios.delete(`${env.url}/v1/order?${query}&signature=${signature}`, {
           headers: { 'X-MBX-APIKEY': this._apiKey },
           timeout: 5000
         });
@@ -332,16 +320,14 @@ class BinanceExecutor {
     const envs = this._getEnvs(true);
     for (const env of envs) {
       try {
-        const timeUrl = this._testnet ? env.url.replace('/v2', '/v1') : `${env.url}/v1`;
-        const timeRes = await axios.get(`${timeUrl}/time`, { timeout: 5000 });
+        const timeRes = await axios.get(`${env.url}/v1/time`, { timeout: 5000 });
         
         // Fetch open orders
         const params = { timestamp: timeRes.data.serverTime, recvWindow: 10000 };
         const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
         const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
 
-        const accUrl = this._testnet ? env.url.replace('/v2', '/v1') : `${env.url}/v1`;
-        const res = await axios.get(`${accUrl}/openOrders?${query}&signature=${signature}`, {
+        const res = await axios.get(`${env.url}/v1/openOrders?${query}&signature=${signature}`, {
           headers: { 'X-MBX-APIKEY': this._apiKey },
           timeout: 5000
         });
