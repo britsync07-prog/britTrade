@@ -188,6 +188,16 @@ app.get('/live-trading/logs', authMiddleware, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+app.post('/live-trading/kill-switch', authMiddleware, async (req, res, next) => {
+  try {
+    const result = await liveTradeOrchestrator.userKillSwitch(req.userId);
+    res.json({
+      message: '🚨 Kill-switch activated. Live trading disabled. All open orders cancelled.',
+      cancelledCount: result.cancelled,
+    });
+  } catch (e) { next(e); }
+});
+
 app.get('/live-trading/dashboard', authMiddleware, async (req, res, next) => {
   try {
     const config = await liveTradeDb.getUserBinanceConfig(req.userId);

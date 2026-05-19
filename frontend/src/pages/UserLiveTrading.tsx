@@ -29,7 +29,7 @@ export default function UserLiveTrading() {
         </header>
 
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-          <LiveTradingPanel apiBase="/live-trading" showKillSwitch={false} />
+          <LiveTradingPanel apiBase="/live-trading" showKillSwitch={true} />
         </motion.div>
       </div>
     </div>

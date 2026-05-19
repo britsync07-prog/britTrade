@@ -284,65 +284,78 @@ export default function LiveTradingPanel({ apiBase = '/admin/live-trading', show
         </div>
         <div className="divide-y divide-white/5">
           {strategyConfigs.map(sc => (
-            <div key={sc.strategy_id} className={`p-6 flex flex-wrap items-center gap-6 transition-all ${sc.enabled ? 'bg-emerald-500/[0.02]' : ''}`}>
+            <div key={sc.strategy_id} className={`p-6 flex flex-wrap items-center gap-6 transition-all ${sc.enabled ? 'bg-emerald-500/[0.02]' : ''} ${sc.strategy_id !== 1 ? 'opacity-50 grayscale' : ''}`}>
               <div className="flex-1 min-w-[200px]">
-                <div className={`text-lg font-black tracking-tight ${STRATEGY_COLORS[sc.strategy_id] || 'text-white'}`}>
+                <div className={`text-lg font-black tracking-tight ${STRATEGY_COLORS[sc.strategy_id] || 'text-white'} flex items-center gap-3`}>
                   {STRATEGY_NAMES[sc.strategy_id] || `Strategy ${sc.strategy_id}`}
+                  {sc.strategy_id !== 1 && (
+                    <span className="text-[9px] px-2 py-1 bg-white/10 text-white rounded-lg uppercase tracking-widest border border-white/10">Coming Soon</span>
+                  )}
                 </div>
-                {editingStratId === sc.strategy_id ? (
-                  <div className="grid grid-cols-3 gap-3 mt-4 p-4 bg-white/5 rounded-2xl border border-white/5">
-                    <div>
-                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Trade Amt (USDT)</label>
-                      <input type="number" value={editValues.amount} onChange={e => setEditValues({ ...editValues, amount: parseFloat(e.target.value) })}
-                        className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white font-bold outline-none focus:border-cyan-500 transition-all" />
+                {sc.strategy_id === 1 && (
+                  editingStratId === sc.strategy_id ? (
+                    <div className="grid grid-cols-3 gap-3 mt-4 p-4 bg-white/5 rounded-2xl border border-white/5">
+                      <div>
+                        <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Trade Amt (USDT)</label>
+                        <input type="number" value={editValues.amount} onChange={e => setEditValues({ ...editValues, amount: parseFloat(e.target.value) })}
+                          className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white font-bold outline-none focus:border-cyan-500 transition-all" />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Leverage (X)</label>
+                        <input type="number" value={editValues.leverage} onChange={e => setEditValues({ ...editValues, leverage: parseInt(e.target.value) })}
+                          className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white font-bold outline-none focus:border-cyan-500 transition-all" />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Total Capital ($)</label>
+                        <input type="number" value={editValues.capital} onChange={e => setEditValues({ ...editValues, capital: parseFloat(e.target.value) })}
+                          className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white font-bold outline-none focus:border-cyan-500 transition-all" />
+                      </div>
                     </div>
-                    <div>
-                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Leverage (X)</label>
-                      <input type="number" value={editValues.leverage} onChange={e => setEditValues({ ...editValues, leverage: parseInt(e.target.value) })}
-                        className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white font-bold outline-none focus:border-cyan-500 transition-all" />
+                  ) : (
+                    <div className="flex gap-4 mt-2">
+                      <div className="text-[10px] text-slate-400 font-bold uppercase"><span className="text-slate-600 mr-1">Trade:</span> ${sc.trade_amount_usdt}</div>
+                      <div className="text-[10px] text-slate-400 font-bold uppercase"><span className="text-slate-600 mr-1">Lev:</span> {sc.leverage}x</div>
+                      <div className="text-[10px] text-cyan-400/80 font-bold uppercase"><span className="text-slate-600 mr-1">Capital:</span> ${sc.allocated_capital || 0}</div>
                     </div>
-                    <div>
-                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Total Capital ($)</label>
-                      <input type="number" value={editValues.capital} onChange={e => setEditValues({ ...editValues, capital: parseFloat(e.target.value) })}
-                        className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white font-bold outline-none focus:border-cyan-500 transition-all" />
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex gap-4 mt-2">
-                    <div className="text-[10px] text-slate-400 font-bold uppercase"><span className="text-slate-600 mr-1">Trade:</span> ${sc.trade_amount_usdt}</div>
-                    <div className="text-[10px] text-slate-400 font-bold uppercase"><span className="text-slate-600 mr-1">Lev:</span> {sc.leverage}x</div>
-                    <div className="text-[10px] text-cyan-400/80 font-bold uppercase"><span className="text-slate-600 mr-1">Capital:</span> ${sc.allocated_capital || 0}</div>
-                  </div>
+                  )
                 )}
               </div>
               <div className="flex items-center gap-3">
-                {editingStratId === sc.strategy_id ? (
-                  <div className="flex flex-col gap-2">
-                    <button onClick={() => handleUpdateStrategy(sc.strategy_id)}
-                      className="px-6 py-2.5 bg-cyan-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-cyan-400 transition-all shadow-lg shadow-cyan-500/20">
-                      Apply Changes
+                {sc.strategy_id === 1 ? (
+                  <>
+                    {editingStratId === sc.strategy_id ? (
+                      <div className="flex flex-col gap-2">
+                        <button onClick={() => handleUpdateStrategy(sc.strategy_id)}
+                          className="px-6 py-2.5 bg-cyan-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-cyan-400 transition-all shadow-lg shadow-cyan-500/20">
+                          Apply Changes
+                        </button>
+                        <button onClick={() => setEditingStratId(null)}
+                          className="px-6 py-2.5 bg-white/5 text-slate-400 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all">
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button onClick={() => {
+                        setEditingStratId(sc.strategy_id);
+                        setEditValues({ amount: sc.trade_amount_usdt, leverage: sc.leverage, capital: sc.allocated_capital });
+                      }}
+                        className="h-12 px-6 flex items-center gap-2 bg-white/5 text-slate-400 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all">
+                        <Settings size={14} />
+                        Configure
+                      </button>
+                    )}
+                    <button onClick={() => handleStrategyToggle(sc.strategy_id, sc.enabled)}
+                      className={`h-12 px-8 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-all ${
+                        sc.enabled ? 'bg-emerald-500 text-white border-emerald-400 shadow-lg shadow-emerald-500/20' : 'bg-slate-800 text-slate-500 border-white/5 hover:border-white/10'
+                      }`}>
+                      {sc.enabled ? '● DEPLOYED' : '○ OFFLINE'}
                     </button>
-                    <button onClick={() => setEditingStratId(null)}
-                      className="px-6 py-2.5 bg-white/5 text-slate-400 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all">
-                      Cancel
-                    </button>
-                  </div>
+                  </>
                 ) : (
-                  <button onClick={() => {
-                    setEditingStratId(sc.strategy_id);
-                    setEditValues({ amount: sc.trade_amount_usdt, leverage: sc.leverage, capital: sc.allocated_capital });
-                  }}
-                    className="h-12 px-6 flex items-center gap-2 bg-white/5 text-slate-400 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all">
-                    <Settings size={14} />
-                    Configure
-                  </button>
+                  <div className="h-12 px-6 flex items-center justify-center bg-white/5 text-slate-500 rounded-2xl text-[10px] font-black uppercase tracking-widest border border-white/5 cursor-not-allowed">
+                    Coming Soon
+                  </div>
                 )}
-                <button onClick={() => handleStrategyToggle(sc.strategy_id, sc.enabled)}
-                  className={`h-12 px-8 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-all ${
-                    sc.enabled ? 'bg-emerald-500 text-white border-emerald-400 shadow-lg shadow-emerald-500/20' : 'bg-slate-800 text-slate-500 border-white/5 hover:border-white/10'
-                  }`}>
-                  {sc.enabled ? '● DEPLOYED' : '○ OFFLINE'}
-                </button>
               </div>
             </div>
           ))}

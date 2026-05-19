@@ -72,45 +72,57 @@ class LiveTradeOrchestrator {
     }
   }
 
-  /**
-   * Background task that runs every 30s to cancel stale limit orders.
-   */
   _startOrderWatcher() {
     setInterval(async () => {
       try {
         if (!this._ready) return;
 
-        // 1. Get all orders with OPEN or NEW status from DB
-        const allOrders = await liveTradeDb.getOrders(100, 0);
-        const openLimitOrders = allOrders.filter(o => {
-          const s = (o.status || '').toUpperCase();
-          return (s === 'OPEN' || s === 'NEW' || s === 'PARTIALLY_FILLED') && o.order_type === 'limit';
-        });
+        // 1. Get all open/new orders (both admin and users)
+        const allOrders = await liveTradeDb.all("SELECT * FROM live_orders WHERE UPPER(status) IN ('OPEN', 'NEW', 'PARTIALLY_FILLED') AND order_type='limit'");
+        if (!allOrders.length) return;
 
         const now = Math.floor(Date.now() / 1000);
-        const EXPIRY_SECONDS = 300; // 2 minutes
+        const EXPIRY_SECONDS = 300; // 5 minutes
 
-        for (const order of openLimitOrders) {
-          // Convert DB string timestamp to Unix seconds
+        // Group expired orders by user_id
+        const expiredByUser = new Map();
+        for (const order of allOrders) {
           const createdAt = Math.floor(new Date(order.created_at + ' UTC').getTime() / 1000);
           const age = now - createdAt;
-
-          console.log(`[OrderWatcher] Checking ${order.symbol} (${order.binance_id}). Age: ${age}s`);
-
+          
           if (age > EXPIRY_SECONDS) {
-            console.log(`[OrderWatcher] ⏳ Order ${order.binance_id} expired. Cancelling...`);
-            
-            // Force binance_id to string and remove any ".0"
+            const uid = order.user_id || 'admin';
+            if (!expiredByUser.has(uid)) expiredByUser.set(uid, []);
+            expiredByUser.get(uid).push(order);
+          }
+        }
+
+        // Process cancellations per user context
+        for (const [uid, orders] of expiredByUser.entries()) {
+          let executor;
+          if (uid === 'admin') {
+            executor = binanceExecutor;
+          } else {
+            const userCfg = await liveTradeDb.getUserBinanceConfig(uid);
+            if (!userCfg || !userCfg.enabled) continue;
+            const apiKey = decrypt(userCfg.api_key_enc);
+            const apiSecret = decrypt(userCfg.api_sec_enc);
+            if (!apiKey || !apiSecret) continue;
+            executor = new BinanceExecutor();
+            await executor.init(apiKey, apiSecret, userCfg.testnet === 1);
+          }
+
+          for (const order of orders) {
+            console.log(`[OrderWatcher] ⏳ Order ${order.binance_id} expired for ${uid}. Cancelling...`);
             const cleanId = String(order.binance_id).split('.')[0];
-            const cancelRes = await binanceExecutor.cancelOrder(order.symbol, cleanId);
-            
-            // If success OR if order is already gone, mark as CANCELLED in DB
+            const cancelRes = await executor.cancelOrder(order.symbol, cleanId);
+
             if (cancelRes.success || cancelRes.error?.includes('Order not found')) {
               await liveTradeDb.updateOrder(order.id, { status: 'CANCELLED' });
-              liveTradeDb.addLog('info', `Auto-cancelled stale limit order: ${order.symbol} @ ${order.price}`, { strategy_id: order.strategy_id });
+              liveTradeDb.addLog('info', `Auto-cancelled stale limit order: ${order.symbol} @ ${order.price}`, { strategy_id: order.strategy_id, user_id: uid === 'admin' ? null : uid }).catch(() => {});
               console.log(`[OrderWatcher] ✅ Order ${cleanId} marked as CANCELLED in DB.`);
             } else {
-              console.error(`[OrderWatcher] Failed to cancel order ${cleanId}:`, cancelRes.error);
+              console.error(`[OrderWatcher] Failed to cancel order ${cleanId} for ${uid}:`, cancelRes.error);
             }
           }
         }
@@ -330,13 +342,41 @@ class LiveTradeOrchestrator {
     await liveTradeDb.setGlobalEnabled(false);
     const cancelled = await binanceExecutor.cancelAllOpenOrders();
     // Mark all open DB orders as cancelled
-    const allOrders = await liveTradeDb.getOrders(500, 0);
-    const openOrders = allOrders.filter(o => o.status === 'open');
-    for (const o of (openOrders || [])) {
-      await liveTradeDb.updateOrder(o.id, { status: 'cancelled' });
+    const allOrders = await liveTradeDb.all("SELECT * FROM live_orders WHERE UPPER(status) IN ('OPEN', 'NEW', 'PARTIALLY_FILLED') AND user_id IS NULL");
+    for (const o of allOrders) {
+      await liveTradeDb.updateOrder(o.id, { status: 'CANCELLED' });
     }
     liveTradeDb.addLog('warn', 'Kill-switch activated — all open orders cancelled, live trading disabled').catch(() => {});
     return { cancelled: cancelled.length };
+  }
+
+  /**
+   * User Kill-switch: cancel all open orders and disable live trading for a specific user.
+   */
+  async userKillSwitch(userId) {
+    console.log(`[LiveTradeOrchestrator] 🚨 USER KILL SWITCH ACTIVATED [User ${userId}]`);
+    await liveTradeDb.setUserEnabled(userId, false);
+
+    const userCfg = await liveTradeDb.getUserBinanceConfig(userId);
+    let cancelledCount = 0;
+    if (userCfg) {
+      const apiKey = decrypt(userCfg.api_key_enc);
+      const apiSecret = decrypt(userCfg.api_sec_enc);
+      if (apiKey && apiSecret) {
+        const userExecutor = new BinanceExecutor();
+        await userExecutor.init(apiKey, apiSecret, userCfg.testnet === 1);
+        const cancelled = await userExecutor.cancelAllOpenOrders();
+        cancelledCount = cancelled.length;
+      }
+    }
+
+    // Mark all open DB orders for this user as cancelled
+    const userOrders = await liveTradeDb.all("SELECT * FROM live_orders WHERE UPPER(status) IN ('OPEN', 'NEW', 'PARTIALLY_FILLED') AND user_id=?", [userId]);
+    for (const o of userOrders) {
+      await liveTradeDb.updateOrder(o.id, { status: 'CANCELLED' });
+    }
+    liveTradeDb.addLog('warn', `User kill-switch activated — disabled live trading and cancelled ${cancelledCount} orders`, { user_id: userId }).catch(() => {});
+    return { cancelled: cancelledCount };
   }
 }
 
