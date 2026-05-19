@@ -111,15 +111,18 @@ router.delete('/config', async (req, res) => {
 
 router.post('/config/test', async (req, res) => {
   try {
-    const { api_key, api_secret, testnet } = req.body;
+    const { api_key, api_secret, apiKey, apiSecret, testnet } = req.body;
     
     let executorToTest = binanceExecutor;
     
+    const finalKey = api_key || apiKey;
+    const finalSecret = api_secret || apiSecret;
+
     // If they provided keys to test, create a temporary executor
-    if (api_key && api_secret) {
+    if (finalKey && finalSecret) {
       const { BinanceExecutor } = require('../liveTrading/binanceExecutor');
       executorToTest = new BinanceExecutor();
-      await executorToTest.init(api_key, api_secret, testnet);
+      await executorToTest.init(finalKey, finalSecret, testnet);
     } else if (!executorToTest.isReady()) {
       await liveTradeOrchestrator.reinitExecutor();
       if (!executorToTest.isReady()) {
