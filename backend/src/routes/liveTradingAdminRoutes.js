@@ -112,18 +112,24 @@ router.delete('/config', async (req, res) => {
 router.post('/config/test', async (req, res) => {
   try {
     const { api_key, api_secret, apiKey, apiSecret, testnet } = req.body;
+    console.log('[DEBUG /config/test] Received payload:', { api_key, apiKey, testnet });
     
     let executorToTest = binanceExecutor;
     
     const finalKey = api_key || apiKey;
     const finalSecret = api_secret || apiSecret;
 
+    // Force strict boolean conversion
+    const isTestnet = testnet === true || testnet === 'true' || testnet === 1;
+
     // If they provided keys to test, create a temporary executor
     if (finalKey && finalSecret) {
+      console.log('[DEBUG /config/test] Testing provided keys as', isTestnet ? 'TESTNET' : 'LIVE');
       const { BinanceExecutor } = require('../liveTrading/binanceExecutor');
       executorToTest = new BinanceExecutor();
-      await executorToTest.init(finalKey, finalSecret, testnet);
+      await executorToTest.init(finalKey, finalSecret, isTestnet);
     } else if (!executorToTest.isReady()) {
+      console.log('[DEBUG /config/test] No keys provided, booting global executor from DB');
       await liveTradeOrchestrator.reinitExecutor();
       if (!executorToTest.isReady()) {
         return res.status(400).json({ error: 'No Binance credentials configured to test' });
