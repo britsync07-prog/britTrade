@@ -82,7 +82,11 @@ export default function LiveTradingPanel({ apiBase = '/admin/live-trading', show
   const handleTest = async () => {
     setTesting(true); setTestResult(null);
     try {
-      const res = await api.post(`${apiBase}/config/test`);
+      const res = await api.post(`${apiBase}/config/test`, {
+        api_key: apiKey,
+        api_secret: apiSecret,
+        testnet: testnet
+      });
       setTestResult({ ok: true, msg: `✅ Connected! Futures Balance: $${res.data.balance.futures?.toFixed(2) || '0.00'}` });
     } catch (err: any) {
       setTestResult({ ok: false, msg: err.response?.data?.error || 'Connection failed' });
