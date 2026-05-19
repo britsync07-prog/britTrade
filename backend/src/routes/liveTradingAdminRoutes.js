@@ -110,9 +110,14 @@ router.delete('/config', async (req, res) => {
 // ─── POST /config/test ────────────────────────────────────────────────────────
 
 router.post('/config/test', async (req, res) => {
+  console.log('\n======================================================');
+  console.log('🛑 [DEBUG] /config/test ROUTE HAS BEEN HIT (NEW CODE)');
+  console.log('======================================================\n');
   try {
     const { api_key, api_secret, apiKey, apiSecret, testnet } = req.body;
-    console.log('[DEBUG /config/test] Received payload:', { api_key, apiKey, testnet });
+    
+    console.log('>>> [PAYLOAD RAW] req.body:', req.body);
+    console.log(`>>> [VARS EXPORTED] api_key: ${api_key ? 'exists' : 'missing'}, apiKey: ${apiKey ? 'exists' : 'missing'}, testnet: ${testnet}`);
     
     let executorToTest = binanceExecutor;
     
@@ -122,21 +127,29 @@ router.post('/config/test', async (req, res) => {
     // Force strict boolean conversion
     const isTestnet = testnet === true || testnet === 'true' || testnet === 1;
 
+    console.log(`>>> [EVALUATION] finalKey exists: ${!!finalKey}, isTestnet boolean evaluated to: ${isTestnet}`);
+
     // If they provided keys to test, create a temporary executor
     if (finalKey && finalSecret) {
-      console.log('[DEBUG /config/test] Testing provided keys as', isTestnet ? 'TESTNET' : 'LIVE');
+      console.log('>>> [BRANCH] Creating TEMPORARY executor with provided keys. isTestnet:', isTestnet ? 'TESTNET' : 'LIVE');
       const { BinanceExecutor } = require('../liveTrading/binanceExecutor');
       executorToTest = new BinanceExecutor();
       await executorToTest.init(finalKey, finalSecret, isTestnet);
+      console.log('>>> [TEMP EXECUTOR] init finished. isReady:', executorToTest.isReady());
     } else if (!executorToTest.isReady()) {
-      console.log('[DEBUG /config/test] No keys provided, booting global executor from DB');
+      console.log('>>> [BRANCH] No keys provided! Falling back to global DB executor!');
       await liveTradeOrchestrator.reinitExecutor();
       if (!executorToTest.isReady()) {
+        console.log('>>> [ERROR] Global executor failed to initialize from DB.');
         return res.status(400).json({ error: 'No Binance credentials configured to test' });
       }
+    } else {
+      console.log('>>> [BRANCH] No keys provided, global executor already ready, proceeding with global executor.');
     }
 
+    console.log('>>> [FETCHING BALANCE] Calling executorToTest.getBalance()...');
     const balance = await executorToTest.getBalance();
+    console.log('>>> [BALANCE RESULT]', balance);
     if (balance.error) {
       return res.status(400).json({ error: `Connection test failed: ${balance.error}` });
     }
