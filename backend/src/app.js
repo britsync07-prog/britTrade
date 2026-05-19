@@ -115,16 +115,32 @@ app.post('/live-trading/config', authMiddleware, async (req, res, next) => {
 
 app.post('/live-trading/config/test', authMiddleware, async (req, res, next) => {
   try {
-    const cfg = await liveTradeDb.getUserBinanceConfig(req.userId);
-    if (!cfg) return res.status(400).json({ error: 'No Binance credentials saved' });
-    const apiKey = decrypt(cfg.api_key_enc);
-    const apiSecret = decrypt(cfg.api_sec_enc);
-    if (!apiKey || !apiSecret) return res.status(400).json({ error: 'Could not decrypt saved credentials' });
+    const { api_key, api_secret, apiKey, apiSecret, testnet } = req.body;
+    
+    const finalKey = api_key || apiKey;
+    const finalSecret = api_secret || apiSecret;
+    const isTestnet = testnet === true || testnet === 'true' || testnet === 1;
+
+    let testKey = finalKey;
+    let testSec = finalSecret;
+    let testIsTestnet = isTestnet;
+
+    // Fallback to database if no keys are provided
+    if (!testKey || !testSec) {
+      const cfg = await liveTradeDb.getUserBinanceConfig(req.userId);
+      if (!cfg) return res.status(400).json({ error: 'No Binance credentials provided or saved' });
+      testKey = decrypt(cfg.api_key_enc);
+      testSec = decrypt(cfg.api_sec_enc);
+      testIsTestnet = cfg.testnet === 1;
+      if (!testKey || !testSec) return res.status(400).json({ error: 'Could not decrypt saved credentials' });
+    }
+
     const userExecutor = new BinanceExecutor();
-    await userExecutor.init(apiKey, apiSecret, cfg.testnet === 1);
+    await userExecutor.init(testKey, testSec, testIsTestnet);
     const balance = await userExecutor.getBalance();
+    
     if (balance.error) return res.status(400).json({ error: `Connection test failed: ${balance.error}` });
-    res.json({ success: true, testnet: cfg.testnet === 1, balance });
+    res.json({ success: true, testnet: testIsTestnet, balance });
   } catch (e) { next(e); }
 });
 

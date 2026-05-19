@@ -247,7 +247,7 @@ export default function LiveTradingPanel({ apiBase = '/admin/live-trading', show
                       className="flex-1 py-3 bg-cyan-500 hover:bg-cyan-400 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-50">
                       {saving ? 'Saving…' : 'Save Keys'}
                     </button>
-                    <button type="button" onClick={handleTest} disabled={testing || !status.configured}
+                    <button type="button" onClick={handleTest} disabled={testing || (!status.configured && (!apiKey || !apiSecret))}
                       className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-slate-300 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-50">
                       {testing ? 'Testing…' : 'Test Connection'}
                     </button>
