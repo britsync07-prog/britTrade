@@ -1,7 +1,14 @@
 import time
 import hmac
 import hashlib
+import socket
+import urllib3.util.connection as connection
 import requests
+
+def allowed_gai_family():
+    return socket.AF_INET
+
+connection.allowed_gai_family = allowed_gai_family
 
 API_KEY = 'OtQlPsGh9oYw8LfIfJ2cwUHnzo96PCT6frFS0bgDRkh4nSN4IfWw72mpykiES1Vn'
 SECRET_KEY = 'WjtLdeE5gjw6Ficge3D8cPTkWWYd5lpEjcU3aal3Hy0ZX7d4QxJkV03qEe0iLaYy'

@@ -8,6 +8,13 @@
 
 const crypto = require('crypto');
 const axios = require('axios');
+const http = require('http');
+const https = require('https');
+
+// Force Axios to use IPv4 for all requests and enable keepAlive
+axios.defaults.httpAgent = new http.Agent({ family: 4, keepAlive: true });
+axios.defaults.httpsAgent = new https.Agent({ family: 4, keepAlive: true });
+
 const { normalizeSymbol } = require('./symbolUtils');
 
 const FUTURES_STRATEGIES = new Set([1, 2, 3]);

@@ -1,4 +1,11 @@
 const axios = require('axios');
+const http = require('http');
+const https = require('https');
+
+// Force Axios to use IPv4 for all requests and enable keepAlive
+axios.defaults.httpAgent = new http.Agent({ family: 4, keepAlive: true });
+axios.defaults.httpsAgent = new https.Agent({ family: 4, keepAlive: true });
+
 const RSI = require('technicalindicators').RSI;
 
 async function checkSignals() {
@@ -18,7 +25,7 @@ async function checkSignals() {
       
       console.log(`${s.padEnd(10)}: Price: ${closes[closes.length-1].toFixed(4)} | RSI: ${currentRsi.toFixed(2)} | State: ${signal}`);
     } catch (e) {
-      console.error(`Error checking ${s}`);
+      console.error(`Error checking ${s}: ${e.message}`);
     }
   }
 }
