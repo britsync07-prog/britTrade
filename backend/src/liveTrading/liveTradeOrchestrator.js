@@ -159,146 +159,186 @@ class LiveTradeOrchestrator {
   async handleSignal(signal) {
     if (!this._ready) return;
 
-    const { strategyId, symbol, side, price, signalId, isEntry } = signal;
+    const { strategyId, signalId } = signal;
     try {
+      // 1. Get global admin config
+      const globalConfig = await liveTradeDb.getBinanceConfig();
+      const adminEnabled = globalConfig && globalConfig.enabled === 1;
+
+      // 2. Get user subscribers
       const subscribers = await db.query(
         'SELECT userId FROM subscriptions WHERE strategyId = ? AND useSignal = 1',
         [strategyId]
       );
-      if (!subscribers.length) return;
 
-      const enabledUserCfgs = await liveTradeDb.getEnabledUserBinanceConfigs();
-      const enabledByUser = new Map(enabledUserCfgs.map(c => [Number(c.user_id), c]));
+      if (!adminEnabled && !subscribers.length) return;
 
-      for (const sub of subscribers) {
-        const userId = Number(sub.userId);
-        const userCfg = enabledByUser.get(userId);
-        if (!userCfg) continue;
-
-        const log = (level, msg) => {
-          console.log(`[LiveTrading][U${userId}][${level.toUpperCase()}] ${msg}`);
-          liveTradeDb.addLog(level, msg, { user_id: userId, strategy_id: strategyId, signal_id: signalId }).catch(() => {});
-        };
-
-        const apiKey = decrypt(userCfg.api_key_enc);
-        const apiSecret = decrypt(userCfg.api_sec_enc);
-        if (!apiKey || !apiSecret) {
-          log('warn', 'Could not decrypt user Binance credentials');
-          continue;
+      // 3. Process Admin if enabled
+      if (adminEnabled) {
+        const adminStratConfig = await liveTradeDb.getStrategyConfig(strategyId);
+        if (adminStratConfig && adminStratConfig.enabled) {
+          await this._processSignalForAccount(binanceExecutor, null, strategyId, signal, adminStratConfig, globalConfig.testnet === 1);
         }
+      }
 
-        const userExecutor = new BinanceExecutor();
-        await userExecutor.init(apiKey, apiSecret, userCfg.testnet === 1);
-        const stratConfig = await liveTradeDb.getUserStrategyConfig(userId, strategyId);
-        if (!stratConfig || !stratConfig.enabled) continue;
+      // 4. Process User subscribers
+      if (subscribers.length) {
+        const enabledUserCfgs = await liveTradeDb.getEnabledUserBinanceConfigs();
+        const enabledByUser = new Map(enabledUserCfgs.map(c => [Number(c.user_id), c]));
 
-        const openOrders = await liveTradeDb.getOpenOrdersByUser(strategyId, userId);
-        const totalMarginUsed = openOrders.reduce((sum, o) => sum + (o.amount_usdt || 0), 0);
-        if (isEntry) {
-          if (openOrders.length >= (stratConfig.max_open_orders || 5)) continue;
-          if ((totalMarginUsed + stratConfig.trade_amount_usdt) > (stratConfig.allocated_capital || 100)) continue;
+        for (const sub of subscribers) {
+          const userId = Number(sub.userId);
+          const userCfg = enabledByUser.get(userId);
+          if (!userCfg) continue;
+
+          const apiKey = decrypt(userCfg.api_key_enc);
+          const apiSecret = decrypt(userCfg.api_sec_enc);
+          if (!apiKey || !apiSecret) continue;
+
+          const userExecutor = new BinanceExecutor();
+          await userExecutor.init(apiKey, apiSecret, userCfg.testnet === 1);
+          const userStratConfig = await liveTradeDb.getUserStrategyConfig(userId, strategyId);
+          
+          await this._processSignalForAccount(userExecutor, userId, strategyId, signal, userStratConfig, userCfg.testnet === 1);
         }
-
-        let isEntryOrder = signal.isEntry;
-        let orderSide = null;
-        let orderToClose = null;
-        let fixedQty = null;
-        let finalAmount = stratConfig.trade_amount_usdt;
-        let hasPosition = false;
-        let positionAmt = 0;
-        let positionSide = null;
-
-        try {
-          const positionsRes = await userExecutor.getPositions();
-          if (Array.isArray(positionsRes)) {
-            const bSymbol = normalizeSymbol(symbol, true);
-            const pos = positionsRes.find(p => normalizeSymbol(p.symbol, true) === bSymbol);
-            if (pos && Math.abs(parseFloat(pos.positionAmt)) > 0) {
-              hasPosition = true;
-              positionAmt = parseFloat(pos.positionAmt);
-              positionSide = positionAmt > 0 ? 'buy' : 'sell';
-            }
-          }
-        } catch (_) {}
-
-        const openForSymbol = openOrders.find(o => normalizeSymbol(o.symbol, true) === normalizeSymbol(symbol, true));
-        if (hasPosition) {
-          if (!isEntryOrder) {
-            // Closing a position
-            orderSide = positionSide === 'buy' ? 'sell' : 'buy';
-            fixedQty = Math.abs(positionAmt);
-            if (openForSymbol) {
-              orderToClose = openForSymbol;
-              finalAmount = openForSymbol.amount_usdt || finalAmount;
-            }
-          } else {
-            // Already have a position, skip entry
-            continue;
-          }
-        } else if (!isEntryOrder) {
-          // Exit signal but no position found
-          if (openForSymbol) await liveTradeDb.updateOrder(openForSymbol.id, { status: 'CLOSED' });
-          continue;
-        } else {
-          // Entry signal, no position
-          const s = (side || '').toLowerCase();
-          if (s === 'buy' || s === 'long') orderSide = 'buy';
-          else if (s === 'sell' || s === 'short') orderSide = 'sell';
-          else continue;
-        }
-
-        if (isEntryOrder && finalAmount < 20 && userCfg.testnet) finalAmount = 20;
-        
-        // 6. Get Price for Limit Orders
-        const targetPrice = signal.price || signal.entry || signal.entry_price || null;
-
-        log('info', `Signal → ${symbol} ${side.toUpperCase()} | strategy=${strategyId} | entry=${isEntryOrder} | margin=$${finalAmount} | price=${targetPrice || 'market'} | qty=${fixedQty || 'auto'}`);
-
-        // 7. Place order
-        const order = await userExecutor.placeOrder(
-          symbol,
-          orderSide,
-          finalAmount,
-          stratConfig.order_type || 'market',
-          targetPrice,
-          strategyId,
-          stratConfig.leverage || 1,
-          fixedQty
-        );
-
-        if (order.error) {
-          log('error', `Order failed: ${order.error}`);
-          await liveTradeDb.insertOrder({
-            user_id: userId, strategy_id: strategyId, signal_id: signalId, symbol, side: orderSide,
-            order_type: stratConfig.order_type || 'market', amount_usdt: finalAmount,
-            testnet: userCfg.testnet, status: 'error', error_msg: order.error
-          });
-          continue;
-        }
-
-        const orderId = await liveTradeDb.insertOrder({
-          user_id: userId,
-          strategy_id: strategyId,
-          signal_id: signalId,
-          binance_id: order.id,
-          client_oid: order.clientOrderId || null,
-          symbol,
-          side: orderSide,
-          order_type: order.type || 'market',
-          amount_usdt: finalAmount,
-          amount: order.amount,
-          price: parseFloat(order.price) || 0,
-          avg_fill_price: parseFloat(order.average || order.price) || 0,
-          testnet: userCfg.testnet,
-          status: isEntryOrder ? (order.status || 'OPEN') : 'CLOSED',
-        });
-
-        if (orderToClose) await liveTradeDb.updateOrder(orderToClose.id, { status: 'CLOSED' });
-        log('info', `Order saved | DB id=${orderId} | Binance id=${order.id}`);
       }
     } catch (err) {
       console.error('[LiveTradeOrchestrator] handleSignal error:', err.message);
       liveTradeDb.addLog('error', `Unexpected error in handleSignal: ${err.message}`, { strategy_id: strategyId, signal_id: signalId }).catch(() => {});
+    }
+  }
+
+  /**
+   * Helper to process a signal for a specific account (Admin or User).
+   */
+  async _processSignalForAccount(executor, userId, strategyId, signal, stratConfig, testnet) {
+    if (!stratConfig || !stratConfig.enabled) return;
+
+    const { symbol, side, signalId, isEntry } = signal;
+    const label = userId ? `U${userId}` : 'ADMIN';
+
+    const log = (level, msg) => {
+      console.log(`[LiveTrading][${label}][${level.toUpperCase()}] ${msg}`);
+      liveTradeDb.addLog(level, msg, { user_id: userId, strategy_id: strategyId, signal_id: signalId }).catch(() => {});
+    };
+
+    try {
+      // 1. Check open orders count and margin
+      const openOrders = userId
+        ? await liveTradeDb.getOpenOrdersByUser(strategyId, userId)
+        : await liveTradeDb.all(
+            "SELECT * FROM live_orders WHERE strategy_id=? AND user_id IS NULL AND UPPER(status) IN ('OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED') ORDER BY created_at DESC",
+            [strategyId]
+          );
+
+      const totalMarginUsed = openOrders.reduce((sum, o) => sum + (o.amount_usdt || 0), 0);
+      if (isEntry) {
+        if (openOrders.length >= (stratConfig.max_open_orders || 5)) return;
+        if ((totalMarginUsed + stratConfig.trade_amount_usdt) > (stratConfig.allocated_capital || 100)) return;
+      }
+
+      // 2. Resolve side/amount/qty
+      let isEntryOrder = isEntry;
+      let orderSide = null;
+      let orderToClose = null;
+      let fixedQty = null;
+      let finalAmount = stratConfig.trade_amount_usdt;
+      let hasPosition = false;
+      let positionAmt = 0;
+      let positionSide = null;
+
+      try {
+        const positionsRes = await executor.getPositions();
+        if (Array.isArray(positionsRes)) {
+          const bSymbol = normalizeSymbol(symbol, true);
+          const pos = positionsRes.find(p => normalizeSymbol(p.symbol, true) === bSymbol);
+          if (pos && Math.abs(parseFloat(pos.positionAmt)) > 0) {
+            hasPosition = true;
+            positionAmt = parseFloat(pos.positionAmt);
+            positionSide = positionAmt > 0 ? 'buy' : 'sell';
+          }
+        }
+      } catch (e) {
+        // Position check failed, log but maybe continue if it's an entry?
+      }
+
+      const openForSymbol = openOrders.find(o => normalizeSymbol(o.symbol, true) === normalizeSymbol(symbol, true));
+      
+      if (hasPosition) {
+        if (!isEntryOrder) {
+          // Closing a position
+          orderSide = positionSide === 'buy' ? 'sell' : 'buy';
+          fixedQty = Math.abs(positionAmt);
+          if (openForSymbol) {
+            orderToClose = openForSymbol;
+            finalAmount = openForSymbol.amount_usdt || finalAmount;
+          }
+        } else {
+          // Already have a position, skip entry
+          return;
+        }
+      } else if (!isEntryOrder) {
+        // Exit signal but no position found
+        if (openForSymbol) await liveTradeDb.updateOrder(openForSymbol.id, { status: 'CLOSED' });
+        return;
+      } else {
+        // Entry signal, no position
+        const s = (side || '').toLowerCase();
+        if (s === 'buy' || s === 'long') orderSide = 'buy';
+        else if (s === 'sell' || s === 'short') orderSide = 'sell';
+        else return;
+      }
+
+      if (isEntryOrder && finalAmount < 20 && testnet) finalAmount = 20;
+      
+      const targetPrice = signal.price || signal.entry || signal.entry_price || null;
+
+      log('info', `Signal → ${symbol} ${side.toUpperCase()} | strategy=${strategyId} | entry=${isEntryOrder} | margin=$${finalAmount} | price=${targetPrice || 'market'} | qty=${fixedQty || 'auto'}`);
+
+      // 3. Place order
+      const order = await executor.placeOrder(
+        symbol,
+        orderSide,
+        finalAmount,
+        stratConfig.order_type || 'market',
+        targetPrice,
+        strategyId,
+        stratConfig.leverage || 1,
+        fixedQty
+      );
+
+      if (order.error) {
+        log('error', `Order failed: ${order.error}`);
+        await liveTradeDb.insertOrder({
+          user_id: userId, strategy_id: strategyId, signal_id: signalId, symbol, side: orderSide,
+          order_type: stratConfig.order_type || 'market', amount_usdt: finalAmount,
+          testnet: testnet ? 1 : 0, status: 'error', error_msg: order.error
+        });
+        return;
+      }
+
+      const orderId = await liveTradeDb.insertOrder({
+        user_id: userId,
+        strategy_id: strategyId,
+        signal_id: signalId,
+        binance_id: order.id,
+        client_oid: order.clientOrderId || null,
+        symbol,
+        side: orderSide,
+        order_type: order.type || 'market',
+        amount_usdt: finalAmount,
+        amount: order.amount,
+        price: parseFloat(order.price) || 0,
+        avg_fill_price: parseFloat(order.average || order.price) || 0,
+        testnet: testnet ? 1 : 0,
+        status: isEntryOrder ? (order.status || 'OPEN') : (order.status || 'CLOSED'),
+      });
+
+      if (orderToClose) await liveTradeDb.updateOrder(orderToClose.id, { status: 'CLOSED' });
+      log('info', `Order saved | DB id=${orderId} | Binance id=${order.id}`);
+
+    } catch (err) {
+      log('error', `Error processing account: ${err.message}`);
     }
   }
 
