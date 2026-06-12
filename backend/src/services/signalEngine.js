@@ -155,7 +155,7 @@ class SignalEngine {
           }
         }
       } catch (e) { console.error('[Signal Tracker Error]', e.message); }
-    }, 30000);
+    }, 1000);
   }
 
   async runStrategy(strategyId, configs, strategy) {
@@ -166,7 +166,8 @@ class SignalEngine {
     console.log(`[Engine] >>> BOOTING CONTINUOUS SCAN: ${strategy.name}`);
 
     const scanFunction = async () => {
-      for (const symbol of config.symbols) {
+      // Process all symbols in parallel for maximum speed
+      await Promise.all(config.symbols.map(async (symbol) => {
         try {
           let signalSide = null, currentPrice = 0, initialTp = 0, initialSl = 0;
           const data = await this.fetchOHLC(symbol, config.timeframe);
@@ -190,9 +191,7 @@ class SignalEngine {
                 signalSide = 'buy'; initialTp = currentPrice * 1.01; initialSl = currentPrice * 0.85; 
               } else if (currentPrice > bb[bb.length - 1].middle) signalSide = 'sell';
             }
-          }
-
- else if (strategy.name === 'UltimateFuturesScalper') {
+          } else if (strategy.name === 'UltimateFuturesScalper') {
             const rsi = RSI.calculate({ period: 14, values: data.closes });
             if (rsi.length > 0) {
               const activeSignal = await db.get("SELECT side FROM signals WHERE strategyId = ? AND symbol = ? AND status = 'active' LIMIT 1", [id, symbol]);
@@ -236,8 +235,25 @@ class SignalEngine {
                  pnl = pnl - (leverage * 0.1); // Deduct 0.1% exchange fee
                  const liquidationThreshold = leverage > 1 ? -85 : -100;
                  if (pnl <= liquidationThreshold) { pnl = liquidationThreshold; finalStatus = 'sl_hit'; }
-                 await db.run("UPDATE signals SET status = 'closed', pnl = ? WHERE id = ?", [pnl, activeSignal.id]);
+                 
+                 // Update the existing signal to closed/completed
+                 await db.run("UPDATE signals SET status = ?, pnl = ? WHERE id = ?", [finalStatus === 'active' ? 'closed' : finalStatus, pnl, activeSignal.id]);
                  await paperTradeService.closePaperTrade(activeSignal.id, currentPrice);
+                 
+                 // Broadcast the close event
+                 await getTelegramService().broadcastClose(id, symbol, signalSide, currentPrice, pnl, finalStatus);
+                 
+                 // Fire live trade hook for exit signal using the original signalId
+                 this._fireSignalListeners({ 
+                   strategyId: id, 
+                   symbol, 
+                   side: signalSide, 
+                   price: currentPrice, 
+                   signalId: activeSignal.id, 
+                   isEntry: false 
+                 });
+                 
+                 return; // Stop here, do not insert a new signal for the exit
                }
 
                const result = await db.run("INSERT INTO signals (strategyId, symbol, side, price, tp, sl, status, pnl, highestPrice, entryCount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", [id, symbol, signalSide, currentPrice, initialTp, initialSl, finalStatus, pnl, currentPrice, 1]);
@@ -249,15 +265,11 @@ class SignalEngine {
                   await getTelegramService().broadcastSignal({ strategyId: id, strategyName: strategy.name, symbol, side: signalSide, price: currentPrice, tp: initialTp, sl: initialSl, stakeAmount: 10 });
                   // Fire live trade hook (non-blocking)
                   this._fireSignalListeners({ strategyId: id, symbol, side: signalSide, price: currentPrice, tp: initialTp, sl: initialSl, signalId: result.lastID, isEntry: true });
-               } else {
-                  await getTelegramService().broadcastClose(id, symbol, signalSide, currentPrice, pnl, finalStatus);
-                  // Fire live trade hook for exit signal (non-blocking)
-                  this._fireSignalListeners({ strategyId: id, symbol, side: signalSide, price: currentPrice, signalId: result.lastID, isEntry: false });
                }
             }
           } else delete this.lastSignals[`${id}_${symbol}`];
         } catch (e) {}
-      }
+      }));
     };
     scanFunction();
     const interval = setInterval(scanFunction, 7000);

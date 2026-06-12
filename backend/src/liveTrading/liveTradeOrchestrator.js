@@ -296,11 +296,14 @@ class LiveTradeOrchestrator {
       log('info', `Signal → ${symbol} ${side.toUpperCase()} | strategy=${strategyId} | entry=${isEntryOrder} | margin=$${finalAmount} | price=${targetPrice || 'market'} | qty=${fixedQty || 'auto'}`);
 
       // 3. Place order
+      // Force LIMIT for entries and MARKET for exits as requested for speed and precision
+      const orderTypeToUse = isEntryOrder ? 'limit' : 'market';
+      
       const order = await executor.placeOrder(
         symbol,
         orderSide,
         finalAmount,
-        stratConfig.order_type || 'market',
+        orderTypeToUse,
         targetPrice,
         strategyId,
         stratConfig.leverage || 1,

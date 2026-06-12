@@ -388,7 +388,7 @@ app.get('/public/status', (req, res) => {
 app.get('/public/signals/broadcast', async (req, res, next) => {
   try {
     const signals = await db.query(
-      "SELECT s.symbol, s.side, s.pnl, s.status, s.timestamp, st.name as strategyName FROM signals s JOIN strategies st ON s.strategyId = st.id WHERE s.status != 'active' AND s.pnl IS NOT NULL ORDER BY s.timestamp DESC LIMIT 15"
+      "SELECT s.symbol, s.side, s.pnl, s.status, s.timestamp, st.name as strategyName FROM signals s JOIN strategies st ON s.strategyId = st.id WHERE s.status != 'active' AND s.pnl IS NOT NULL AND LOWER(s.side) IN ('buy', 'long', 'short') ORDER BY s.timestamp DESC LIMIT 15"
     );
     res.json(signals);
   } catch (e) { next(e); }
@@ -488,6 +488,7 @@ app.get('/portfolio/history', authMiddleware, async (req, res, next) => {
        JOIN strategy_daily_budgets sdb ON sdb.strategyId = sig.strategyId
        WHERE sub.userId = ?
          AND sig.timestamp >= sdb.lastReset
+         AND LOWER(sig.side) IN ('buy', 'long', 'short')
          AND (p.planId = CASE sig.strategyId
               WHEN 1 THEN 'low_risk'
               WHEN 2 THEN 'medium_risk'

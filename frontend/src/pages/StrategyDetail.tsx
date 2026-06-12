@@ -105,14 +105,10 @@ export default function StrategyDetail() {
   
   // Filter for real closed signals. 
   // 1. Must be in a closed status.
-  // 2. Either be a primary entry side (BUY/LONG/SHORT)
-  // 3. OR be an exit side (SELL/COVER) but with an actual PnL result (not just a noise broadcast)
+  // 2. Must be a primary entry side (BUY/LONG/SHORT) to avoid showing redundant exit/noise signals.
   const closedSigs = sigs.filter((s:any) => 
     closedStatuses.includes(s.status) && 
-    (
-      ['buy', 'long', 'short'].includes(s.side.toLowerCase()) || 
-      Math.abs(s.pnl || 0) > 0.001
-    )
+    ['buy', 'long', 'short'].includes(s.side.toLowerCase())
   );
 
   // Win/Loss logic based on PnL or Status
