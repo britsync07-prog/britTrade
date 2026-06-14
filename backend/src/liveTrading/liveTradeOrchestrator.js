@@ -115,14 +115,17 @@ class LiveTradeOrchestrator {
           for (const order of orders) {
             console.log(`[OrderWatcher] ⏳ Order ${order.binance_id} expired for ${uid}. Cancelling...`);
             const cleanId = String(order.binance_id).split('.')[0];
-            const cancelRes = await executor.cancelOrder(order.symbol, cleanId);
+            const cancelRes = await executor.cancelOrder(order.symbol, cleanId, order.strategy_id);
 
-            if (cancelRes.success || cancelRes.error?.includes('Order not found')) {
+            if (cancelRes.success || cancelRes.error === 'NOT_FOUND') {
               await liveTradeDb.updateOrder(order.id, { status: 'CANCELLED' });
-              liveTradeDb.addLog('info', `Auto-cancelled stale limit order: ${order.symbol} @ ${order.price}`, { strategy_id: order.strategy_id, user_id: uid === 'admin' ? null : uid }).catch(() => {});
-              console.log(`[OrderWatcher] ✅ Order ${cleanId} marked as CANCELLED in DB.`);
+              const msg = cancelRes.success ? `Auto-cancelled stale limit order: ${order.symbol} @ ${order.price}` : `Order already closed on Binance: ${order.symbol} @ ${order.price}`;
+              liveTradeDb.addLog('info', msg, { strategy_id: order.strategy_id, user_id: uid === 'admin' ? null : uid }).catch(() => {});
+              console.log(`[OrderWatcher] ✅ Order ${cleanId} marked as CANCELLED in DB. Reason: ${cancelRes.success ? 'Exchange Success' : 'Not Found'}`);
             } else {
-              console.error(`[OrderWatcher] Failed to cancel order ${cleanId} for ${uid}:`, cancelRes.error);
+              const errMsg = `Failed to auto-cancel stale order ${order.symbol}: ${cancelRes.message || 'Unknown'}`;
+              console.error(`[OrderWatcher] ${errMsg} (Order ID: ${cleanId})`);
+              liveTradeDb.addLog('error', errMsg, { strategy_id: order.strategy_id, user_id: uid === 'admin' ? null : uid }).catch(() => {});
             }
           }
         }
@@ -437,16 +440,27 @@ class LiveTradeOrchestrator {
   async killSwitch() {
     console.log('[LiveTradeOrchestrator] 🚨 KILL SWITCH ACTIVATED');
     await liveTradeDb.setGlobalEnabled(false);
-    const cancelled = await binanceExecutor.cancelAllOpenOrders();
-    // Mark all open DB orders as cancelled
-    const allOrders = await liveTradeDb.all("SELECT * FROM live_orders WHERE UPPER(status) IN ('OPEN', 'NEW', 'PARTIALLY_FILLED') AND user_id IS NULL");
-    for (const o of allOrders) {
-      await liveTradeDb.updateOrder(o.id, { status: 'CANCELLED' });
-    }
-    liveTradeDb.addLog('warn', 'Kill-switch activated — all open orders cancelled, live trading disabled').catch(() => {});
-    return { cancelled: cancelled.length };
-  }
 
+    // 1. Cancel global admin orders on both Spot and Futures
+    const resSpot = await binanceExecutor.cancelAllOpenOrders(1);
+    const resFutures = await binanceExecutor.cancelAllOpenOrders(3);
+    const totalEx = (resSpot.count || 0) + (resFutures.count || 0);
+
+    // 2. Sync DB status for admin orders
+    const adminOrders = await liveTradeDb.all("SELECT * FROM live_orders WHERE UPPER(status) IN ('OPEN', 'NEW', 'PARTIALLY_FILLED') AND user_id IS NULL");
+    let dbCount = 0;
+    for (const o of adminOrders) {
+      // Re-verify specific order cancellation
+      const cr = await binanceExecutor.cancelOrder(o.symbol, String(o.binance_id).split('.')[0], o.strategy_id);
+      if (cr.success || cr.error === 'NOT_FOUND') {
+        await liveTradeDb.updateOrder(o.id, { status: 'CANCELLED' });
+        dbCount++;
+      }
+    }
+
+    addLog('warn', `Global kill-switch activated — cancelled ${totalEx} orders on exchange and ${dbCount} in DB`).catch(() => {});
+    return { cancelled: totalEx, dbUpdated: dbCount };
+  }
   /**
    * User Kill-switch: cancel all open orders and disable live trading for a specific user.
    */
@@ -456,24 +470,31 @@ class LiveTradeOrchestrator {
 
     const userCfg = await liveTradeDb.getUserBinanceConfig(userId);
     let cancelledCount = 0;
+    let cancelledEx = 0;
     if (userCfg) {
       const apiKey = decrypt(userCfg.api_key_enc);
       const apiSecret = decrypt(userCfg.api_sec_enc);
       if (apiKey && apiSecret) {
         const userExecutor = new BinanceExecutor();
         await userExecutor.init(apiKey, apiSecret, userCfg.testnet === 1);
-        const cancelled = await userExecutor.cancelAllOpenOrders();
-        cancelledCount = cancelled.length;
+        const resSpot = await userExecutor.cancelAllOpenOrders(1);
+        const resFutures = await userExecutor.cancelAllOpenOrders(3);
+        cancelledEx = (resSpot.count || 0) + (resFutures.count || 0);
+
+        // Mark all open DB orders for this user as cancelled, but only if they were confirmed or not found
+        const userOrders = await liveTradeDb.all("SELECT * FROM live_orders WHERE UPPER(status) IN ('OPEN', 'NEW', 'PARTIALLY_FILLED') AND user_id=?", [userId]);
+        for (const o of userOrders) {
+          const cr = await userExecutor.cancelOrder(o.symbol, String(o.binance_id).split('.')[0], o.strategy_id);
+          if (cr.success || cr.error === 'NOT_FOUND') {
+            await liveTradeDb.updateOrder(o.id, { status: 'CANCELLED' });
+            cancelledCount++;
+          }
+        }
       }
     }
 
-    // Mark all open DB orders for this user as cancelled
-    const userOrders = await liveTradeDb.all("SELECT * FROM live_orders WHERE UPPER(status) IN ('OPEN', 'NEW', 'PARTIALLY_FILLED') AND user_id=?", [userId]);
-    for (const o of userOrders) {
-      await liveTradeDb.updateOrder(o.id, { status: 'CANCELLED' });
-    }
-    liveTradeDb.addLog('warn', `User kill-switch activated — disabled live trading and cancelled ${cancelledCount} orders`, { user_id: userId }).catch(() => {});
-    return { cancelled: cancelledCount };
+    liveTradeDb.addLog('warn', `User kill-switch activated — cancelled ${cancelledEx} orders on exchange and ${cancelledCount} in DB`, { user_id: userId }).catch(() => {});
+    return { cancelled: cancelledCount, exchangeCancelled: cancelledEx };
   }
 }
 

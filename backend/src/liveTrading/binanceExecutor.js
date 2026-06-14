@@ -267,14 +267,16 @@ class BinanceExecutor {
     return { error: 'Failed to fetch account info from all environments' };
   }
 
-  async getOrder(symbol, orderId) {
-    if (!this._initialized) return { error: 'Not initialized' };
-    const bSymbol = normalizeSymbol(symbol, true);
-    const envs = this._getEnvs(true);
+  async getOrder(symbol, orderId, strategyId = 1) {
+    if (!this._initialized) return { error: 'Order not found' };
+    const isFutures = FUTURES_STRATEGIES.has(Number(strategyId));
+    const bSymbol = normalizeSymbol(symbol, isFutures);
+    const envs = this._getEnvs(isFutures);
 
     for (const env of envs) {
       try {
         const timeRes = await axios.get(`${env.url}/v1/time`, { timeout: 15000 });
+        const baseUrl = isFutures ? `${env.url}/v1` : `${env.url}/v3`;
         const params = {
           symbol: bSymbol,
           orderId: orderId,
@@ -284,7 +286,7 @@ class BinanceExecutor {
         const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
         const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
 
-        const res = await axios.get(`${env.url}/v1/order?${query}&signature=${signature}`, {
+        const res = await axios.get(`${baseUrl}/order?${query}&signature=${signature}`, {
           headers: { 'X-MBX-APIKEY': this._apiKey },
           timeout: 15000
         });
@@ -294,14 +296,17 @@ class BinanceExecutor {
     return { error: 'Order not found' };
   }
 
-  async cancelOrder(symbol, orderId) {
+  async cancelOrder(symbol, orderId, strategyId = 1) {
     if (!this._initialized) return { success: false, error: 'Not initialized' };
-    const bSymbol = normalizeSymbol(symbol, true);
-    const envs = this._getEnvs(true);
+    const isFutures = FUTURES_STRATEGIES.has(Number(strategyId));
+    const bSymbol = normalizeSymbol(symbol, isFutures);
+    const envs = this._getEnvs(isFutures);
 
+    let lastError = null;
     for (const env of envs) {
       try {
         const timeRes = await axios.get(`${env.url}/v1/time`, { timeout: 15000 });
+        const baseUrl = isFutures ? `${env.url}/v1` : `${env.url}/v3`;
         const params = {
           symbol: bSymbol,
           orderId: orderId,
@@ -311,44 +316,56 @@ class BinanceExecutor {
         const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
         const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
 
-        await axios.delete(`${env.url}/v1/order?${query}&signature=${signature}`, {
+        await axios.delete(`${baseUrl}/order?${query}&signature=${signature}`, {
           headers: { 'X-MBX-APIKEY': this._apiKey },
           timeout: 15000
         });
         return { success: true };
-      } catch (e) { }
+      } catch (e) {
+        lastError = e.response?.data?.msg || e.message;
+        const code = e.response?.data?.code;
+        // Binance Error Codes:
+        // -2011: Unknown order (Spot/Futures)
+        // -2013: Order does not exist (Spot/Futures)
+        if (code === -2011 || code === -2013 || (lastError || '').toLowerCase().includes('unknown order')) {
+          return { success: false, error: 'NOT_FOUND', message: lastError };
+        }
+      }
     }
-    return { success: false, error: 'Order not found or already closed' };
+    return { success: false, error: 'FAILED', message: lastError || 'Unknown error' };
   }
 
-  async cancelAllOpenOrders() {
-    if (!this._initialized) return [];
-    
-    const envs = this._getEnvs(true);
+  async cancelAllOpenOrders(strategyId = 1) {
+    if (!this._initialized) return { success: false, error: 'Not initialized' };
+    const isFutures = FUTURES_STRATEGIES.has(Number(strategyId));
+    const envs = this._getEnvs(isFutures);
+
     for (const env of envs) {
       try {
         const timeRes = await axios.get(`${env.url}/v1/time`, { timeout: 15000 });
+        const baseUrl = isFutures ? `${env.url}/v1` : `${env.url}/v3`;
         
         // Fetch open orders
         const params = { timestamp: timeRes.data.serverTime, recvWindow: 10000 };
         const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
         const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
 
-        const res = await axios.get(`${env.url}/v1/openOrders?${query}&signature=${signature}`, {
+        const res = await axios.get(`${baseUrl}/openOrders?${query}&signature=${signature}`, {
           headers: { 'X-MBX-APIKEY': this._apiKey },
           timeout: 15000
         });
         
-        // Cancel each one manually since allOpenOrders requires symbol on Binance
+        let cancelledCount = 0;
         if (Array.isArray(res.data)) {
            for (const order of res.data) {
-              await this.cancelOrder(order.symbol, order.orderId);
+              const cres = await this.cancelOrder(order.symbol, order.orderId, strategyId);
+              if (cres.success) cancelledCount++;
            }
         }
-        return [];
+        return { success: true, count: cancelledCount };
       } catch (e) { }
     }
-    return [];
+    return { success: false, error: 'Connection failed' };
   }
 
   destroy() { this._initialized = false; }
