@@ -81,11 +81,6 @@ class SignalEngine {
       try {
         const activeSignals = await db.query("SELECT * FROM signals WHERE status = 'active'");
         
-        // Heartbeat for tracker (approx every 1 min)
-        if (activeSignals.length > 0 && Math.random() < 0.1) {
-           console.log(`[Signal Tracker] Monitoring ${activeSignals.length} active positions for potential exits...`);
-        }
-
         const configSymbols = Object.values(configs).flatMap(c => c.symbols);
         const symbols = [...new Set([...configSymbols, ...activeSignals.map(s => s.symbol)])];
         
@@ -169,7 +164,6 @@ class SignalEngine {
     this.stopStrategy(id);
 
     const config = configs[strategy.name] || { symbols: ['BTC/USDT'], timeframe: '5m', stakeAmount: 10 };
-    console.log(`[Engine] >>> BOOTING CONTINUOUS SCAN: ${strategy.name}`);
 
     const scanFunction = async () => {
       // Show heartbeat for scanning (approx every 1 min)
@@ -217,7 +211,6 @@ class SignalEngine {
           }
 
           if (signalSide) {
-            console.log(`[Engine] [${strategy.name}] Identified potential ${signalSide.toUpperCase()} signal for ${symbol} @ ${currentPrice}`);
             const signalKey = `${id}_${symbol}`;
             const isEntry = ['buy', 'long', 'short'].includes(signalSide.toLowerCase());
             const activeSignal = await db.get("SELECT id, side, price FROM signals WHERE strategyId = ? AND symbol = ? AND status = 'active' LIMIT 1", [id, symbol]);
