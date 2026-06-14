@@ -113,8 +113,33 @@ class LiveTradeOrchestrator {
           }
 
           for (const order of orders) {
-            console.log(`[OrderWatcher] ⏳ Order ${order.binance_id} expired for ${uid}. Cancelling...`);
             const cleanId = String(order.binance_id).split('.')[0];
+            
+            // --- Sync Status Check ---
+            // Before cancelling, check if it was already FILLED on the exchange
+            try {
+              const exchangeOrder = await executor.getOrder(order.symbol, cleanId, order.strategy_id);
+              if (exchangeOrder && exchangeOrder.status) {
+                const exStatus = exchangeOrder.status.toUpperCase();
+                if (exStatus === 'FILLED') {
+                  await liveTradeDb.updateOrder(order.id, { 
+                    status: 'FILLED',
+                    avg_fill_price: parseFloat(exchangeOrder.avgPrice || exchangeOrder.price || 0),
+                    filled: parseFloat(exchangeOrder.executedQty || exchangeOrder.origQty || 0)
+                  });
+                  console.log(`[OrderWatcher] ✅ Order ${cleanId} was already FILLED. Updated DB status.`);
+                  continue; // Skip cancellation logic for this order
+                } else if (exStatus === 'CANCELED' || exStatus === 'EXPIRED') {
+                  await liveTradeDb.updateOrder(order.id, { status: 'CANCELLED' });
+                  console.log(`[OrderWatcher] ℹ️ Order ${cleanId} was already ${exStatus}. Synced DB.`);
+                  continue;
+                }
+              }
+            } catch (syncErr) {
+              console.warn(`[OrderWatcher] Status sync failed for ${cleanId}: ${syncErr.message}`);
+            }
+
+            console.log(`[OrderWatcher] ⏳ Order ${order.binance_id} expired for ${uid}. Cancelling...`);
             const cancelRes = await executor.cancelOrder(order.symbol, cleanId, order.strategy_id);
 
             if (cancelRes.success || cancelRes.error === 'NOT_FOUND') {
