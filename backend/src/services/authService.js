@@ -87,6 +87,17 @@ class AuthService {
     
     if (user.role === 'admin') {
       user.purchasedPlans = ['low_risk', 'medium_risk', 'high_risk', 'bundle'];
+      
+      // PERMANENT FIX: Auto-subscribe admins to all strategies so they always take trades
+      try {
+        const strategyService = require('./strategyService');
+        const strats = await db.query("SELECT id FROM strategies");
+        for (const s of strats) {
+          await strategyService.subscribe(userId, s.id, true);
+        }
+      } catch (err) {
+        console.error(`[AuthService] Admin auto-subscription failed for user ${userId}:`, err.message);
+      }
     } else {
       const now = new Date().toISOString();
       const purchases = await db.query(

@@ -159,46 +159,78 @@ class LiveTradeOrchestrator {
   async handleSignal(signal) {
     if (!this._ready) return;
 
-    const { strategyId, signalId } = signal;
+    const { strategyId, signalId, symbol, side } = signal;
     try {
       // 1. Get global admin config
       const globalConfig = await liveTradeDb.getBinanceConfig();
       const adminEnabled = globalConfig && globalConfig.enabled === 1;
 
-      // 2. Get user subscribers
+      // 2. Get user subscribers (All active Admins + explicit subscribers)
       const subscribers = await db.query(
-        'SELECT userId FROM subscriptions WHERE strategyId = ? AND useSignal = 1',
+        `SELECT id as userId, role, email FROM users 
+         WHERE (role = 'admin' AND status = 'active')
+         OR id IN (SELECT userId FROM subscriptions WHERE strategyId = ? AND useSignal = 1)`,
         [strategyId]
       );
 
-      if (!adminEnabled && !subscribers.length) return;
+      if (!adminEnabled && !subscribers.length) {
+        // Only log if there was potentially someone to trade for
+        console.log(`[LiveTradeOrchestrator] No active trading accounts for Strategy ${strategyId}. Admin global: ${adminEnabled ? 'ON' : 'OFF'}, Subscribers: ${subscribers.length}`);
+        return;
+      }
 
-      // 3. Process Admin if enabled
+      console.log(`[LiveTradeOrchestrator] Processing Signal: ${symbol} ${side.toUpperCase()} for Strategy ${strategyId}`);
+
+      // 3. Process Admin Global Account if enabled
       if (adminEnabled) {
         const adminStratConfig = await liveTradeDb.getStrategyConfig(strategyId);
         if (adminStratConfig && adminStratConfig.enabled) {
           await this._processSignalForAccount(binanceExecutor, null, strategyId, signal, adminStratConfig, globalConfig.testnet === 1);
+        } else {
+          console.log(`[LiveTradeOrchestrator] Admin global strategy ${strategyId} is disabled or missing config`);
         }
       }
 
-      // 4. Process User subscribers
+      // 4. Process User accounts (including admins with personal keys)
       if (subscribers.length) {
         const enabledUserCfgs = await liveTradeDb.getEnabledUserBinanceConfigs();
         const enabledByUser = new Map(enabledUserCfgs.map(c => [Number(c.user_id), c]));
 
         for (const sub of subscribers) {
           const userId = Number(sub.userId);
+          const userLabel = `User ${userId} (${sub.email})`;
+          
           const userCfg = enabledByUser.get(userId);
-          if (!userCfg) continue;
+          if (!userCfg) {
+            if (sub.role === 'admin') {
+              const msg = `Skipping ${userLabel}: Binance API config is disabled or not found for this user.`;
+              console.log(`[LiveTradeOrchestrator] ${msg}`);
+              liveTradeDb.addLog('warn', msg, { user_id: userId, strategy_id: strategyId, signal_id: signalId }).catch(() => {});
+            }
+            continue;
+          }
 
           const apiKey = decrypt(userCfg.api_key_enc);
           const apiSecret = decrypt(userCfg.api_sec_enc);
-          if (!apiKey || !apiSecret) continue;
+          
+          if (!apiKey || !apiSecret) {
+            const msg = `Could not decrypt Binance credentials for ${userLabel}. Check your LIVE_TRADE_ENCRYPTION_KEY.`;
+            console.warn(`[LiveTradeOrchestrator] ${msg}`);
+            liveTradeDb.addLog('error', msg, { user_id: userId, strategy_id: strategyId, signal_id: signalId }).catch(() => {});
+            continue;
+          }
 
           const userExecutor = new BinanceExecutor();
           await userExecutor.init(apiKey, apiSecret, userCfg.testnet === 1);
           const userStratConfig = await liveTradeDb.getUserStrategyConfig(userId, strategyId);
           
+          if (!userStratConfig || !userStratConfig.enabled) {
+            const msg = `Skipping ${userLabel}: Strategy ${strategyId} is not enabled in your settings.`;
+            console.log(`[LiveTradeOrchestrator] ${msg}`);
+            liveTradeDb.addLog('info', msg, { user_id: userId, strategy_id: strategyId, signal_id: signalId }).catch(() => {});
+            continue;
+          }
+
           await this._processSignalForAccount(userExecutor, userId, strategyId, signal, userStratConfig, userCfg.testnet === 1);
         }
       }
@@ -233,8 +265,14 @@ class LiveTradeOrchestrator {
 
       const totalMarginUsed = openOrders.reduce((sum, o) => sum + (o.amount_usdt || 0), 0);
       if (isEntry) {
-        if (openOrders.length >= (stratConfig.max_open_orders || 5)) return;
-        if ((totalMarginUsed + stratConfig.trade_amount_usdt) > (stratConfig.allocated_capital || 100)) return;
+        if (openOrders.length >= (stratConfig.max_open_orders || 5)) {
+          log('info', `Skipping entry: Max open orders reached (${openOrders.length}/${stratConfig.max_open_orders || 5}). Close existing trades first.`);
+          return;
+        }
+        if ((totalMarginUsed + stratConfig.trade_amount_usdt) > (stratConfig.allocated_capital || 100)) {
+          log('info', `Skipping entry: Insufficient allocated capital. Used: $${totalMarginUsed.toFixed(2)}, Needed: $${stratConfig.trade_amount_usdt}, Total Allocated: $${stratConfig.allocated_capital || 100}. Increase your allocated capital in settings.`);
+          return;
+        }
       }
 
       // 2. Resolve side/amount/qty
@@ -259,7 +297,7 @@ class LiveTradeOrchestrator {
           }
         }
       } catch (e) {
-        // Position check failed, log but maybe continue if it's an entry?
+        log('warn', `Binance position check failed: ${e.message}. Proceeding with cautious DB-only state.`);
       }
 
       const openForSymbol = openOrders.find(o => normalizeSymbol(o.symbol, true) === normalizeSymbol(symbol, true));
@@ -275,30 +313,46 @@ class LiveTradeOrchestrator {
           }
         } else {
           // Already have a position, skip entry
+          log('info', `Skipping entry for ${symbol}: An active position already exists on Binance. Use exit signal to close it first.`);
           return;
         }
       } else if (!isEntryOrder) {
         // Exit signal but no position found
-        if (openForSymbol) await liveTradeDb.updateOrder(openForSymbol.id, { status: 'CLOSED' });
+        log('info', `Skipping exit for ${symbol}: No active position found on Binance to close.`);
+        if (openForSymbol) {
+          await liveTradeDb.updateOrder(openForSymbol.id, { status: 'CLOSED' });
+          log('info', `Marked stale DB order ${openForSymbol.id} as CLOSED as no Binance position exists.`);
+        }
         return;
       } else {
         // Entry signal, no position
         const s = (side || '').toLowerCase();
         if (s === 'buy' || s === 'long') orderSide = 'buy';
         else if (s === 'sell' || s === 'short') orderSide = 'sell';
-        else return;
+        else {
+          log('warn', `Unknown signal side "${side}". Supported sides: buy, long, short, sell.`);
+          return;
+        }
       }
 
-      if (isEntryOrder && finalAmount < 20 && testnet) finalAmount = 20;
+      if (isEntryOrder && finalAmount < 20 && testnet) {
+         // Some testnets have higher minimums
+         finalAmount = 20;
+      }
       
       const targetPrice = signal.price || signal.entry || signal.entry_price || null;
 
-      log('info', `Signal → ${symbol} ${side.toUpperCase()} | strategy=${strategyId} | entry=${isEntryOrder} | margin=$${finalAmount} | price=${targetPrice || 'market'} | qty=${fixedQty || 'auto'}`);
-
       // 3. Place order
-      // Force LIMIT for entries and MARKET for exits as requested for speed and precision
+      // STRICTOR REQUIREMENT: LIMIT for entry, MARKET for exit
       const orderTypeToUse = isEntryOrder ? 'limit' : 'market';
       
+      if (isEntryOrder && !targetPrice) {
+        log('error', `Cannot place LIMIT entry for ${symbol}: Signal provided no entry price.`);
+        return;
+      }
+
+      log('info', `Placing ${orderTypeToUse.toUpperCase()} ${orderSide.toUpperCase()} order for ${symbol} | Amount: $${finalAmount} | Price: ${targetPrice || 'Market'}`);
+
       const order = await executor.placeOrder(
         symbol,
         orderSide,
