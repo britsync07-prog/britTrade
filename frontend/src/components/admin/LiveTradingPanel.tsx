@@ -288,15 +288,12 @@ export default function LiveTradingPanel({ apiBase = '/admin/live-trading', show
         </div>
         <div className="divide-y divide-white/5">
           {strategyConfigs.map(sc => (
-            <div key={sc.strategy_id} className={`p-6 flex flex-wrap items-center gap-6 transition-all ${sc.enabled ? 'bg-emerald-500/[0.02]' : ''} ${sc.strategy_id !== 1 ? 'opacity-50 grayscale' : ''}`}>
+            <div key={sc.strategy_id} className={`p-6 flex flex-wrap items-center gap-6 transition-all ${sc.enabled ? 'bg-emerald-500/[0.02]' : ''}`}>
               <div className="flex-1 min-w-[200px]">
                 <div className={`text-lg font-black tracking-tight ${STRATEGY_COLORS[sc.strategy_id] || 'text-white'} flex items-center gap-3`}>
                   {STRATEGY_NAMES[sc.strategy_id] || `Strategy ${sc.strategy_id}`}
-                  {sc.strategy_id !== 1 && (
-                    <span className="text-[9px] px-2 py-1 bg-white/10 text-white rounded-lg uppercase tracking-widest border border-white/10">Coming Soon</span>
-                  )}
                 </div>
-                {sc.strategy_id === 1 && (
+                {(
                   editingStratId === sc.strategy_id ? (
                     <div className="grid grid-cols-3 gap-3 mt-4 p-4 bg-white/5 rounded-2xl border border-white/5">
                       <div>
@@ -325,7 +322,7 @@ export default function LiveTradingPanel({ apiBase = '/admin/live-trading', show
                 )}
               </div>
               <div className="flex items-center gap-3">
-                {sc.strategy_id === 1 ? (
+                {true ? (
                   <>
                     {editingStratId === sc.strategy_id ? (
                       <div className="flex flex-col gap-2">
