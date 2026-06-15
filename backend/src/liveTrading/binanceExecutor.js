@@ -107,6 +107,13 @@ class BinanceExecutor {
     return { error: finalErrors.join(' | ') };
   }
 
+  _getPrecision(value) {
+    if (!value) return 0;
+    const s = String(value);
+    if (s.indexOf('.') === -1) return 0;
+    return s.split('.')[1].length;
+  }
+
   async placeOrder(symbol, side, amountUSDT, orderType = 'market', price = null, strategyId = 1, leverage = 1, fixedQty = null) {
     if (!this._initialized) return { error: 'Executor not initialized' };
     const isFutures = FUTURES_STRATEGIES.has(Number(strategyId));
@@ -121,7 +128,12 @@ class BinanceExecutor {
             const infoUrl = isFutures ? `${env.url}/v1` : `${env.url}/v3`;
             const infoRes = await axios.get(`${infoUrl}/exchangeInfo`, { timeout: 30000 });
             for (const s of infoRes.data.symbols) {
-              this._precisions[s.symbol] = s.quantityPrecision || s.baseAssetPrecision;
+              const qFilter = s.filters.find(f => f.filterType === 'LOT_SIZE');
+              const pFilter = s.filters.find(f => f.filterType === 'PRICE_FILTER');
+              this._precisions[s.symbol] = {
+                qty: qFilter ? this._getPrecision(qFilter.stepSize) : (s.quantityPrecision || 3),
+                price: pFilter ? this._getPrecision(pFilter.tickSize) : (s.pricePrecision || 5)
+              };
             }
           } catch (e) {
             console.warn(`[BinanceExecutor] Failed to fetch exchangeInfo: ${e.message}`);
@@ -150,12 +162,19 @@ class BinanceExecutor {
         }
         
         const currentPrice = parseFloat(tickerRes.data.price);
-        const prec = this._precisions[bSymbol] !== undefined ? this._precisions[bSymbol] : (isFutures ? 3 : 5);
+        const prec = this._precisions[bSymbol] || { qty: (isFutures ? 3 : 5), price: (isFutures ? 4 : 5) };
+        
         let qty = fixedQty;
         if (!qty && currentPrice > 0) {
           const rawQty = (amountUSDT * leverage) / currentPrice;
-          const factor = Math.pow(10, prec);
-          qty = (Math.floor(rawQty * factor) / factor).toFixed(prec);
+          const factor = Math.pow(10, prec.qty);
+          qty = (Math.floor(rawQty * factor) / factor).toFixed(prec.qty);
+        }
+
+        let finalPrice = price;
+        if (finalPrice) {
+          const pFactor = Math.pow(10, prec.price);
+          finalPrice = (Math.floor(parseFloat(finalPrice) * pFactor) / pFactor).toFixed(prec.price);
         }
 
         const params = {
@@ -166,12 +185,12 @@ class BinanceExecutor {
           timestamp: timeRes.data.serverTime,
           recvWindow: 10000
         };
-        if (orderType === 'limit' && price) { params.price = price; params.timeInForce = 'GTC'; }
+        if (orderType === 'limit' && finalPrice) { params.price = finalPrice; params.timeInForce = 'GTC'; }
         
         const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
         const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
         
-        console.log(`[BinanceExecutor] Placing ${env.name} ${isFutures?'Futures':'Spot'} Order: ${side} ${qty} ${bSymbol} (Lev: ${leverage}x)`);
+        console.log(`[BinanceExecutor] Placing ${env.name} ${isFutures?'Futures':'Spot'} Order: ${side} ${qty} ${bSymbol} @ ${finalPrice || 'Market'} (Lev: ${leverage}x)`);
         const res = await axios.post(`${baseUrl}/order?${query}&signature=${signature}`, null, { 
           headers: { 'X-MBX-APIKEY': this._apiKey, 'User-Agent': 'Mozilla/5.0' },
           timeout: 30000
