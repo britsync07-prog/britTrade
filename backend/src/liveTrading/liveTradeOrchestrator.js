@@ -275,7 +275,7 @@ class LiveTradeOrchestrator {
     if (!stratConfig || !stratConfig.enabled) return;
 
     const { symbol, side, signalId, isEntry } = signal;
-    const label = userId ? `U${userId}` : 'ADMIN';
+    const label = (userId ? `U${userId}` : 'ADMIN') + `|S${strategyId}`;
 
     const log = (level, msg) => {
       console.log(`[LiveTrading][${label}][${level.toUpperCase()}] ${msg}`);
@@ -318,7 +318,7 @@ class LiveTradeOrchestrator {
         if (Array.isArray(positionsRes)) {
           const bSymbol = normalizeSymbol(symbol, true);
           const pos = positionsRes.find(p => normalizeSymbol(p.symbol, true) === bSymbol);
-          if (pos && Math.abs(parseFloat(pos.positionAmt)) > 0) {
+          if (pos && Math.abs(parseFloat(pos.positionAmt)) > 0.000001) {
             hasPosition = true;
             positionAmt = parseFloat(pos.positionAmt);
             positionSide = positionAmt > 0 ? 'buy' : 'sell';
@@ -332,7 +332,9 @@ class LiveTradeOrchestrator {
       
       if (hasPosition) {
         if (!isEntryOrder) {
-          // Closing a position
+          // Exit signal: Close the existing position
+          // If we are LONG (positionAmt > 0), we need to SELL to close.
+          // If we are SHORT (positionAmt < 0), we need to BUY to cover.
           orderSide = positionSide === 'buy' ? 'sell' : 'buy';
           fixedQty = Math.abs(positionAmt);
           if (openForSymbol) {
@@ -340,9 +342,20 @@ class LiveTradeOrchestrator {
             finalAmount = openForSymbol.amount_usdt || finalAmount;
           }
         } else {
-          // Already have a position, skip entry
-          log('info', `Skipping entry for ${symbol}: An active position already exists on Binance. Use exit signal to close it first.`);
-          return;
+          // Entry signal but we already have a position
+          const s = (side || '').toLowerCase();
+          const targetSide = (s === 'buy' || s === 'long') ? 'buy' : 'sell';
+
+          if (targetSide === positionSide) {
+             log('info', `Skipping entry for ${symbol}: An active position already exists in the same direction.`);
+             return;
+          } else {
+             log('info', `Detected opposite signal for ${symbol}: Closing current ${positionSide} and opening ${targetSide}.`);
+             // This would normally be handled by an exit signal, but if it happens here, we close first.
+             orderSide = positionSide === 'buy' ? 'sell' : 'buy';
+             fixedQty = Math.abs(positionAmt);
+             isEntryOrder = false; // Treat this specific action as an exit
+          }
         }
       } else if (!isEntryOrder) {
         // Exit signal but no position found
@@ -395,9 +408,16 @@ class LiveTradeOrchestrator {
       if (order.error) {
         log('error', `Order failed: ${order.error}`);
         await liveTradeDb.insertOrder({
-          user_id: userId, strategy_id: strategyId, signal_id: signalId, symbol, side: orderSide,
-          order_type: stratConfig.order_type || 'market', amount_usdt: finalAmount,
-          testnet: testnet ? 1 : 0, status: 'error', error_msg: order.error
+          user_id: userId,
+          strategy_id: strategyId,
+          signal_id: signalId,
+          symbol,
+          side: orderSide,
+          order_type: orderTypeToUse,
+          amount_usdt: finalAmount,
+          testnet: testnet ? 1 : 0,
+          status: 'error',
+          error_msg: String(order.error)
         });
         return;
       }
@@ -417,6 +437,7 @@ class LiveTradeOrchestrator {
         avg_fill_price: parseFloat(order.average || order.price) || 0,
         testnet: testnet ? 1 : 0,
         status: isEntryOrder ? (order.status || 'OPEN') : (order.status || 'CLOSED'),
+        error_msg: null
       });
 
       if (orderToClose) await liveTradeDb.updateOrder(orderToClose.id, { status: 'CLOSED' });

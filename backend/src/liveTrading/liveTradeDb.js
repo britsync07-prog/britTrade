@@ -281,13 +281,14 @@ async function insertOrder(data) {
   const {
     user_id = null,
     strategy_id, signal_id, binance_id, client_oid, symbol, side,
-    order_type = 'market', amount_usdt, amount, price, avg_fill_price = null, testnet = 1, status = 'open'
+    order_type = 'market', amount_usdt, amount, price, avg_fill_price = null, testnet = 1, status = 'open',
+    error_msg = null
   } = data;
   const res = await run(
     `INSERT INTO live_orders
-      (user_id, strategy_id, signal_id, binance_id, client_oid, symbol, side, order_type, amount_usdt, amount, price, avg_fill_price, testnet, status)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    [user_id, strategy_id, signal_id, binance_id, client_oid, symbol, side, order_type, amount_usdt ?? null, amount ?? null, price, avg_fill_price, testnet ? 1 : 0, status]
+      (user_id, strategy_id, signal_id, binance_id, client_oid, symbol, side, order_type, amount_usdt, amount, price, avg_fill_price, testnet, status, error_msg)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [user_id, strategy_id, signal_id, binance_id, client_oid, symbol, side, order_type, amount_usdt ?? null, amount ?? null, price, avg_fill_price, testnet ? 1 : 0, status, error_msg]
   );
   return res.lastID;
 }
