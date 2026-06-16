@@ -1,0 +1,29 @@
+# DCA Pipeline Architecture Context
+
+## Overview
+This document explains how Dollar Cost Averaging (DCA) is handled across the BritSyncAI trading backend. Previously, DCA was a "silent" math update in the Signal Engine that caused a disconnect between theoretical paper trading and the live Binance execution. 
+
+The architecture has been updated to explicitly pipe DCA intents from the engine, through the orchestrator, and to Binance and Telegram.
+
+## The Pipeline Flow
+
+### 1. The Trigger (`backend/src/services/signalEngine.js`)
+Strategy 1 (`GridMeanReversion`) has an algorithmic rule: if an active trade drops below -5% PnL, and it hasn't averaged down 10 times yet, it will trigger a DCA event.
+*   The engine calculates a new `newAvgPrice` to track the theoretical break-even point.
+*   Crucially, it now emits a live trade signal to the orchestrator with a specific flag: `isDCA: true`.
+*   It also fires a broadcast to Telegram with this same flag.
+
+### 2. The Gatekeeper (`backend/src/liveTrading/liveTradeOrchestrator.js`)
+The Live Trade Orchestrator has a strict global lock that prevents duplicate trades. If the system already holds a LONG position on TRX/USDT, and the engine sends another "buy" signal for TRX/USDT, the orchestrator normally blocks it instantly.
+*   However, if the signal includes `signal.isDCA === true`, the orchestrator explicitly bypasses this block, allowing the limit order to be placed on Binance to buy the dip.
+*   **Safety Net:** The orchestrator still enforces the `allocated_capital` limit. If the strategy has used all its allocated capital, the DCA order will be safely skipped.
+
+### 3. The Notification (`backend/src/services/telegramService.js`)
+To prevent user confusion, Telegram messages are now split:
+*   Standard entries trigger `formatEntryMessage` (`NEW SIGNAL`).
+*   DCA entries trigger `formatDCAMessage` (`DCA ENTRY (Averaging Down)`). This ensures the user knows *why* a new buy order was placed for a coin they are already holding.
+
+## Future Modifications
+If you need to add DCA to other strategies (like Strategy 2 or 3), you must follow this exact pipeline:
+1. Add the math logic to `signalEngine.js` for that strategy.
+2. Ensure you call `this._fireSignalListeners` and `getTelegramService().broadcastSignal` with the exact parameter `isDCA: true`. If you forget this flag, the orchestrator will block your trade.

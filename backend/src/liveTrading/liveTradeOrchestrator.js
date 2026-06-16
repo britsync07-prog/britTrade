@@ -78,7 +78,7 @@ class LiveTradeOrchestrator {
         if (!this._ready) return;
 
         // 1. Get all open/new orders (both admin and users)
-        const allOrders = await liveTradeDb.all("SELECT * FROM live_orders WHERE UPPER(status) IN ('OPEN', 'NEW', 'PARTIALLY_FILLED') AND order_type='limit'");
+        const allOrders = await liveTradeDb.all("SELECT * FROM live_orders WHERE UPPER(status) IN ('OPEN', 'NEW', 'PARTIALLY_FILLED')");
         if (!allOrders.length) return;
 
         const now = Math.floor(Date.now() / 1000);
@@ -328,7 +328,11 @@ class LiveTradeOrchestrator {
         log('warn', `Binance position check failed: ${e.message}. Proceeding with cautious DB-only state.`);
       }
 
-      const openForSymbol = openOrders.find(o => normalizeSymbol(o.symbol, true) === normalizeSymbol(symbol, true));
+      let openForSymbol = openOrders.find(o => o.signal_id === signalId);
+      if (!openForSymbol) {
+        // Fallback for older orders that missed signal_id linkage due to previous bug
+        openForSymbol = openOrders.find(o => normalizeSymbol(o.symbol, true) === normalizeSymbol(symbol, true));
+      }
       
       if (hasPosition) {
         if (!isEntryOrder) {
@@ -347,8 +351,13 @@ class LiveTradeOrchestrator {
           const targetSide = (s === 'buy' || s === 'long') ? 'buy' : 'sell';
 
           if (targetSide === positionSide) {
-             log('info', `Skipping entry for ${symbol}: An active position already exists in the same direction.`);
-             return;
+             if (signal.isDCA) {
+                 log('info', `DCA Triggered for ${symbol}: Averaging down existing position.`);
+                 orderSide = targetSide; // REQUIRED FIX: Ensure the orchestrator knows whether to buy or sell
+             } else {
+                 log('info', `Skipping entry for ${symbol}: An active position already exists in the same direction and is not a DCA.`);
+                 return;
+             }
           } else {
              log('info', `Detected opposite signal for ${symbol}: Closing current ${positionSide} and opening ${targetSide}.`);
              // This would normally be handled by an exit signal, but if it happens here, we close first.

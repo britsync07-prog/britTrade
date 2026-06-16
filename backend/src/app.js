@@ -248,7 +248,8 @@ app.get('/live-trading/dashboard', authMiddleware, async (req, res, next) => {
               const sym = order.symbol.replace('/', '').replace(':', '');
               const binancePos = positions.find(p => p.symbol === sym);
               const amt = parseFloat(binancePos?.positionAmt || 0);
-              if (amt === 0 && (order.status || '').toUpperCase() !== 'NEW') {
+              // Only mark FILLED orders as CLOSED when position is 0 to avoid killing pending OPEN orders
+              if (amt === 0 && (order.status || '').toUpperCase() === 'FILLED') {
                 await liveTradeDb.updateOrder(order.id, { status: 'CLOSED' });
                 order.status = 'CLOSED';
               }

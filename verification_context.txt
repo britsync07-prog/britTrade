@@ -1,0 +1,27 @@
+# Verification Context
+
+## Codebase Changes Applied
+1. **signalEngine.js**: 
+   - Fixed `result.lastID` to `result.id` so `live_orders.signal_id` will be populated correctly instead of being null.
+   - Added a global check `SELECT id, strategyId, side, price FROM signals WHERE symbol = ? AND status = 'active' LIMIT 1`. This ensures that if a symbol is already active, no other strategy (or the same strategy) can open a new trade on it.
+2. **liveTradeOrchestrator.js**:
+   - `_processSignalForAccount` exit logic updated to first find open orders using `o.signal_id === signalId`, with a fallback to `symbol` matching for old legacy trades.
+   - `_startOrderWatcher` now selects all `OPEN`, `NEW`, `PARTIALLY_FILLED` orders (removed the `order_type='limit'` restriction) to catch any type of stuck trade and clean them up if they are older than 5 minutes.
+3. **app.js**:
+   - In `/live-trading/dashboard`, fixed the state reconciliation bug. It now only forces a DB order to `CLOSED` if `amt === 0` AND the DB order status is already `FILLED`. It will no longer prematurely kill `OPEN` limit orders.
+
+## Historical Trades to Verify
+- BNB/USDT buy CLOSED $603.0300 FuturesScalper Live 6/16/2026, 1:28:23 PM
+- DOGE/USDT sell CLOSED $0.0871 FuturesScalper Live 6/16/2026, 5:11:47 AM
+- DOGE/USDT buy CLOSED $0.0867 FuturesScalper Live 6/16/2026, 4:31:45 AM
+- ETH/USDT sell CLOSED $1796.8700 GridMeanReversion Live 6/16/2026, 12:10:13 AM
+- ETH/USDT buy CANCELLED $1796.0100 GridMeanReversion Live 6/15/2026, 10:25:39 PM
+- ADA/USDT buy CLOSED $0.1836 FuturesScalper Live 6/15/2026, 8:37:44 PM
+- AVAX/USDT buy error $ TrendFollower Live 6/15/2026, 4:00:09 PM
+- TRX/USDT buy error $ GridMeanReversion Live 6/15/2026, 2:11:30 PM
+- BCH/USDT buy CANCELLED $196.9900 GridMeanReversion Live 6/14/2026, 6:21:47 PM
+- ETC/USDT buy CANCELLED $7.0010 GridMeanReversion Live 6/14/2026, 2:34:44 PM
+- BTC/USDT buy error $ GridMeanReversion Live 6/14/2026, 2:34:38 PM
+
+## Goal
+To guarantee the new logic handles errors (like balance/API issues), cancellations (stale limits), entries, and exits without overlapping and without stranding ghost trades.

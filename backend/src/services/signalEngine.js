@@ -123,6 +123,10 @@ class SignalEngine {
             const newSl = newAvgPrice * 0.85; 
             
             await db.run("UPDATE signals SET price = ?, tp = ?, sl = ?, entryCount = ? WHERE id = ?", [newAvgPrice, newTp, newSl, newEntryCount, sig.id]);
+            
+            // Fire the actual live trade entry for this DCA action so Binance syncs
+            await getTelegramService().broadcastSignal({ strategyId: sig.strategyId, strategyName: 'GridMeanReversion', symbol: sig.symbol, side: sig.side, price: currentPrice, tp: newTp, sl: newSl, stakeAmount: 10, isDCA: true });
+            this._fireSignalListeners({ strategyId: sig.strategyId, symbol: sig.symbol, side: sig.side, price: currentPrice, tp: newTp, sl: newSl, signalId: sig.id, isEntry: true, isDCA: true });
             continue; 
           }
 
@@ -213,10 +217,15 @@ class SignalEngine {
           if (signalSide) {
             const signalKey = `${id}_${symbol}`;
             const isEntry = ['buy', 'long', 'short'].includes(signalSide.toLowerCase());
-            const activeSignal = await db.get("SELECT id, side, price FROM signals WHERE strategyId = ? AND symbol = ? AND status = 'active' LIMIT 1", [id, symbol]);
+            
+            // Global check to prevent overlapping trades across strategies
+            const globalActiveSignal = await db.get("SELECT id, strategyId, side, price FROM signals WHERE symbol = ? AND status = 'active' LIMIT 1", [symbol]);
+            const activeSignal = (globalActiveSignal && globalActiveSignal.strategyId === id) ? globalActiveSignal : null;
 
             let shouldTrigger = false;
-            if (isEntry) { if (!activeSignal) shouldTrigger = true; } 
+            if (isEntry) { 
+               if (!globalActiveSignal) shouldTrigger = true; 
+            } 
             else if (activeSignal) {
                 const activeSide = activeSignal.side.toLowerCase();
                 const leverage = 5;

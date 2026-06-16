@@ -109,8 +109,11 @@ class BinanceExecutor {
 
   _getPrecision(value) {
     if (!value) return 0;
-    const s = String(value);
-    if (s.indexOf('.') === -1) return 0;
+    const val = parseFloat(value);
+    if (isNaN(val) || val === 0) return 0;
+    const s = val.toString();
+    if (s.includes('e-')) return parseInt(s.split('e-')[1], 10);
+    if (!s.includes('.')) return 0;
     return s.split('.')[1].length;
   }
 
