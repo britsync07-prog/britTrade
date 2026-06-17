@@ -156,7 +156,18 @@ class SignalEngine {
           if (status !== 'active') {
             await db.run("UPDATE signals SET status = ?, pnl = ? WHERE id = ?", [status, pnl, sig.id]);
             await paperTradeService.closePaperTrade(sig.id, currentPrice); // Close paper trade too
-            await getTelegramService().broadcastClose(sig.strategyId, sig.symbol, sig.side === 'buy' || sig.side === 'long' ? 'sell' : 'cover', currentPrice, pnl, status);
+            const exitSide = (sig.side === 'buy' || sig.side === 'long') ? 'sell' : 'cover';
+            await getTelegramService().broadcastClose(sig.strategyId, sig.symbol, exitSide, currentPrice, pnl, status);
+
+            // FIX: Fire live trade hook for exit signal
+            this._fireSignalListeners({ 
+              strategyId: sig.strategyId, 
+              symbol: sig.symbol, 
+              side: exitSide, 
+              price: currentPrice, 
+              signalId: sig.id, 
+              isEntry: false 
+            });
           }
         }
       } catch (e) { console.error('[Signal Tracker Error]', e.message); }
