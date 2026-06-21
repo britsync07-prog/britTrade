@@ -171,7 +171,21 @@ class BinanceExecutor {
         if (!qty && currentPrice > 0) {
           const rawQty = (amountUSDT * leverage) / currentPrice;
           const factor = Math.pow(10, prec.qty);
-          qty = (Math.floor(rawQty * factor) / factor).toFixed(prec.qty);
+          const flooredQtyStr = (Math.floor(rawQty * factor) / factor).toFixed(prec.qty);
+          const flooredQty = parseFloat(flooredQtyStr);
+          
+          if (flooredQty * currentPrice < amountUSDT * leverage) {
+            const ceiledQtyStr = (Math.ceil(rawQty * factor) / factor).toFixed(prec.qty);
+            const ceiledQty = parseFloat(ceiledQtyStr);
+            // Only round up if it doesn't exceed the target notional by more than 10%
+            if (ceiledQty * currentPrice <= (amountUSDT * leverage) * 1.10) {
+              qty = ceiledQtyStr;
+            } else {
+              qty = flooredQtyStr;
+            }
+          } else {
+            qty = flooredQtyStr;
+          }
         }
 
         let finalPrice = price;
