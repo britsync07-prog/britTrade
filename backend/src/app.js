@@ -499,7 +499,7 @@ app.get('/portfolio/history', authMiddleware, async (req, res, next) => {
        JOIN purchases p ON p.userId = sub.userId
        JOIN strategy_daily_budgets sdb ON sdb.strategyId = sig.strategyId
        WHERE sub.userId = ?
-         AND sig.timestamp >= sdb.lastReset
+         AND (sig.timestamp >= sdb.lastReset OR sig.status = 'active')
          AND LOWER(sig.side) IN ('buy', 'long', 'short')
          AND (p.planId = CASE sig.strategyId
               WHEN 1 THEN 'low_risk'

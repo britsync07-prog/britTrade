@@ -59,7 +59,7 @@ class StrategyService {
 
       const allSignals = await db.query("SELECT pnl, status FROM signals WHERE strategyId = ? AND LOWER(side) IN ('buy', 'long', 'short')", [s.id]);
       const signals24h = await db.query(
-        "SELECT pnl, status, side, price, symbol FROM signals WHERE strategyId = ? AND timestamp >= ? AND LOWER(side) IN ('buy', 'long', 'short')",
+        "SELECT pnl, status, side, price, symbol FROM signals WHERE strategyId = ? AND (timestamp >= ? OR status = 'active') AND LOWER(side) IN ('buy', 'long', 'short')",
         [s.id, lastReset]
       );
 
@@ -143,7 +143,7 @@ class StrategyService {
     let signals = await db.query(`
       SELECT sig.* FROM signals sig
       JOIN strategy_daily_budgets sdb ON sdb.strategyId = sig.strategyId
-      WHERE sig.strategyId = ? AND sig.timestamp >= sdb.lastReset
+      WHERE sig.strategyId = ? AND (sig.timestamp >= sdb.lastReset OR sig.status = 'active')
         AND LOWER(sig.side) IN ('buy', 'long', 'short')
       ORDER BY sig.timestamp DESC
     `, [strategyId]);
