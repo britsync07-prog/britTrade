@@ -210,10 +210,16 @@ class LiveTradeOrchestrator {
       console.log(`[LiveTradeOrchestrator] Processing Signal: ${symbol} ${side.toUpperCase()} for Strategy ${strategyId}`);
 
       // 3. Process Admin Global Account if enabled
+      let adminApiKey = null;
       if (adminEnabled) {
         const adminStratConfig = await liveTradeDb.getStrategyConfig(strategyId);
         if (adminStratConfig && adminStratConfig.enabled) {
           await this._processSignalForAccount(binanceExecutor, null, strategyId, signal, adminStratConfig, globalConfig.testnet === 1);
+          try {
+            adminApiKey = decrypt(globalConfig.api_key_enc);
+          } catch (e) {
+            console.error('[LiveTradeOrchestrator] Failed to decrypt admin API key:', e.message);
+          }
         } else {
           console.log(`[LiveTradeOrchestrator] Admin global strategy ${strategyId} is disabled or missing config`);
         }
@@ -245,6 +251,13 @@ class LiveTradeOrchestrator {
             const msg = `Could not decrypt Binance credentials for ${userLabel}. Check your LIVE_TRADE_ENCRYPTION_KEY.`;
             console.warn(`[LiveTradeOrchestrator] ${msg}`);
             liveTradeDb.addLog('error', msg, { user_id: userId, strategy_id: strategyId, signal_id: signalId }).catch(() => {});
+            continue;
+          }
+
+          if (adminEnabled && adminApiKey && apiKey === adminApiKey) {
+            const msg = `Skipping personal trade for ${userLabel}: User API key is identical to the active Global Admin API key to prevent double trading.`;
+            console.log(`[LiveTradeOrchestrator] ${msg}`);
+            liveTradeDb.addLog('info', msg, { user_id: userId, strategy_id: strategyId, signal_id: signalId }).catch(() => {});
             continue;
           }
 
@@ -381,6 +394,24 @@ class LiveTradeOrchestrator {
         else if (s === 'sell' || s === 'short') orderSide = 'sell';
         else {
           log('warn', `Unknown signal side "${side}". Supported sides: buy, long, short, sell.`);
+          return;
+        }
+      }
+
+      // A. Check if we already processed this exact signal and side for this account (de-duplication)
+      if (signalId) {
+        const existingOrder = userId
+          ? await liveTradeDb.get(
+              "SELECT id FROM live_orders WHERE signal_id=? AND user_id=? AND side=? AND status != 'error'",
+              [signalId, userId, orderSide]
+            )
+          : await liveTradeDb.get(
+              "SELECT id FROM live_orders WHERE signal_id=? AND user_id IS NULL AND side=? AND status != 'error'",
+              [signalId, orderSide]
+            );
+
+        if (existingOrder && !signal.isDCA) {
+          log('info', `Order side ${orderSide ? orderSide.toUpperCase() : 'UNKNOWN'} for Signal ${signalId} has already been placed (Order ID: ${existingOrder.id}). Skipping duplicate execution.`);
           return;
         }
       }
