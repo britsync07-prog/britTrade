@@ -422,5 +422,6 @@ module.exports = {
   getLogs,
   getLogsByUser,
   run,
+  get,
   all
 };

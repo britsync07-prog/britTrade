@@ -211,10 +211,12 @@ class LiveTradeOrchestrator {
 
       // 3. Process Admin Global Account if enabled
       let adminApiKey = null;
+      let adminGlobalTraded = false;
       if (adminEnabled) {
         const adminStratConfig = await liveTradeDb.getStrategyConfig(strategyId);
         if (adminStratConfig && adminStratConfig.enabled) {
           await this._processSignalForAccount(binanceExecutor, null, strategyId, signal, adminStratConfig, globalConfig.testnet === 1);
+          adminGlobalTraded = true;
           try {
             adminApiKey = decrypt(globalConfig.api_key_enc);
           } catch (e) {
@@ -234,6 +236,12 @@ class LiveTradeOrchestrator {
           const userId = Number(sub.userId);
           const userLabel = `User ${userId} (${sub.email})`;
           
+          if (sub.role === 'admin' && adminGlobalTraded) {
+            const msg = `Skipping personal trade for Admin ${userLabel}: Global Admin has already traded for this signal.`;
+            console.log(`[LiveTradeOrchestrator] ${msg}`);
+            continue;
+          }
+
           const userCfg = enabledByUser.get(userId);
           if (!userCfg) {
             if (sub.role === 'admin') {
