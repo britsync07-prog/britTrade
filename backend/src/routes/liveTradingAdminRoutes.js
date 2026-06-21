@@ -348,6 +348,17 @@ router.get('/dashboard', async (req, res) => {
             if (amt === 0 && status !== 'NEW') {
               await liveTradeDb.updateOrder(order.id, { status: 'CLOSED' });
               order.status = 'CLOSED';
+            } else if (amt !== 0 && status === 'FILLED') {
+              // Fix C: Improved dashboard reconciliation
+              // If order is FILLED but position is open, ensure we don't show exit orders
+              // as active entry trades. If order side opposes the position, it's an exit.
+              const isLongPosition = amt > 0;
+              const isEntryAlignment = (isLongPosition && order.side === 'buy') || (!isLongPosition && order.side === 'sell');
+              
+              if (!isEntryAlignment) {
+                await liveTradeDb.updateOrder(order.id, { status: 'CLOSED' });
+                order.status = 'CLOSED';
+              }
             }
           }
 

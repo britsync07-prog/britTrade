@@ -113,7 +113,7 @@ class LiveTradeOrchestrator {
           }
 
           for (const order of orders) {
-            const cleanId = String(order.binance_id).split('.')[0];
+            const cleanId = order.client_oid || String(order.binance_id).split('.')[0];
             
             // --- Sync Status Check ---
             // Before cancelling, check if it was already FILLED on the exchange
@@ -411,7 +411,8 @@ class LiveTradeOrchestrator {
         targetPrice,
         strategyId,
         stratConfig.leverage || 1,
-        fixedQty
+        fixedQty,
+        !isEntryOrder // reduceOnly = true for exits
       );
 
       if (order.error) {
@@ -445,7 +446,7 @@ class LiveTradeOrchestrator {
         price: parseFloat(order.price) || 0,
         avg_fill_price: parseFloat(order.average || order.price) || 0,
         testnet: testnet ? 1 : 0,
-        status: isEntryOrder ? (order.status || 'OPEN') : (order.status || 'CLOSED'),
+        status: isEntryOrder ? (order.status || 'OPEN') : 'CLOSED',
         error_msg: null
       });
 
@@ -506,7 +507,7 @@ class LiveTradeOrchestrator {
     let dbCount = 0;
     for (const o of adminOrders) {
       // Re-verify specific order cancellation
-      const cr = await binanceExecutor.cancelOrder(o.symbol, String(o.binance_id).split('.')[0], o.strategy_id);
+      const cr = await binanceExecutor.cancelOrder(o.symbol, o.client_oid || String(o.binance_id).split('.')[0], o.strategy_id);
       if (cr.success || cr.error === 'NOT_FOUND') {
         await liveTradeDb.updateOrder(o.id, { status: 'CANCELLED' });
         dbCount++;
@@ -539,7 +540,7 @@ class LiveTradeOrchestrator {
         // Mark all open DB orders for this user as cancelled, but only if they were confirmed or not found
         const userOrders = await liveTradeDb.all("SELECT * FROM live_orders WHERE UPPER(status) IN ('OPEN', 'NEW', 'PARTIALLY_FILLED') AND user_id=?", [userId]);
         for (const o of userOrders) {
-          const cr = await userExecutor.cancelOrder(o.symbol, String(o.binance_id).split('.')[0], o.strategy_id);
+          const cr = await userExecutor.cancelOrder(o.symbol, o.client_oid || String(o.binance_id).split('.')[0], o.strategy_id);
           if (cr.success || cr.error === 'NOT_FOUND') {
             await liveTradeDb.updateOrder(o.id, { status: 'CANCELLED' });
             cancelledCount++;

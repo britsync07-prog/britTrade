@@ -22,7 +22,7 @@ interface DashboardData {
     id: number; strategy_id: number; symbol: string; side: string; amount: number;
     price: number; avg_fill_price: number | null; status: string; testnet: number;
     created_at: string; livePnlUSDT: number | null; livePnlPct: number | null; currentPrice?: number;
-    error_msg?: string;
+    error_msg?: string; real_pnl?: number | null; commission?: number | null;
   }>;
   summary: { openCount: number; closedCount: number; totalOrders: number; totalLivePnlUSDT: number };
 }
@@ -435,7 +435,7 @@ export default function LiveTradingPanel({ apiBase = '/admin/live-trading', show
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-white/[0.02]">
-                  {['Symbol', 'Side', 'Status', 'Entry Price', 'Strategy', 'Testnet', 'Time'].map(h => (
+                  {['Symbol', 'Side', 'Status', 'Entry Price', 'Real PnL', 'Fees', 'Strategy', 'Testnet', 'Time'].map(h => (
                     <th key={h} className="px-5 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">{h}</th>
                   ))}
                 </tr>
@@ -453,6 +453,12 @@ export default function LiveTradingPanel({ apiBase = '/admin/live-trading', show
                       <StatusBadge status={o.status} />
                     </td>
                     <td className="px-5 py-4 text-sm text-slate-400 font-mono">${(o.avg_fill_price || o.price)?.toFixed(4)}</td>
+                    <td className={`px-5 py-4 text-sm font-black font-mono ${o.real_pnl !== undefined && o.real_pnl !== null ? (o.real_pnl >= 0 ? 'text-emerald-400' : 'text-red-400') : 'text-slate-500'}`}>
+                      {o.real_pnl !== undefined && o.real_pnl !== null ? `${o.real_pnl >= 0 ? '+' : ''}$${o.real_pnl.toFixed(4)}` : '—'}
+                    </td>
+                    <td className="px-5 py-4 text-xs text-slate-500 font-mono">
+                      {o.commission !== undefined && o.commission !== null ? `$${o.commission.toFixed(4)}` : '—'}
+                    </td>
                     <td className={`px-5 py-4 text-xs font-bold ${STRATEGY_COLORS[o.strategy_id] || 'text-slate-400'}`}>
                       {STRATEGY_NAMES[o.strategy_id] || `#${o.strategy_id}`}
                     </td>

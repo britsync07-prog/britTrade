@@ -252,6 +252,17 @@ app.get('/live-trading/dashboard', authMiddleware, async (req, res, next) => {
               if (amt === 0 && (order.status || '').toUpperCase() === 'FILLED') {
                 await liveTradeDb.updateOrder(order.id, { status: 'CLOSED' });
                 order.status = 'CLOSED';
+              } else if (amt !== 0 && (order.status || '').toUpperCase() === 'FILLED') {
+                // Fix C: Improved dashboard reconciliation
+                // If order is FILLED but position is open, ensure we don't show exit orders
+                // as active entry trades. If order side opposes the position, it's an exit.
+                const isLongPosition = amt > 0;
+                const isEntryAlignment = (isLongPosition && order.side === 'buy') || (!isLongPosition && order.side === 'sell');
+                
+                if (!isEntryAlignment) {
+                  await liveTradeDb.updateOrder(order.id, { status: 'CLOSED' });
+                  order.status = 'CLOSED';
+                }
               }
             }
             totalLivePnlUSDT = parseFloat(accountInfo.totalUnrealizedProfit || 0);
@@ -554,7 +565,15 @@ async function start() {
 
     // Initialize live trading orchestrator (admin-only Binance trading)
     await liveTradeOrchestrator.initialize();
-    
+
+    // Start the Bullet-Proof Parity Enforcer
+    const parityEnforcer = require('./services/parityEnforcer');
+    parityEnforcer.start(60000).catch(err => console.error('Failed to start ParityEnforcer:', err));
+
+    // Start the Realized PnL Sync Service
+    const pnlSyncService = require('./services/pnlSyncService');
+    pnlSyncService.start(300000).catch(err => console.error('Failed to start PnlSyncService:', err));
+
     console.log(`Starting server on port ${PORT}...`);
     const server = app.listen(PORT, () => {
       console.log(`\n🚀 AI Trading SaaS Backend Running`);

@@ -151,9 +151,9 @@ class PaperTradeService {
       "UPDATE strategy_daily_budgets SET currentBalance = 100.0, lastReset = CURRENT_TIMESTAMP WHERE strategyId = ?",
       [strategyId]
     );
-    // Also cleanup any orphaned open trades for this strategy
+    // Cleanup truly orphaned open trades (where the underlying signal is no longer active)
     await db.run(
-      "UPDATE paper_trades SET status = 'closed', pnlUsd = 0, closedAt = CURRENT_TIMESTAMP WHERE strategyId = ? AND status = 'open'",
+      "UPDATE paper_trades SET status = 'closed', pnlUsd = 0, closedAt = CURRENT_TIMESTAMP WHERE strategyId = ? AND status = 'open' AND signalId NOT IN (SELECT id FROM signals WHERE status = 'active')",
       [strategyId]
     );
     return true;

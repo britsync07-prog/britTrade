@@ -117,7 +117,7 @@ class BinanceExecutor {
     return s.split('.')[1].length;
   }
 
-  async placeOrder(symbol, side, amountUSDT, orderType = 'market', price = null, strategyId = 1, leverage = 1, fixedQty = null) {
+  async placeOrder(symbol, side, amountUSDT, orderType = 'market', price = null, strategyId = 1, leverage = 1, fixedQty = null, reduceOnly = false) {
     if (!this._initialized) return { error: 'Executor not initialized' };
     const isFutures = FUTURES_STRATEGIES.has(Number(strategyId));
     const bSymbol = normalizeSymbol(symbol, isFutures);
@@ -189,6 +189,7 @@ class BinanceExecutor {
           recvWindow: 10000
         };
         if (orderType === 'limit' && finalPrice) { params.price = finalPrice; params.timeInForce = 'GTC'; }
+        if (isFutures && reduceOnly) { params.reduceOnly = 'true'; }
         
         const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
         const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
@@ -301,10 +302,14 @@ class BinanceExecutor {
         const baseUrl = isFutures ? `${env.url}/v1` : `${env.url}/v3`;
         const params = {
           symbol: bSymbol,
-          orderId: orderId,
           timestamp: timeRes.data.serverTime,
           recvWindow: 10000
         };
+        if (typeof orderId === 'string' && /[a-zA-Z]/.test(orderId)) {
+          params.origClientOrderId = orderId;
+        } else {
+          params.orderId = orderId;
+        }
         const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
         const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
 
@@ -331,10 +336,14 @@ class BinanceExecutor {
         const baseUrl = isFutures ? `${env.url}/v1` : `${env.url}/v3`;
         const params = {
           symbol: bSymbol,
-          orderId: orderId,
           timestamp: timeRes.data.serverTime,
           recvWindow: 10000
         };
+        if (typeof orderId === 'string' && /[a-zA-Z]/.test(orderId)) {
+          params.origClientOrderId = orderId;
+        } else {
+          params.orderId = orderId;
+        }
         const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
         const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
 

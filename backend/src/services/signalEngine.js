@@ -77,7 +77,7 @@ class SignalEngine {
   }
 
   startSignalTracker(configs) {
-    setInterval(async () => {
+    const runTracker = async () => {
       try {
         const activeSignals = await db.query("SELECT * FROM signals WHERE status = 'active'");
         
@@ -171,7 +171,9 @@ class SignalEngine {
           }
         }
       } catch (e) { console.error('[Signal Tracker Error]', e.message); }
-    }, 1000);
+      finally { setTimeout(runTracker, 1000); }
+    };
+    runTracker();
   }
 
   async runStrategy(strategyId, configs, strategy) {
