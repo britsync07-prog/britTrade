@@ -211,6 +211,147 @@ app.get('/live-trading/logs', authMiddleware, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// --- Profit Guard ---
+// GET current settings + live progress
+app.get('/live-trading/profit-guard', authMiddleware, async (req, res, next) => {
+  try {
+    const config = await liveTradeDb.getUserBinanceConfig(req.userId);
+    if (!config) return res.json({ enabled: false, targetPct: 1.5, totalCapital: 0, todayRealizedPnl: 0, unrealizedPnl: 0, totalProfit: 0, profitPct: 0 });
+
+    const stratConfigs = await liveTradeDb.getUserStrategyConfigs(req.userId);
+    const totalCapital = stratConfigs.reduce((sum, s) => sum + (parseFloat(s.allocated_capital) || 0), 0);
+    const todayRealizedPnl = await liveTradeDb.getUserTodayRealizedPnl(req.userId);
+
+    // Get live unrealized PnL from Binance (best-effort)
+    let unrealizedPnl = 0;
+    try {
+      const apiKey = decrypt(config.api_key_enc);
+      const apiSecret = decrypt(config.api_sec_enc);
+      if (apiKey && apiSecret) {
+        const userExecutor = new BinanceExecutor();
+        await userExecutor.init(apiKey, apiSecret, config.testnet === 1);
+        const positions = await userExecutor.getPositions();
+        if (Array.isArray(positions)) {
+          unrealizedPnl = positions.reduce((sum, p) => sum + parseFloat(p.unRealizedProfit || 0), 0);
+        }
+      }
+    } catch (_) {}
+
+    const totalProfit = todayRealizedPnl + unrealizedPnl;
+    const profitPct = totalCapital > 0 ? (totalProfit / totalCapital) * 100 : 0;
+    const targetPct = parseFloat(config.profit_target_pct || 1.5);
+
+    res.json({
+      enabled: config.profit_guard_enabled === 1,
+      targetPct,
+      totalCapital: +totalCapital.toFixed(2),
+      todayRealizedPnl: +todayRealizedPnl.toFixed(4),
+      unrealizedPnl: +unrealizedPnl.toFixed(4),
+      totalProfit: +totalProfit.toFixed(4),
+      profitPct: +profitPct.toFixed(3),
+      profitTarget: +(totalCapital * targetPct / 100).toFixed(2),
+    });
+  } catch (e) { next(e); }
+});
+
+// PUT — toggle profit guard on/off and set target %
+app.put('/live-trading/profit-guard', authMiddleware, async (req, res, next) => {
+  try {
+    const config = await liveTradeDb.getUserBinanceConfig(req.userId);
+    if (!config) return res.status(400).json({ error: 'No Binance API keys configured' });
+
+    const { enabled, targetPct } = req.body;
+    if (typeof enabled !== 'boolean') return res.status(400).json({ error: '"enabled" (boolean) is required' });
+    const pct = parseFloat(targetPct);
+    if (isNaN(pct) || pct <= 0 || pct > 100) return res.status(400).json({ error: 'targetPct must be between 0.1 and 100' });
+
+    await liveTradeDb.setUserProfitGuard(req.userId, enabled, pct);
+    res.json({ enabled, targetPct: pct, message: `Profit guard ${enabled ? `ENABLED at ${pct}%` : 'DISABLED'}` });
+  } catch (e) { next(e); }
+});
+
+app.post('/live-trading/orders/:id/close', authMiddleware, async (req, res, next) => {
+  try {
+    const orderId = parseInt(req.params.id, 10);
+    if (isNaN(orderId)) return res.status(400).json({ error: 'Invalid order id' });
+
+    // Fetch the order from DB and verify it belongs to this user
+    const order = await liveTradeDb.get(
+      "SELECT * FROM live_orders WHERE id = ? AND user_id = ?",
+      [orderId, req.userId]
+    );
+    if (!order) return res.status(404).json({ error: 'Order not found or does not belong to you' });
+
+    const activeStatuses = ['OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED'];
+    if (!activeStatuses.includes((order.status || '').toUpperCase())) {
+      return res.status(400).json({ error: `Order is already ${order.status} — nothing to close` });
+    }
+
+    // Get user Binance config
+    const config = await liveTradeDb.getUserBinanceConfig(req.userId);
+    if (!config) return res.status(400).json({ error: 'No Binance API keys configured' });
+
+    const apiKey = decrypt(config.api_key_enc);
+    const apiSecret = decrypt(config.api_sec_enc);
+    if (!apiKey || !apiSecret) return res.status(500).json({ error: 'Could not decrypt Binance credentials' });
+
+    const userExecutor = new BinanceExecutor();
+    await userExecutor.init(apiKey, apiSecret, config.testnet === 1);
+
+    // Get actual live position size from Binance
+    const positions = await userExecutor.getPositions();
+    if (positions.error) return res.status(502).json({ error: `Binance error: ${positions.error}` });
+
+    const cleanSymbol = order.symbol.replace('/', '').replace(':', '');
+    const livePos = Array.isArray(positions)
+      ? positions.find(p => p.symbol === cleanSymbol || p.symbol === order.symbol)
+      : null;
+
+    const positionAmt = livePos ? parseFloat(livePos.positionAmt || 0) : 0;
+
+    if (positionAmt === 0) {
+      // No live position — just mark DB as closed
+      await liveTradeDb.updateOrder(orderId, { status: 'CLOSED' });
+      return res.json({ message: 'No open position found on Binance — order marked as closed in DB' });
+    }
+
+    // Determine close side: if long (positionAmt > 0) → sell; if short → buy
+    const closeSide = positionAmt > 0 ? 'sell' : 'buy';
+    const closeQty = Math.abs(positionAmt);
+
+    const closeResult = await userExecutor.placeOrder(
+      order.symbol,
+      closeSide,
+      order.amount_usdt || 0,
+      'market',
+      null,               // no price — market order
+      order.strategy_id || 1,
+      1,                  // leverage not relevant for close
+      closeQty,           // fixed qty = exact position size
+      true                // reduceOnly = true
+    );
+
+    if (closeResult.error) {
+      return res.status(502).json({ error: `Failed to close on Binance: ${closeResult.error}` });
+    }
+
+    // Update DB status
+    await liveTradeDb.updateOrder(orderId, { status: 'CLOSED' });
+    await liveTradeDb.addLog('info',
+      `Manual close: ${order.symbol} ${closeSide.toUpperCase()} ${closeQty} via market order (Order ID: ${closeResult.id})`,
+      { user_id: req.userId, strategy_id: order.strategy_id }
+    );
+
+    res.json({
+      message: `Trade closed successfully`,
+      symbol: order.symbol,
+      side: closeSide,
+      qty: closeQty,
+      binanceOrderId: closeResult.id,
+    });
+  } catch (e) { next(e); }
+});
+
 app.post('/live-trading/kill-switch', authMiddleware, async (req, res, next) => {
   try {
     const result = await liveTradeOrchestrator.userKillSwitch(req.userId);
@@ -218,6 +359,26 @@ app.post('/live-trading/kill-switch', authMiddleware, async (req, res, next) => 
       message: '🚨 Kill-switch activated. Live trading disabled. All open orders cancelled.',
       cancelledCount: result.cancelled,
     });
+  } catch (e) { next(e); }
+});
+
+// On-demand PnL sync for a user — fetches realized PnL from Binance for all closed orders missing PnL
+app.post('/live-trading/sync-pnl', authMiddleware, async (req, res, next) => {
+  try {
+    const config = await liveTradeDb.getUserBinanceConfig(req.userId);
+    if (!config) return res.status(400).json({ error: 'No Binance API keys configured' });
+
+    const apiKey = decrypt(config.api_key_enc);
+    const apiSecret = decrypt(config.api_sec_enc);
+    if (!apiKey || !apiSecret) return res.status(500).json({ error: 'Could not decrypt Binance credentials' });
+
+    const pnlSyncService = require('./services/pnlSyncService');
+    await pnlSyncService.syncAccountPnl({ userId: req.userId, cfg: config });
+
+    // Return updated orders so frontend can refresh immediately
+    const orders = await liveTradeDb.getOrdersByUser(req.userId, 100, 0);
+    const synced = orders.filter(o => o.real_pnl !== null && o.real_pnl !== undefined).length;
+    res.json({ message: `PnL sync complete`, synced });
   } catch (e) { next(e); }
 });
 
@@ -573,6 +734,10 @@ async function start() {
     // Start the Realized PnL Sync Service
     const pnlSyncService = require('./services/pnlSyncService');
     pnlSyncService.start(300000).catch(err => console.error('Failed to start PnlSyncService:', err));
+
+    // Start the Daily Profit Guard
+    const profitGuard = require('./services/profitGuard');
+    profitGuard.start(60000).catch(err => console.error('Failed to start ProfitGuard:', err));
 
     console.log(`Starting server on port ${PORT}...`);
     const server = app.listen(PORT, () => {

@@ -48,15 +48,30 @@ class PnlSyncService {
     async runSync() {
         console.log(`[PnlSyncService] 🔄 Starting Realized PnL sync cycle...`);
         try {
-            const adminCfg = await liveTradeDb.getBinanceConfig();
-            const userCfgs = await liveTradeDb.getEnabledUserBinanceConfigs();
+            // Get ALL users who have CLOSED orders missing real_pnl (regardless of enabled status)
+            const pendingRows = await liveTradeDb.all(
+                "SELECT DISTINCT user_id FROM live_orders WHERE status = 'CLOSED' AND real_pnl IS NULL AND binance_id IS NOT NULL"
+            );
 
             const accounts = [];
-            if (adminCfg && adminCfg.enabled === 1) {
+
+            // Admin account
+            const adminCfg = await liveTradeDb.getBinanceConfig();
+            const hasAdminPending = pendingRows.some(r => r.user_id === null);
+            if (adminCfg && hasAdminPending) {
                 accounts.push({ userId: 'admin', cfg: adminCfg });
             }
-            for (const u of userCfgs) {
-                accounts.push({ userId: u.user_id, cfg: u });
+
+            // User accounts — fetch config for every user with pending PnL (even if disabled)
+            for (const row of pendingRows) {
+                if (row.user_id === null) continue;
+                const userCfg = await liveTradeDb.get(
+                    'SELECT * FROM user_binance_config WHERE user_id=?',
+                    [row.user_id]
+                );
+                if (userCfg) {
+                    accounts.push({ userId: row.user_id, cfg: userCfg });
+                }
             }
 
             for (const acc of accounts) {
@@ -79,18 +94,21 @@ class PnlSyncService {
                 : await liveTradeDb.all("SELECT * FROM live_orders WHERE user_id = ? AND status = 'CLOSED' AND real_pnl IS NULL AND binance_id IS NOT NULL LIMIT 20", [acc.userId]);
 
             if (pendingOrders.length === 0) return;
+            console.log(`${label} Found ${pendingOrders.length} orders missing PnL. Fetching from Binance...`);
 
             for (const order of pendingOrders) {
                 const bSymbol = normalizeSymbol(order.symbol, true);
                 const pnlData = await this.fetchBinanceRealizedPnl(apiKey, apiSecret, bSymbol, order.binance_id, acc.cfg.testnet === 1);
 
                 if (pnlData) {
-                    console.log(`${label} ✅ Synced PnL for ${order.symbol}: $${pnlData.pnl.toFixed(4)}`);
+                    console.log(`${label} ✅ Synced PnL for ${order.symbol}: $${pnlData.pnl.toFixed(4)} (fee: $${pnlData.commission.toFixed(4)})`);
                     await liveTradeDb.updateOrder(order.id, { real_pnl: pnlData.pnl, commission: pnlData.commission });
                 } else {
+                    // If older than 1 hour and still no PnL data, mark as $0 to stop retrying
                     const ageSec = (Date.now() - new Date(order.updated_at + ' UTC').getTime()) / 1000;
                     if (ageSec > 3600) {
-                        await liveTradeDb.updateOrder(order.id, { real_pnl: 0 });
+                        console.log(`${label} ⚠️ No PnL data after 1hr for order ${order.binance_id} (${order.symbol}). Marking as 0.`);
+                        await liveTradeDb.updateOrder(order.id, { real_pnl: 0, commission: 0 });
                     }
                 }
             }
@@ -100,29 +118,45 @@ class PnlSyncService {
     }
 
     async fetchBinanceRealizedPnl(apiKey, apiSecret, symbol, binanceOrderId, isTestnet) {
-        const baseUrl = isTestnet ? 'https://testnet.binancefuture.com/fapi/v1' : 'https://fapi.binance.com/fapi/v1';
-        const timestamp = Date.now();
-        const query = `symbol=${symbol}&limit=100&timestamp=${timestamp}&recvWindow=10000`;
-        const signature = crypto.createHmac('sha256', apiSecret).update(query).digest('hex');
+        // Try multiple environments for testnet
+        const urls = isTestnet
+            ? [
+                'https://testnet.binancefuture.com/fapi/v1',
+                'https://demo-fapi.binance.com/fapi/v1',
+              ]
+            : ['https://fapi.binance.com/fapi/v1'];
 
-        try {
-            const res = await axios.get(`${baseUrl}/userTrades?${query}&signature=${signature}`, {
-                headers: { 'X-MBX-APIKEY': apiKey },
-                timeout: 10000
-            });
+        const cleanOrderId = String(binanceOrderId).split('.')[0];
 
-            if (Array.isArray(res.data)) {
-                const matchingTrades = res.data.filter(t => String(t.orderId) === String(binanceOrderId).split('.')[0]);
-                if (matchingTrades.length > 0) {
+        for (const baseUrl of urls) {
+            try {
+                // First try: get server time for accurate timestamp
+                let timestamp = Date.now();
+                try {
+                    const timeRes = await axios.get(`${baseUrl}/time`, { timeout: 10000 });
+                    timestamp = timeRes.data.serverTime;
+                } catch (_) {}
+
+                const query = `symbol=${symbol}&orderId=${cleanOrderId}&limit=100&timestamp=${timestamp}&recvWindow=10000`;
+                const signature = crypto.createHmac('sha256', apiSecret).update(query).digest('hex');
+
+                const res = await axios.get(`${baseUrl}/userTrades?${query}&signature=${signature}`, {
+                    headers: { 'X-MBX-APIKEY': apiKey },
+                    timeout: 15000
+                });
+
+                if (Array.isArray(res.data) && res.data.length > 0) {
                     let totalPnl = 0, totalComm = 0;
-                    for (const t of matchingTrades) {
+                    for (const t of res.data) {
                         totalPnl += parseFloat(t.realizedPnl || 0);
                         totalComm += parseFloat(t.commission || 0);
                     }
                     return { pnl: totalPnl, commission: totalComm };
                 }
+            } catch (e) {
+                // Try next URL silently
             }
-        } catch (e) {}
+        }
         return null;
     }
 }

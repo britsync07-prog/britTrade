@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   TrendingUp, TrendingDown, Activity, Power, PowerOff,
   RefreshCw, AlertTriangle, CheckCircle, XCircle, ChevronUp, ChevronDown,
-  Zap, DollarSign, BarChart2, ShieldOff, Settings
+  Zap, DollarSign, BarChart2, ShieldOff, Settings, XOctagon, Target, Lock
 } from 'lucide-react';
 import api from '../../services/api';
 
@@ -44,6 +44,19 @@ export default function LiveTradingPanel({ apiBase = '/admin/live-trading', show
   const [showConfig, setShowConfig] = useState(false);
   const [editingStratId, setEditingStratId] = useState<number | null>(null);
   const [editValues, setEditValues] = useState({ amount: 10, leverage: 5, capital: 100 });
+  const [closingOrderId, setClosingOrderId] = useState<number | null>(null);
+  const [syncingPnl, setSyncingPnl] = useState(false);
+
+  // --- Profit Guard State ---
+  const [guardData, setGuardData] = useState<{
+    enabled: boolean; targetPct: number; totalCapital: number;
+    todayRealizedPnl: number; unrealizedPnl: number;
+    totalProfit: number; profitPct: number; profitTarget: number;
+  } | null>(null);
+  const [guardEnabled, setGuardEnabled] = useState(false);
+  const [guardTargetPct, setGuardTargetPct] = useState('1.5');
+  const [savingGuard, setSavingGuard] = useState(false);
+  const [guardMsg, setGuardMsg] = useState('');
 
   const fetchDashboard = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
@@ -59,11 +72,21 @@ export default function LiveTradingPanel({ apiBase = '/admin/live-trading', show
     }
   }, [apiBase]);
 
+  const fetchGuard = useCallback(async () => {
+    try {
+      const res = await api.get(`${apiBase}/profit-guard`);
+      setGuardData(res.data);
+      setGuardEnabled(res.data.enabled);
+      setGuardTargetPct(String(res.data.targetPct ?? 1.5));
+    } catch (_) {}
+  }, [apiBase]);
+
   useEffect(() => {
     fetchDashboard();
-    const iv = setInterval(() => fetchDashboard(true), 30000);
+    fetchGuard();
+    const iv = setInterval(() => { fetchDashboard(true); fetchGuard(); }, 30000);
     return () => clearInterval(iv);
-  }, [fetchDashboard]);
+  }, [fetchDashboard, fetchGuard]);
 
   const handleSaveConfig = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -128,6 +151,56 @@ export default function LiveTradingPanel({ apiBase = '/admin/live-trading', show
       setEditingStratId(null);
       fetchDashboard(true);
     } catch (err: any) { alert(err.response?.data?.error || 'Update failed'); }
+  };
+
+  const handleCloseTrade = async (orderId: number, symbol: string) => {
+    if (!confirm(`⚠️ Close trade for ${symbol} NOW at market price? This is irreversible.`)) return;
+    setClosingOrderId(orderId);
+    try {
+      const res = await api.post(`${apiBase}/orders/${orderId}/close`);
+      const msg = res.data?.message || 'Trade closed successfully';
+      setKillMsg(`✅ ${msg}`);
+      setTimeout(() => setKillMsg(''), 5000);
+      fetchDashboard(true);
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to close trade');
+    } finally {
+      setClosingOrderId(null);
+    }
+  };
+
+  const handleSyncPnl = async () => {
+    setSyncingPnl(true);
+    try {
+      const res = await api.post(`${apiBase}/sync-pnl`);
+      setKillMsg(`✅ ${res.data?.message || 'PnL synced from Binance'}`);
+      setTimeout(() => setKillMsg(''), 6000);
+      fetchDashboard(true);
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'PnL sync failed');
+    } finally {
+      setSyncingPnl(false);
+    }
+  };
+
+  const handleSaveGuard = async () => {
+    const pct = parseFloat(guardTargetPct);
+    if (isNaN(pct) || pct <= 0 || pct > 100) {
+      alert('Please enter a valid profit target between 0.1% and 100%');
+      return;
+    }
+    setSavingGuard(true);
+    try {
+      await api.put(`${apiBase}/profit-guard`, { enabled: guardEnabled, targetPct: pct });
+      const msg = guardEnabled ? `✅ Profit Guard ON — closes all trades at +${pct}% profit` : '✅ Profit Guard disabled';
+      setGuardMsg(msg);
+      setTimeout(() => setGuardMsg(''), 6000);
+      fetchGuard();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to save profit guard settings');
+    } finally {
+      setSavingGuard(false);
+    }
   };
 
   if (loading) return (
@@ -199,13 +272,165 @@ export default function LiveTradingPanel({ apiBase = '/admin/live-trading', show
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
         <StatCard icon={BarChart2} label="Futures Balance" color="text-purple-400"
           value={balance.futures !== null ? `$${balance.futures.toFixed(2)}` : 'N/A'} />
         <StatCard icon={Activity} label="Open Trades" color="text-yellow-400"
           value={summary.openCount} />
         <StatCard icon={DollarSign} label="Live PnL (Open)" color={summary.totalLivePnlUSDT >= 0 ? 'text-emerald-400' : 'text-red-400'}
           value={`${summary.totalLivePnlUSDT >= 0 ? '+' : ''}$${summary.totalLivePnlUSDT.toFixed(2)}`} />
+        {(() => {
+          const closedPnl = orders
+            .filter(o => !['OPEN','FILLED','NEW','PARTIALLY_FILLED'].includes((o.status||'').toUpperCase()))
+            .reduce((sum, o) => sum + (o.real_pnl ?? 0), 0);
+          return (
+            <StatCard icon={TrendingUp} label="Realized PnL (Closed)" color={closedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}
+              value={`${closedPnl >= 0 ? '+' : ''}$${closedPnl.toFixed(2)}`} />
+          );
+        })()}
+      </div>
+
+      {/* ─── Profit Guard Panel ─── */}
+      <div className={`glass-card border overflow-hidden transition-all duration-300 ${
+        guardEnabled && guardData ? 'border-amber-500/30' : 'border-white/5'
+      }`}>
+        <div className="p-6 flex flex-wrap items-start gap-6">
+          {/* Left: icon + label */}
+          <div className="flex items-center gap-4 flex-1 min-w-[260px]">
+            <div className={`p-3 rounded-2xl ${guardEnabled ? 'bg-amber-500/15' : 'bg-white/5'}`}>
+              <Target className={`w-6 h-6 ${guardEnabled ? 'text-amber-400' : 'text-slate-500'}`} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-black text-white uppercase tracking-widest">Daily Profit Guard</span>
+                {guardEnabled && (
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest bg-amber-500/15 border border-amber-500/20 text-amber-400">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse inline-block" />
+                    ACTIVE
+                  </span>
+                )}
+              </div>
+              <p className="text-slate-500 text-xs mt-0.5">
+                Auto-close all trades &amp; stop new ones when daily profit target is reached
+              </p>
+            </div>
+          </div>
+
+          {/* Right: controls */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Target</span>
+              <div className="relative">
+                <input
+                  id="profit-guard-target-input"
+                  type="number" min="0.1" max="100" step="0.1"
+                  value={guardTargetPct}
+                  onChange={e => setGuardTargetPct(e.target.value)}
+                  className="w-20 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white font-bold text-center outline-none focus:border-amber-500/50 transition-all"
+                />
+                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none">%</span>
+              </div>
+            </div>
+            <button
+              id="profit-guard-toggle"
+              onClick={() => setGuardEnabled(v => !v)}
+              className={`relative w-14 h-7 rounded-full transition-colors duration-300 ${guardEnabled ? 'bg-amber-500' : 'bg-slate-700'}`}
+            >
+              <span className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow transition-all duration-300 ${guardEnabled ? 'left-8' : 'left-1'}`} />
+            </button>
+            <button
+              id="profit-guard-save-btn"
+              onClick={handleSaveGuard}
+              disabled={savingGuard}
+              className="px-5 py-2 bg-amber-500/15 hover:bg-amber-500/30 text-amber-400 border border-amber-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-50 flex items-center gap-2"
+            >
+              {savingGuard ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Lock className="w-3 h-3" />}
+              Save
+            </button>
+          </div>
+        </div>
+
+        {/* Guard message */}
+        <AnimatePresence>
+          {guardMsg && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="mx-6 mb-4 px-4 py-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400 text-xs font-bold">
+              {guardMsg}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Live progress — only shown when enabled */}
+        {guardEnabled && guardData && guardData.totalCapital > 0 && (
+          <div className="px-6 pb-6">
+            <div className="p-4 bg-white/[0.02] border border-white/5 rounded-2xl space-y-3">
+              {/* Breakdown row */}
+              <div className="flex flex-wrap justify-between items-center gap-3">
+                <div className="text-center">
+                  <div className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Capital</div>
+                  <div className="text-sm font-black text-white">${guardData.totalCapital.toFixed(2)}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Today Realized</div>
+                  <div className={`text-sm font-black ${guardData.todayRealizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {guardData.todayRealizedPnl >= 0 ? '+' : ''}${guardData.todayRealizedPnl.toFixed(4)}
+                  </div>
+                </div>
+                <div className="text-center">
+                  <div className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Unrealized</div>
+                  <div className={`text-sm font-black ${guardData.unrealizedPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {guardData.unrealizedPnl >= 0 ? '+' : ''}${guardData.unrealizedPnl.toFixed(4)}
+                  </div>
+                </div>
+                <div className="text-center">
+                  <div className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Total Profit</div>
+                  <div className={`text-lg font-black ${guardData.totalProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {guardData.totalProfit >= 0 ? '+' : ''}${guardData.totalProfit.toFixed(2)}
+                  </div>
+                </div>
+                <div className="text-center">
+                  <div className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Target</div>
+                  <div className="text-sm font-black text-amber-400">${guardData.profitTarget.toFixed(2)} ({guardData.targetPct}%)</div>
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              {(() => {
+                const progressPct = Math.min(100, Math.max(0, (guardData.totalProfit / guardData.profitTarget) * 100));
+                const isNear = progressPct >= 80;
+                const isHit = progressPct >= 100;
+                return (
+                  <div>
+                    <div className="flex justify-between items-center mb-1.5">
+                      <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Progress to Target</span>
+                      <span className={`text-[10px] font-black ${isHit ? 'text-red-400' : isNear ? 'text-amber-400' : 'text-emerald-400'}`}>
+                        {guardData.profitPct.toFixed(2)}% / {guardData.targetPct}%
+                      </span>
+                    </div>
+                    <div className="h-2.5 bg-white/5 rounded-full overflow-hidden">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${progressPct}%` }}
+                        transition={{ duration: 0.8, ease: 'easeOut' }}
+                        className={`h-full rounded-full ${isHit ? 'bg-red-500' : isNear ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                      />
+                    </div>
+                    {isHit && (
+                      <div className="mt-2 text-[10px] font-black text-red-400 flex items-center gap-1.5">
+                        <AlertTriangle className="w-3 h-3" /> Target reached — live trading has been DISABLED automatically
+                      </div>
+                    )}
+                    {isNear && !isHit && (
+                      <div className="mt-2 text-[10px] font-bold text-amber-400/80">
+                        ⚠️ Approaching target — guard will close all trades soon
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* API Config panel */}
@@ -381,7 +606,7 @@ export default function LiveTradingPanel({ apiBase = '/admin/live-trading', show
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-white/[0.02]">
-                  {['Symbol', 'Side', 'Amount', 'Entry', 'Current', 'PnL %', 'PnL USDT', 'Strategy', 'Opened'].map(h => (
+                  {['Symbol', 'Side', 'Amount', 'Entry', 'Current', 'PnL %', 'PnL USDT', 'Strategy', 'Opened', 'Action'].map(h => (
                     <th key={h} className="px-5 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">{h}</th>
                   ))}
                 </tr>
@@ -415,6 +640,22 @@ export default function LiveTradingPanel({ apiBase = '/admin/live-trading', show
                       <td className="px-5 py-4 text-xs text-slate-500 font-mono">
                         {new Date(o.created_at).toLocaleTimeString()}
                       </td>
+                      <td className="px-5 py-4">
+                        <button
+                          id={`close-trade-btn-${o.id}`}
+                          onClick={() => handleCloseTrade(o.id, o.symbol)}
+                          disabled={closingOrderId === o.id}
+                          title={`Instantly close ${o.symbol} position at market price`}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/20 hover:border-red-500 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed group"
+                        >
+                          {closingOrderId === o.id ? (
+                            <RefreshCw className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <XOctagon className="w-3 h-3" />
+                          )}
+                          {closingOrderId === o.id ? 'Closing…' : 'Close'}
+                        </button>
+                      </td>
                     </tr>
                   );
                 })}
@@ -427,9 +668,21 @@ export default function LiveTradingPanel({ apiBase = '/admin/live-trading', show
       {/* Recent closed/error orders */}
       {recentClosed.length > 0 && (
         <div className="glass-card border-white/5 overflow-hidden">
-          <div className="p-6 border-b border-white/5">
-            <h3 className="text-sm font-black text-white uppercase tracking-widest">Recent Order History</h3>
-            <p className="text-slate-500 text-xs mt-1">Last {recentClosed.length} completed orders</p>
+          <div className="p-6 border-b border-white/5 flex items-center justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-black text-white uppercase tracking-widest">Recent Order History</h3>
+              <p className="text-slate-500 text-xs mt-1">Last {recentClosed.length} completed orders</p>
+            </div>
+            <button
+              id="refresh-pnl-btn"
+              onClick={handleSyncPnl}
+              disabled={syncingPnl}
+              title="Fetch realized PnL from Binance for all closed trades"
+              className="flex items-center gap-2 px-4 py-2 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3 h-3 ${syncingPnl ? 'animate-spin' : ''}`} />
+              {syncingPnl ? 'Fetching PnL…' : 'Refresh PnL'}
+            </button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left">
@@ -453,8 +706,20 @@ export default function LiveTradingPanel({ apiBase = '/admin/live-trading', show
                       <StatusBadge status={o.status} />
                     </td>
                     <td className="px-5 py-4 text-sm text-slate-400 font-mono">${(o.avg_fill_price || o.price)?.toFixed(4)}</td>
-                    <td className={`px-5 py-4 text-sm font-black font-mono ${o.real_pnl !== undefined && o.real_pnl !== null ? (o.real_pnl >= 0 ? 'text-emerald-400' : 'text-red-400') : 'text-slate-500'}`}>
-                      {o.real_pnl !== undefined && o.real_pnl !== null ? `${o.real_pnl >= 0 ? '+' : ''}$${o.real_pnl.toFixed(4)}` : '—'}
+                    <td className={`px-5 py-4 text-sm font-black font-mono ${
+                      o.real_pnl !== undefined && o.real_pnl !== null
+                        ? (o.real_pnl >= 0 ? 'text-emerald-400' : 'text-red-400')
+                        : 'text-slate-500'
+                    }`}>
+                      {o.real_pnl !== undefined && o.real_pnl !== null
+                        ? `${o.real_pnl >= 0 ? '+' : ''}$${o.real_pnl.toFixed(4)}`
+                        : (
+                          <span className="flex items-center gap-1 text-slate-600">
+                            <RefreshCw className="w-3 h-3 animate-spin opacity-50" />
+                            Pending
+                          </span>
+                        )
+                      }
                     </td>
                     <td className="px-5 py-4 text-xs text-slate-500 font-mono">
                       {o.commission !== undefined && o.commission !== null ? `$${o.commission.toFixed(4)}` : '—'}

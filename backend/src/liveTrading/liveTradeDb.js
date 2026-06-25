@@ -294,7 +294,7 @@ async function insertOrder(data) {
 }
 
 async function updateOrder(id, fields) {
-  const allowed = ['status', 'avg_fill_price', 'filled', 'fee_usdt', 'error_msg', 'binance_id', 'amount', 'amount_usdt'];
+  const allowed = ['status', 'avg_fill_price', 'filled', 'fee_usdt', 'error_msg', 'binance_id', 'amount', 'amount_usdt', 'real_pnl', 'commission'];
   const sets = [];
   const vals = [];
   for (const [k, v] of Object.entries(fields)) {
@@ -393,6 +393,36 @@ async function updateUserStrategyConfig(userId, strategyId, fields) {
   return run(`UPDATE user_live_trade_configs SET ${sets.join(',')} WHERE user_id=? AND strategy_id=?`, vals);
 }
 
+async function setUserProfitGuard(userId, enabled, targetPct) {
+  const updates = [];
+  const vals = [];
+  if (typeof enabled === 'boolean' || typeof enabled === 'number') {
+    updates.push('profit_guard_enabled=?');
+    vals.push(enabled ? 1 : 0);
+  }
+  if (targetPct != null && !isNaN(parseFloat(targetPct))) {
+    updates.push('profit_target_pct=?');
+    vals.push(parseFloat(targetPct));
+  }
+  if (!updates.length) return;
+  updates.push('updated_at=CURRENT_TIMESTAMP');
+  vals.push(userId);
+  return run(`UPDATE user_binance_config SET ${updates.join(',')} WHERE user_id=?`, vals);
+}
+
+// Returns today's realized PnL sum for a user (for display on the dashboard)
+async function getUserTodayRealizedPnl(userId) {
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayStartStr = todayStart.toISOString().replace('T', ' ').split('.')[0];
+  const rows = await all(
+    `SELECT COALESCE(SUM(real_pnl), 0) as total FROM live_orders
+     WHERE user_id = ? AND status = 'CLOSED' AND real_pnl IS NOT NULL AND updated_at >= ?`,
+    [userId, todayStartStr]
+  );
+  return parseFloat(rows[0]?.total || 0);
+}
+
 module.exports = {
   initLiveTradeDb,
   getBinanceConfig,
@@ -403,6 +433,8 @@ module.exports = {
   getEnabledUserBinanceConfigs,
   saveUserBinanceConfig,
   setUserEnabled,
+  setUserProfitGuard,
+  getUserTodayRealizedPnl,
   deleteUserBinanceConfig,
   getAllStrategyConfigs,
   getStrategyConfig,
