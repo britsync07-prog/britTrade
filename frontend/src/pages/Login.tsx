@@ -20,34 +20,29 @@ export default function Login() {
   const [legalType, setLegalType] = useState<'terms' | 'risk' | null>(null);
   const [fpAvailable, setFpAvailable] = useState(false);
   const [fpLoading, setFpLoading] = useState(false);
-  const [fpVerified, setFpVerified] = useState(false);
+  const [fpVerified] = useState(false);
 
   useEffect(() => {
     setFpAvailable(hasFingerprintBridge());
     (window as any).FingerprintBridgeOnSuccess = () => {
       setFpLoading(false);
-      setFpVerified(true);
+      if (isSignup) {
+        autoFpSignup();
+        return;
+      }
       try {
         const saved = localStorage.getItem('fingerprint_cred');
         if (saved) {
           const { email: savedEmail, password: savedPass } = JSON.parse(saved);
-          setEmail(savedEmail);
-          setPassword(savedPass);
           setTimeout(() => handleSubmitWith(savedEmail, savedPass), 100);
         }
       } catch {
         setError('Stored credentials invalid, please login manually');
-        setFpVerified(false);
       }
     };
     (window as any).FingerprintBridgeOnError = (msg: string) => {
       setFpLoading(false);
-      if (msg === 'Cancel') return;
-      if (!localStorage.getItem('fingerprint_cred')) {
-        autoFpSignup();
-        return;
-      }
-      setError(msg);
+      if (msg !== 'Cancel') setError(msg);
     };
     return () => {
       delete (window as any).FingerprintBridgeOnSuccess;
@@ -110,10 +105,6 @@ export default function Login() {
   };
 
   const handleFingerprint = () => {
-    if (isSignup) {
-      autoFpSignup();
-      return;
-    }
     setFpLoading(true);
     (window as any).FingerprintBridge.authenticate();
   };
@@ -173,16 +164,6 @@ export default function Login() {
             {error}
           </motion.div>
         )}
-        {fpVerified && !localStorage.getItem('fingerprint_cred') && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            className="p-3 sm:p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-2xl mb-6 sm:mb-8 text-xs sm:text-sm text-center font-bold"
-          >
-            Fingerprint verified! Enter your credentials below to save them for next time.
-          </motion.div>
-        )}
-
         <div className="flex flex-col gap-3 sm:gap-4 mb-6 sm:mb-8">
           <div className="flex justify-center overflow-hidden">
             <GoogleLogin
