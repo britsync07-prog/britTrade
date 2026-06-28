@@ -49,7 +49,8 @@ const allowedOrigins = [
   'https://brittrade.britsync.co.uk',
   'https://trade.mayfairmarketing.online',
   'http://localhost:3000',
-  'http://localhost:5173'
+  'http://localhost:5173',
+  'http://localhost:5174'
 ];
 
 app.use(cors({
@@ -646,7 +647,9 @@ app.use((err, req, res, next) => {
   console.error('[Middleware Error]', err);
   
   // CRITICAL: Ensure CORS headers are present on EVERY error
-  res.header('Access-Control-Allow-Origin', 'https://brittrade.pages.dev');
+  const reqOrigin = req.headers.origin;
+  const allowedInError = reqOrigin && (allowedOrigins.includes(reqOrigin) || reqOrigin.endsWith('.pages.dev') || reqOrigin.endsWith('.netlify.app') || reqOrigin.includes('britsync.co.uk'));
+  res.header('Access-Control-Allow-Origin', allowedInError ? reqOrigin : 'https://brittrade.pages.dev');
   res.header('Access-Control-Allow-Credentials', 'true');
   
   const status = err.status || 500;
