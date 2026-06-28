@@ -59,11 +59,11 @@ export default function TradingViewChart() {
   }).toString();
 
   return (
-    <div className="container mx-auto px-6 mb-20 relative z-20 max-w-5xl">
+    <div className="container mx-auto px-4 sm:px-6 mb-16 sm:mb-20 relative z-20 max-w-5xl">
       {/* Background glow effect */}
       <div className="absolute -inset-4 bg-cyan-500/10 blur-3xl opacity-30 -z-10" />
       
-      <div className="rounded-3xl overflow-hidden border border-white/10 bg-slate-900/80 backdrop-blur-xl shadow-2xl h-[400px] lg:h-[500px]">
+      <div className="rounded-2xl sm:rounded-3xl overflow-hidden border border-white/10 bg-slate-900/80 backdrop-blur-xl shadow-2xl h-[280px] sm:h-[400px] lg:h-[500px]">
         <iframe
           src={chartUrl.toString()}
           style={{ width: '100%', height: '100%', border: 'none' }}

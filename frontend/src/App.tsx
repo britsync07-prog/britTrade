@@ -6,6 +6,7 @@ import { ServiceCarousel, type Service } from './components/ui/services-card';
 import { Activity, Shield, TrendingUp, Coins, Rocket, Layers } from "lucide-react";
 import { SignalBroadcast } from './components/ui/SignalBroadcast';
 import { PerformanceTicker } from './components/ui/PerformanceTicker';
+import UpdatePopup from './components/ui/UpdatePopup';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import StrategyDetail from './pages/StrategyDetail';
@@ -226,23 +227,40 @@ function LandingPage({ user }: { user: any }) {
         throw new Error('No checkout URL received');
       }
     } catch (e: any) {
-      console.error('Purchase failed', e);
-      alert(e.response?.data?.error || 'Purchase failed');
+      console.error('Stripe session failed, trying direct purchase', e);
+      try {
+        await api.post('/auth/purchase', { planId });
+        window.location.href = '/dashboard?purchased=true';
+      } catch (e2: any) {
+        console.error('Direct purchase failed', e2);
+        alert(e2.response?.data?.error || 'Purchase failed');
+      }
     }
   };
 
   return (
     <div className="min-h-screen bg-[#020617] selection:bg-cyan-500/30">
       <nav className="fixed top-0 w-full z-50 border-b border-white/5 bg-slate-950/50 backdrop-blur-md">
-        <div className="container mx-auto px-6 py-2 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <Activity className="text-cyan-400 w-8 h-8" />
-            <span className="text-xl font-bold tracking-tighter text-white">BRIT<span className="text-cyan-400">TRADE</span></span>
+        <div className="container mx-auto px-4 sm:px-6 py-2 flex justify-between items-center">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <Activity className="text-cyan-400 w-6 h-6 sm:w-8 sm:h-8" />
+            <span className="text-lg sm:text-xl font-bold tracking-tighter text-white">BRIT<span className="text-cyan-400">TRADE</span></span>
           </div>
-          <div className="flex items-center gap-6">
-            <a href="#pricing" className="text-sm font-bold text-cyan-400 hover:text-cyan-300 transition-colors uppercase tracking-widest">Pricing</a>
-            <a href="/login" className="text-sm font-medium text-slate-300 hover:text-white transition-colors">Log In</a>
-            <a href="/login?signup=true" className="px-4 py-2 bg-white text-black rounded-lg text-sm font-bold hover:bg-slate-200 transition-colors">Get Started</a>
+          <div className="flex items-center gap-2 sm:gap-6">
+            <a href="#pricing" className="text-[10px] sm:text-sm font-bold text-cyan-400 hover:text-cyan-300 transition-colors uppercase tracking-widest">Pricing</a>
+            {user ? (
+              <>
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-xs sm:text-sm font-black text-white shadow-lg shadow-cyan-500/20">
+                  {user.email?.[0]?.toUpperCase() || '?'}
+                </div>
+                <a href="/dashboard" className="px-3 py-1.5 sm:px-4 sm:py-2 bg-white text-black rounded-lg text-[10px] sm:text-sm font-bold hover:bg-slate-200 transition-colors">Dashboard</a>
+              </>
+            ) : (
+              <>
+                <a href="/login" className="text-[10px] sm:text-sm font-medium text-slate-300 hover:text-white transition-colors">Log In</a>
+                <a href="/login?signup=true" className="px-3 py-1.5 sm:px-4 sm:py-2 bg-white text-black rounded-lg text-[10px] sm:text-sm font-bold hover:bg-slate-200 transition-colors">Get Started</a>
+              </>
+            )}
           </div>
         </div>
       </nav>
@@ -253,12 +271,12 @@ function LandingPage({ user }: { user: any }) {
         <PerformanceTicker data={perfData} />
         <TradingViewChart />
 
-        <section id="pricing" className="py-24 bg-slate-950/20">
-          <div className="container mx-auto px-6 text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold mb-4 tracking-tighter">
+        <section id="pricing" className="py-16 sm:py-24 bg-slate-950/20">
+          <div className="container mx-auto px-4 sm:px-6 text-center mb-10 sm:mb-16">
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4 tracking-tighter">
               Choose Your <span className="text-cyan-400">Strategy</span>
             </h2>
-            <p className="text-slate-400 max-w-2xl mx-auto">
+            <p className="text-slate-400 max-w-2xl mx-auto px-2">
               Select a signal package tailored to your risk tolerance and trading goals.
               <br />
               <span className="text-[10px] uppercase tracking-widest text-cyan-400/60 font-bold">Based on 24h simulated paper trades</span>
@@ -267,40 +285,40 @@ function LandingPage({ user }: { user: any }) {
           <ServiceCarousel services={localServices} onPurchase={handlePurchase} />
         </section>
         
-        <section className="py-24 relative">
-          <div className="container mx-auto px-6 text-center mb-16">
-            <h2 className="text-4xl md:text-5xl font-bold mb-4">Our Technology <span className="text-cyan-400">Roadmap</span></h2>
+        <section className="py-16 sm:py-24 relative">
+          <div className="container mx-auto px-4 sm:px-6 text-center mb-10 sm:mb-16">
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4">Our Technology <span className="text-cyan-400">Roadmap</span></h2>
             <p className="text-slate-400 max-w-2xl mx-auto">Explore the core systems powering the world's most advanced autonomous trading engine.</p>
           </div>
           
           <RadialOrbitalTimeline timelineData={timelineData} />
         </section>
 
-        <section className="py-24 border-t border-white/5">
-           <div className="container mx-auto px-6 text-center">
-              <div className="grid md:grid-cols-3 gap-12">
-                <div className="p-8 rounded-3xl bg-slate-900/50 border border-white/5">
-                  <Activity className="w-12 h-12 text-cyan-400 mb-6 mx-auto" />
-                  <h3 className="text-xl font-bold mb-4">24/7 Signals</h3>
-                  <p className="text-slate-400">The engine never sleeps. It scans markets and identifies premium signals while you enjoy your life.</p>
+        <section className="py-16 sm:py-24 border-t border-white/5">
+           <div className="container mx-auto px-4 sm:px-6 text-center">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 sm:gap-8 md:gap-12">
+                <div className="p-6 sm:p-8 rounded-3xl bg-slate-900/50 border border-white/5">
+                  <Activity className="w-10 h-10 sm:w-12 sm:h-12 text-cyan-400 mb-4 sm:mb-6 mx-auto" />
+                  <h3 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">24/7 Signals</h3>
+                  <p className="text-sm sm:text-base text-slate-400">The engine never sleeps. It scans markets and identifies premium signals while you enjoy your life.</p>
                 </div>
-                <div className="p-8 rounded-3xl bg-slate-900/50 border border-white/5">
-                  <Shield className="w-12 h-12 text-purple-400 mb-6 mx-auto" />
-                  <h3 className="text-xl font-bold mb-4">Secure Storage</h3>
-                  <p className="text-slate-400">Your API keys are encrypted at rest with military-grade AES-256 standards.</p>
+                <div className="p-6 sm:p-8 rounded-3xl bg-slate-900/50 border border-white/5">
+                  <Shield className="w-10 h-10 sm:w-12 sm:h-12 text-purple-400 mb-4 sm:mb-6 mx-auto" />
+                  <h3 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">Secure Storage</h3>
+                  <p className="text-sm sm:text-base text-slate-400">Your API keys are encrypted at rest with military-grade AES-256 standards.</p>
                 </div>
-                <div className="p-8 rounded-3xl bg-slate-900/50 border border-white/5">
-                  <TrendingUp className="w-12 h-12 text-emerald-400 mb-6 mx-auto" />
-                  <h3 className="text-xl font-bold mb-4">Compound Growth</h3>
-                  <p className="text-slate-400">Our strategies are optimized for long-term compounding and risk management.</p>
+                <div className="p-6 sm:p-8 rounded-3xl bg-slate-900/50 border border-white/5 sm:col-span-2 md:col-span-1">
+                  <TrendingUp className="w-10 h-10 sm:w-12 sm:h-12 text-emerald-400 mb-4 sm:mb-6 mx-auto" />
+                  <h3 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">Compound Growth</h3>
+                  <p className="text-sm sm:text-base text-slate-400">Our strategies are optimized for long-term compounding and risk management.</p>
                 </div>
               </div>
            </div>
         </section>
       </main>
 
-      <footer className="py-12 border-t border-white/5">
-        <div className="container mx-auto px-6 text-center text-slate-500 text-sm">
+      <footer className="py-8 sm:py-12 border-t border-white/5">
+        <div className="container mx-auto px-4 sm:px-6 text-center text-slate-500 text-xs sm:text-sm">
           &copy; 2024 BritTrade AI Solutions. All rights reserved.
         </div>
       </footer>
@@ -337,8 +355,10 @@ function AppContent() {
   const isMaintenanceActive = maintenanceMode && user?.role !== 'admin';
 
   return (
-    <Router>
-      <Routes>
+    <>
+      <UpdatePopup />
+      <Router>
+        <Routes>
         <Route path="/" element={isMaintenanceActive ? <MaintenancePage /> : <LandingPage user={user} />} />
         <Route 
           path="/login" 
@@ -362,6 +382,7 @@ function AppContent() {
         />
       </Routes>
     </Router>
+    </>
   );
 }
 

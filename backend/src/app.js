@@ -512,6 +512,14 @@ app.get('/public/signals/broadcast', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+app.get('/public/version', (req, res) => {
+  res.json({
+    version: process.env.APP_VERSION || '1.0.0',
+    downloadUrl: process.env.APP_DOWNLOAD_URL || '',
+    forceUpdate: true
+  });
+});
+
 app.get('/public/strategies/performance', async (req, res, next) => {
   try {
     const strategies = await strategyService.getAll();

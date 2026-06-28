@@ -120,88 +120,85 @@ export default function StrategyDetail() {
     <div className="min-h-screen bg-[#020617] text-slate-200 pb-20 relative overflow-hidden">
 
 
-      <div className="max-w-7xl mx-auto px-4 md:px-8 pt-12 space-y-8 relative z-10">
-        <Link to="/dashboard" className="inline-flex items-center gap-2 text-slate-500 hover:text-white transition-colors group mb-4">
-          <ChevronLeft size={20} className="group-hover:-translate-x-1 transition-transform" /> 
-          <span className="text-sm font-medium">Market Overview</span>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 pt-8 sm:pt-12 space-y-6 sm:space-y-8 relative z-10">
+        <Link to="/dashboard" className="inline-flex items-center gap-1 sm:gap-2 text-slate-500 hover:text-white transition-colors group mb-2 sm:mb-4">
+          <ChevronLeft size={16} className="sm:w-5 sm:h-5 group-hover:-translate-x-1 transition-transform" /> 
+          <span className="text-xs sm:text-sm font-medium">Market Overview</span>
         </Link>
 
-        <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8">
+        <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-5 sm:gap-8">
           <div>
-            <h1 className="text-4xl md:text-5xl font-bold tracking-tighter mb-2 group leading-tight">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold tracking-tighter mb-2 group leading-tight">
               <span className="bg-gradient-to-r from-cyan-400 via-white to-purple-400 bg-clip-text text-transparent">{strategy.name}</span>
             </h1>
-            <div className="flex items-center gap-3">
-              <Badge variant="outline" className="bg-cyan-500/10 text-cyan-400 border-cyan-400/20 px-3 py-0.5 rounded-lg text-[10px] font-bold">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+              <Badge variant="outline" className="bg-cyan-500/10 text-cyan-400 border-cyan-400/20 px-2 sm:px-3 py-0.5 rounded-lg text-[8px] sm:text-[10px] font-bold">
                 {strategy.type.toUpperCase()}
               </Badge>
-              <div className="flex items-center gap-1.5 text-slate-500 text-xs font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <div className="flex items-center gap-1 sm:gap-1.5 text-slate-500 text-[10px] sm:text-xs font-medium">
+                <span className="w-1 sm:w-1.5 h-1 sm:h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 Live Signal Mining Enabled
               </div>
-              <Badge variant="outline" className="bg-purple-500/10 text-purple-400 border-purple-500/20 px-2 py-0 rounded text-[9px] font-bold">
+              <Badge variant="outline" className="bg-purple-500/10 text-purple-400 border-purple-500/20 px-1.5 sm:px-2 py-0 rounded text-[7px] sm:text-[9px] font-bold">
                 5X LEVERAGE
               </Badge>
             </div>
-            <p className="text-slate-400 max-w-2xl mt-6 leading-relaxed text-sm">
+            <p className="text-slate-400 max-w-2xl mt-3 sm:mt-6 leading-relaxed text-xs sm:text-sm">
               {strategy?.description || "High-performance automated trading strategy utilizing advanced deep learning models for predictive market analysis."}
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-3 w-full lg:w-auto">
+          <div className="flex flex-wrap gap-2 sm:gap-3 w-full lg:w-auto">
             {!hasAccess ? (
-              <div className="flex items-center gap-3 px-5 h-12 rounded-2xl border border-red-500/20 bg-red-500/5 backdrop-blur-sm">
-                <span className="w-2 h-2 rounded-full bg-red-400" />
-                <span className="text-sm font-bold text-red-400">Preview Mode Only</span>
-                <span className="text-[10px] text-slate-500 font-medium">— Live Signals Locked</span>
+              <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-5 h-9 sm:h-12 rounded-xl sm:rounded-2xl border border-red-500/20 bg-red-500/5 backdrop-blur-sm">
+                <span className="w-1.5 sm:w-2 h-1.5 sm:h-2 rounded-full bg-red-400" />
+                <span className="text-xs sm:text-sm font-bold text-red-400">Preview Only</span>
+                <span className="hidden sm:inline text-[10px] text-slate-500 font-medium">— Live Signals Locked</span>
               </div>
             ) : !subInfo ? (
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="flex items-center gap-3 px-5 h-12 rounded-2xl border border-cyan-500/20 bg-cyan-500/5 backdrop-blur-sm">
-                  <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-                  <span className="text-sm font-bold text-cyan-400">Signal Node Active</span>
-                  <span className="text-[10px] text-slate-500 font-medium">— auto-subscribed with your plan</span>
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-5 h-9 sm:h-12 rounded-xl sm:rounded-2xl border border-cyan-500/20 bg-cyan-500/5 backdrop-blur-sm">
+                  <span className="w-1.5 sm:w-2 h-1.5 sm:h-2 rounded-full bg-cyan-400 animate-pulse" />
+                  <span className="text-xs sm:text-sm font-bold text-cyan-400">Node Active</span>
                 </div>
                 <a
                   href={TG_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-5 h-12 rounded-2xl font-bold text-sm bg-[#229ED9]/10 border border-[#229ED9]/30 text-[#229ED9] hover:bg-[#229ED9]/20 hover:border-[#229ED9]/60 transition-all shadow-lg shadow-[#229ED9]/5"
+                  className="inline-flex items-center gap-1 sm:gap-2 px-3 sm:px-5 h-9 sm:h-12 rounded-xl sm:rounded-2xl font-bold text-xs sm:text-sm bg-[#229ED9]/10 border border-[#229ED9]/30 text-[#229ED9] hover:bg-[#229ED9]/20 hover:border-[#229ED9]/60 transition-all shadow-lg shadow-[#229ED9]/5"
                 >
-                  <Send size={15} className="-rotate-45" />
-                  Join Telegram Alerts
+                  <Send size={12} className="sm:w-[15px] sm:h-[15px] -rotate-45" />
+                  <span className="hidden sm:inline">Join Telegram</span>
                 </a>
               </div>
             ) : (
-              <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto">
-                <div className="grid grid-cols-2 gap-3 flex-grow lg:flex-grow-0">
-                  <div className="bg-emerald-500/5 border border-emerald-500/10 rounded-2xl p-4 text-center min-w-[120px] backdrop-blur-md">
-                    <div className="text-[10px] uppercase font-bold text-slate-500 tracking-widest mb-1.5">Hit Profit</div>
-                    <div className="text-2xl font-black text-emerald-400">{winSigs.length}</div>
-                    <div className="text-[9px] text-slate-500 font-bold uppercase tracking-tighter">Wins</div>
+              <div className="flex flex-wrap items-center gap-3 sm:gap-4 w-full lg:w-auto">
+                <div className="grid grid-cols-2 gap-2 sm:gap-3 flex-grow lg:flex-grow-0">
+                  <div className="bg-emerald-500/5 border border-emerald-500/10 rounded-xl sm:rounded-2xl p-2 sm:p-4 text-center min-w-[80px] sm:min-w-[120px] backdrop-blur-md">
+                    <div className="text-[8px] sm:text-[10px] uppercase font-bold text-slate-500 tracking-widest mb-0.5 sm:mb-1.5">Wins</div>
+                    <div className="text-lg sm:text-2xl font-black text-emerald-400">{winSigs.length}</div>
                   </div>
-                  <div className="bg-rose-500/5 border border-rose-500/10 rounded-2xl p-4 text-center min-w-[120px] backdrop-blur-md">
-                    <div className="text-[10px] uppercase font-bold text-slate-500 tracking-widest mb-1.5">Hit Loss</div>
-                    <div className="text-2xl font-black text-rose-400">{lossSigs.length}</div>
-                    <div className="text-[9px] text-slate-500 font-bold uppercase tracking-tighter">Loss</div>
+                  <div className="bg-rose-500/5 border border-rose-500/10 rounded-xl sm:rounded-2xl p-2 sm:p-4 text-center min-w-[80px] sm:min-w-[120px] backdrop-blur-md">
+                    <div className="text-[8px] sm:text-[10px] uppercase font-bold text-slate-500 tracking-widest mb-0.5 sm:mb-1.5">Loss</div>
+                    <div className="text-lg sm:text-2xl font-black text-rose-400">{lossSigs.length}</div>
                   </div>
                 </div>
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-row gap-1 sm:gap-2">
                   <a
                     href={TG_URL}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-5 h-11 rounded-2xl font-bold text-sm bg-[#229ED9]/10 border border-[#229ED9]/30 text-[#229ED9] hover:bg-[#229ED9]/20 hover:border-[#229ED9]/60 transition-all shadow-lg shadow-[#229ED9]/5"
+                    className="inline-flex items-center gap-1 sm:gap-2 px-3 sm:px-5 h-9 sm:h-11 rounded-xl sm:rounded-2xl font-bold text-[10px] sm:text-sm bg-[#229ED9]/10 border border-[#229ED9]/30 text-[#229ED9] hover:bg-[#229ED9]/20 hover:border-[#229ED9]/60 transition-all shadow-lg shadow-[#229ED9]/5"
                   >
-                    <Send size={15} className="-rotate-45" />
-                    Join Telegram Alerts
+                    <Send size={12} className="sm:w-[15px] sm:h-[15px] -rotate-45" />
+                    <span className="hidden sm:inline">Telegram</span>
                   </a>
                   <Button 
                     variant="outline" 
                     onClick={handleUnsubscribe}
-                    className="border-white/10 hover:bg-rose-500/10 hover:text-rose-400 hover:border-rose-500/20 rounded-2xl h-11 px-6 transition-all text-sm"
+                    className="border-white/10 hover:bg-rose-500/10 hover:text-rose-400 hover:border-rose-500/20 rounded-xl sm:rounded-2xl h-9 sm:h-11 px-3 sm:px-6 transition-all text-[10px] sm:text-sm"
                   >
-                    Disconnect Node
+                    Disconnect
                   </Button>
                 </div>
               </div>
@@ -209,52 +206,52 @@ export default function StrategyDetail() {
           </div>
         </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-12">
-          <Card className="lg:col-span-3 bg-slate-900/40 border-white/5 backdrop-blur-sm p-0 rounded-3xl overflow-hidden shadow-2xl relative">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-6 mb-8 sm:mb-12">
+          <Card className="lg:col-span-3 bg-slate-900/40 border-white/5 backdrop-blur-sm p-0 rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl relative">
             <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 via-transparent to-purple-500/5 pointer-events-none" />
-            <div className="p-6 border-b border-white/5 flex flex-row items-center justify-between relative z-10">
-               <h3 className="text-lg font-bold flex items-center gap-2 text-white">
-                 <Activity className="text-cyan-400" size={20} />
+            <div className="p-3 sm:p-6 border-b border-white/5 flex flex-row items-center justify-between relative z-10">
+               <h3 className="text-sm sm:text-lg font-bold flex items-center gap-1 sm:gap-2 text-white">
+                 <Activity className="text-cyan-400 shrink-0" size={16} />
                  Market Flow Analysis
                </h3>
-               <div className="flex items-center gap-2">
-                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                 <span className="text-[10px] text-slate-400 uppercase font-black tracking-widest">Real-time Stream</span>
+               <div className="flex items-center gap-1 sm:gap-2">
+                 <span className="w-1.5 sm:w-2 h-1.5 sm:h-2 rounded-full bg-emerald-500 animate-pulse" />
+                 <span className="text-[8px] sm:text-[10px] text-slate-400 uppercase font-black tracking-widest">Real-time Stream</span>
                </div>
             </div>
-            <div className="h-[400px] p-0 relative">
+            <div className="h-[280px] sm:h-[400px] p-0 relative">
                <StrategyTradingViewChart symbol={chartSymbol} strategyName={strategy.name} />
             </div>
           </Card>
 
-          <div className="space-y-6">
-            <Card className="bg-slate-900/40 border-white/5 backdrop-blur-sm rounded-3xl p-6">
-              <div className="text-[11px] text-slate-500 uppercase font-bold tracking-widest mb-4">Node Health</div>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center text-sm">
+          <div className="grid grid-cols-2 lg:grid-cols-1 gap-4 sm:gap-6">
+            <Card className="bg-slate-900/40 border-white/5 backdrop-blur-sm rounded-2xl sm:rounded-3xl p-4 sm:p-6">
+              <div className="text-[10px] sm:text-[11px] text-slate-500 uppercase font-bold tracking-widest mb-3 sm:mb-4">Node Health</div>
+              <div className="space-y-2 sm:space-y-4">
+                <div className="flex justify-between items-center text-xs sm:text-sm">
                   <span className="text-slate-400">Latency</span>
                   <span className="text-emerald-400 font-mono font-bold">14ms</span>
                 </div>
-                <div className="flex justify-between items-center text-sm">
+                <div className="flex justify-between items-center text-xs sm:text-sm">
                   <span className="text-slate-400">Signal Sync</span>
                   <span className="text-emerald-400 font-mono font-bold">100%</span>
                 </div>
-                <div className="flex justify-between items-center text-sm">
+                <div className="flex justify-between items-center text-xs sm:text-sm">
                   <span className="text-slate-400">Uptime</span>
-                  <span className="text-cyan-400 font-bold text-[10px] uppercase">99.9%</span>
+                  <span className="text-cyan-400 font-bold text-[9px] sm:text-[10px] uppercase">99.9%</span>
                 </div>
               </div>
             </Card>
 
-            <Card className="bg-slate-900/40 border-white/5 backdrop-blur-sm rounded-3xl p-6 relative overflow-hidden group min-h-[160px] flex flex-col justify-center">
+            <Card className="bg-slate-900/40 border-white/5 backdrop-blur-sm rounded-2xl sm:rounded-3xl p-4 sm:p-6 relative overflow-hidden group min-h-[100px] sm:min-h-[160px] flex flex-col justify-center">
               <div className="absolute -right-4 -bottom-4 opacity-5 group-hover:scale-110 transition-transform duration-700">
-                <TrendingUp size={120} />
+                <TrendingUp size={60} className="sm:w-[120px] sm:h-[120px]" />
               </div>
-              <div className="text-[11px] text-slate-500 uppercase font-bold tracking-widest mb-4">Total Signals</div>
-              <div className="text-4xl font-black tracking-tighter text-white">
+              <div className="text-[10px] sm:text-[11px] text-slate-500 uppercase font-bold tracking-widest mb-2 sm:mb-4">Total Signals</div>
+              <div className="text-2xl sm:text-4xl font-black tracking-tighter text-white">
                 {sigs.length}
               </div>
-              <p className="text-[10px] text-slate-500 mt-2">Historical and active alerts.</p>
+              <p className="text-[8px] sm:text-[10px] text-slate-500 mt-1 sm:mt-2">Historical and active alerts.</p>
             </Card>
           </div>
         </div>

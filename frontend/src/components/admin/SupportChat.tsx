@@ -94,9 +94,9 @@ export default function SupportChat() {
   );
 
   return (
-    <div className="flex h-[700px] glass-card overflow-hidden border-white/5 bg-slate-950/40 backdrop-blur-xl">
+    <div className="flex flex-col md:flex-row max-h-[calc(100vh-12rem)] md:h-[700px] glass-card overflow-hidden border-white/5 bg-slate-950/40 backdrop-blur-xl">
       {/* Sidebar - Chat List */}
-      <div className="w-80 border-r border-white/5 flex flex-col bg-white/[0.02]">
+      <div className="w-full md:w-80 border-b md:border-b-0 md:border-r border-white/5 flex flex-col bg-white/[0.02] max-h-48 md:max-h-full shrink-0">
         <div className="p-6 border-b border-white/5">
           <div className="flex items-center gap-3 mb-6">
             <MessageSquare className="w-5 h-5 text-cyan-400" />
