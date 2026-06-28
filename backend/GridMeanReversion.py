@@ -14,8 +14,8 @@ class GridMeanReversion(IStrategy):
     
     # Profit Target
     minimal_roi = { "0": 0.01 } # 1% profit target for the whole basket
-    stoploss = -0.15            # Safety net: Exit if we lose 15% even after DCA
-    
+    stoploss = -0.35            # Safety net: Exit if we lose 35% after DCA steps
+
     # Never sell at a loss UNLESS stoploss is hit
     exit_profit_only = True
     use_exit_signal = True
@@ -53,14 +53,18 @@ class GridMeanReversion(IStrategy):
 
     def adjust_trade_position(self, trade, current_time, current_rate, current_profit, min_stake, max_stake, current_entry_rate, current_exit_rate, current_entry_profit, trade_count_fi, **kwargs):
         """
-        Aggressive DCA: Buy every 5% drop to pull the average price down.
+        Structured DCA: Buy at progressive 5% drop levels (-5%, -10%, -15%, etc.) to pull average price down.
         """
-        if current_profit > -0.05:
+        count_of_entries = trade.nr_of_successful_entries
+        
+        # Calculate target drop threshold for the NEXT DCA level
+        # Level 1 DCA triggers at -5% (-0.05 * 1), Level 2 DCA at -10% (-0.05 * 2), etc.
+        target_dca_profit = -0.05 * count_of_entries
+
+        if current_profit > target_dca_profit:
             return None
 
-        count_of_entries = trade.nr_of_successful_entries
-
-        # We keep adding the initial stake amount to lower the average price
+        # Add initial stake amount to lower average entry price
         if count_of_entries <= self.max_entry_position_adjustment:
             return trade.stake_amount
 

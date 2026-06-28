@@ -275,80 +275,12 @@ app.post('/live-trading/orders/:id/close', authMiddleware, async (req, res, next
     const orderId = parseInt(req.params.id, 10);
     if (isNaN(orderId)) return res.status(400).json({ error: 'Invalid order id' });
 
-    // Fetch the order from DB and verify it belongs to this user
-    const order = await liveTradeDb.get(
-      "SELECT * FROM live_orders WHERE id = ? AND user_id = ?",
-      [orderId, req.userId]
-    );
-    if (!order) return res.status(404).json({ error: 'Order not found or does not belong to you' });
-
-    const activeStatuses = ['OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED'];
-    if (!activeStatuses.includes((order.status || '').toUpperCase())) {
-      return res.status(400).json({ error: `Order is already ${order.status} — nothing to close` });
+    const result = await liveTradeOrchestrator.closeSingleTrade(orderId, req.userId);
+    if (result.error) {
+      return res.status(400).json({ error: result.error });
     }
 
-    // Get user Binance config
-    const config = await liveTradeDb.getUserBinanceConfig(req.userId);
-    if (!config) return res.status(400).json({ error: 'No Binance API keys configured' });
-
-    const apiKey = decrypt(config.api_key_enc);
-    const apiSecret = decrypt(config.api_sec_enc);
-    if (!apiKey || !apiSecret) return res.status(500).json({ error: 'Could not decrypt Binance credentials' });
-
-    const userExecutor = new BinanceExecutor();
-    await userExecutor.init(apiKey, apiSecret, config.testnet === 1);
-
-    // Get actual live position size from Binance
-    const positions = await userExecutor.getPositions();
-    if (positions.error) return res.status(502).json({ error: `Binance error: ${positions.error}` });
-
-    const cleanSymbol = order.symbol.replace('/', '').replace(':', '');
-    const livePos = Array.isArray(positions)
-      ? positions.find(p => p.symbol === cleanSymbol || p.symbol === order.symbol)
-      : null;
-
-    const positionAmt = livePos ? parseFloat(livePos.positionAmt || 0) : 0;
-
-    if (positionAmt === 0) {
-      // No live position — just mark DB as closed
-      await liveTradeDb.updateOrder(orderId, { status: 'CLOSED' });
-      return res.json({ message: 'No open position found on Binance — order marked as closed in DB' });
-    }
-
-    // Determine close side: if long (positionAmt > 0) → sell; if short → buy
-    const closeSide = positionAmt > 0 ? 'sell' : 'buy';
-    const closeQty = Math.abs(positionAmt);
-
-    const closeResult = await userExecutor.placeOrder(
-      order.symbol,
-      closeSide,
-      order.amount_usdt || 0,
-      'market',
-      null,               // no price — market order
-      order.strategy_id || 1,
-      1,                  // leverage not relevant for close
-      closeQty,           // fixed qty = exact position size
-      true                // reduceOnly = true
-    );
-
-    if (closeResult.error) {
-      return res.status(502).json({ error: `Failed to close on Binance: ${closeResult.error}` });
-    }
-
-    // Update DB status
-    await liveTradeDb.updateOrder(orderId, { status: 'CLOSED' });
-    await liveTradeDb.addLog('info',
-      `Manual close: ${order.symbol} ${closeSide.toUpperCase()} ${closeQty} via market order (Order ID: ${closeResult.id})`,
-      { user_id: req.userId, strategy_id: order.strategy_id }
-    );
-
-    res.json({
-      message: `Trade closed successfully`,
-      symbol: order.symbol,
-      side: closeSide,
-      qty: closeQty,
-      binanceOrderId: closeResult.id,
-    });
+    res.json(result);
   } catch (e) { next(e); }
 });
 
@@ -442,17 +374,30 @@ app.get('/live-trading/dashboard', authMiddleware, async (req, res, next) => {
             if (binancePos && parseFloat(binancePos.positionAmt) !== 0) {
               const markPrice = parseFloat(binancePos.markPrice);
               const entryPrice = parseFloat(binancePos.entryPrice);
-              const leverage = parseFloat(binancePos.leverage);
-              let pnlPct = 0;
-              if (entryPrice > 0) {
-                if (order.side === 'buy') pnlPct = ((markPrice - entryPrice) / entryPrice) * 100 * leverage;
-                else pnlPct = ((entryPrice - markPrice) / entryPrice) * 100 * leverage;
-              }
+              const leverage = parseFloat(binancePos.leverage || 1);
+              const unRealizedProfit = parseFloat(binancePos.unRealizedProfit || 0);
+              const posAmt = Math.abs(parseFloat(binancePos.positionAmt || 0));
+
+              // Real Binance ROE % calculation based on position initial margin
+              const initialMargin = leverage > 0 ? (posAmt * entryPrice) / leverage : 0;
+              const pnlPct = initialMargin > 0 ? (unRealizedProfit / initialMargin) * 100 : 0;
+
+              // Proportional share of PnL for each DCA order entry in DB
+              const activeOrdersForSymbol = orders.filter(ord => {
+                const st = (ord.status || '').toUpperCase();
+                const ordSym = ord.symbol.replace('/', '').replace(':', '');
+                return ['OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED'].includes(st) && ordSym === sym;
+              });
+              const totalActiveQty = activeOrdersForSymbol.reduce((acc, ord) => acc + (parseFloat(ord.amount) || 0), 0);
+              const orderQty = parseFloat(order.amount) || 0;
+              const portion = totalActiveQty > 0 ? (orderQty / totalActiveQty) : (1 / Math.max(1, activeOrdersForSymbol.length));
+              const orderLivePnlUSDT = unRealizedProfit * portion;
+
               return {
                 ...order,
                 currentPrice: markPrice,
                 avg_fill_price: entryPrice,
-                livePnlUSDT: +parseFloat(binancePos.unRealizedProfit || 0).toFixed(4),
+                livePnlUSDT: +orderLivePnlUSDT.toFixed(4),
                 livePnlPct: +pnlPct.toFixed(2),
               };
             }

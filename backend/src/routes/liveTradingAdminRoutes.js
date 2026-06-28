@@ -290,6 +290,20 @@ router.get('/orders/:id', async (req, res) => {
   }
 });
 
+// ─── POST /orders/:id/close ───────────────────────────────────────────────────
+
+router.post('/orders/:id/close', async (req, res) => {
+  try {
+    const orderId = parseInt(req.params.id, 10);
+    if (isNaN(orderId)) return res.status(400).json({ error: 'Invalid order id' });
+    const result = await liveTradeOrchestrator.closeSingleTrade(orderId, null);
+    if (result.error) return res.status(400).json({ error: result.error });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── GET /logs ────────────────────────────────────────────────────────────────
 
 router.get('/logs', async (req, res) => {
@@ -382,19 +396,30 @@ router.get('/dashboard', async (req, res) => {
           if (binancePos && parseFloat(binancePos.positionAmt) !== 0) {
             const markPrice = parseFloat(binancePos.markPrice);
             const entryPrice = parseFloat(binancePos.entryPrice);
-            const leverage = parseFloat(binancePos.leverage);
-            
-            let pnlPct = 0;
-            if (entryPrice > 0) {
-              if (order.side === 'buy') pnlPct = ((markPrice - entryPrice) / entryPrice) * 100 * leverage;
-              else pnlPct = ((entryPrice - markPrice) / entryPrice) * 100 * leverage;
-            }
+            const leverage = parseFloat(binancePos.leverage || 1);
+            const unRealizedProfit = parseFloat(binancePos.unRealizedProfit || 0);
+            const posAmt = Math.abs(parseFloat(binancePos.positionAmt || 0));
+
+            // Real Binance ROE % calculation based on position initial margin
+            const initialMargin = leverage > 0 ? (posAmt * entryPrice) / leverage : 0;
+            const pnlPct = initialMargin > 0 ? (unRealizedProfit / initialMargin) * 100 : 0;
+
+            // Proportional share of PnL for each DCA order entry in DB
+            const activeOrdersForSymbol = orders.filter(ord => {
+              const st = (ord.status || '').toUpperCase();
+              const ordSym = ord.symbol.replace('/', '').replace(':', '');
+              return ['OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED'].includes(st) && ordSym === sym;
+            });
+            const totalActiveQty = activeOrdersForSymbol.reduce((acc, ord) => acc + (parseFloat(ord.amount) || 0), 0);
+            const orderQty = parseFloat(order.amount) || 0;
+            const portion = totalActiveQty > 0 ? (orderQty / totalActiveQty) : (1 / Math.max(1, activeOrdersForSymbol.length));
+            const orderLivePnlUSDT = unRealizedProfit * portion;
 
             return {
               ...order,
               currentPrice: markPrice,
               avg_fill_price: entryPrice, // Sync entry price with Binance
-              livePnlUSDT: +parseFloat(binancePos.unRealizedProfit || 0).toFixed(4),
+              livePnlUSDT: +orderLivePnlUSDT.toFixed(4),
               livePnlPct: +pnlPct.toFixed(2)
             };
           } else {

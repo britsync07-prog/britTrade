@@ -530,42 +530,157 @@ class LiveTradeOrchestrator {
   }
 
   /**
-   * Kill-switch: cancel all open orders + disable live trading globally.
+   * Close a single trade/position on Binance and update DB.
    */
-  async killSwitch() {
-    console.log('[LiveTradeOrchestrator] 🚨 KILL SWITCH ACTIVATED');
-    await liveTradeDb.setGlobalEnabled(false);
+  async closeSingleTrade(orderId, userId = null) {
+    let order;
+    if (userId !== null && userId !== undefined) {
+      order = await liveTradeDb.get("SELECT * FROM live_orders WHERE id = ? AND user_id = ?", [orderId, userId]);
+    } else {
+      order = await liveTradeDb.get("SELECT * FROM live_orders WHERE id = ?", [orderId]);
+    }
 
-    // 1. Cancel global admin orders on both Spot and Futures
-    const resSpot = await binanceExecutor.cancelAllOpenOrders(1);
-    const resFutures = await binanceExecutor.cancelAllOpenOrders(3);
-    const totalEx = (resSpot.count || 0) + (resFutures.count || 0);
+    if (!order) {
+      return { error: 'Order not found' };
+    }
 
-    // 2. Sync DB status for admin orders
-    const adminOrders = await liveTradeDb.all("SELECT * FROM live_orders WHERE UPPER(status) IN ('OPEN', 'NEW', 'PARTIALLY_FILLED') AND user_id IS NULL");
-    let dbCount = 0;
-    for (const o of adminOrders) {
-      // Re-verify specific order cancellation
-      const cr = await binanceExecutor.cancelOrder(o.symbol, o.client_oid || String(o.binance_id).split('.')[0], o.strategy_id);
-      if (cr.success || cr.error === 'NOT_FOUND') {
-        await liveTradeDb.updateOrder(o.id, { status: 'CANCELLED' });
-        dbCount++;
+    const s = (order.status || '').toUpperCase();
+    if (!['OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED'].includes(s)) {
+      return { error: `Order is already ${order.status}` };
+    }
+
+    let executor;
+    const targetUserId = order.user_id;
+    if (!targetUserId) {
+      executor = binanceExecutor;
+    } else {
+      const userCfg = await liveTradeDb.getUserBinanceConfig(targetUserId);
+      if (!userCfg) return { error: 'No Binance API keys configured for this trade owner' };
+      const apiKey = decrypt(userCfg.api_key_enc);
+      const apiSecret = decrypt(userCfg.api_sec_enc);
+      if (!apiKey || !apiSecret) return { error: 'Could not decrypt Binance credentials' };
+      executor = new BinanceExecutor();
+      await executor.init(apiKey, apiSecret, userCfg.testnet === 1);
+    }
+
+    if (!executor.isReady()) {
+      return { error: 'Exchange executor is not ready' };
+    }
+
+    // 1. Cancel resting order on exchange if pending
+    const cleanOid = order.client_oid || String(order.binance_id).split('.')[0];
+    if (cleanOid && s !== 'FILLED') {
+      await executor.cancelOrder(order.symbol, cleanOid, order.strategy_id || 1).catch(() => {});
+    }
+
+    // 2. Check live position on Binance Futures
+    const positions = await executor.getPositions();
+    let positionAmt = 0;
+    if (Array.isArray(positions)) {
+      const cleanSymbol = order.symbol.replace('/', '').replace(':', '');
+      const livePos = positions.find(p => p.symbol === cleanSymbol || p.symbol === order.symbol);
+      if (livePos) {
+        positionAmt = parseFloat(livePos.positionAmt || 0);
       }
     }
 
-    addLog('warn', `Global kill-switch activated — cancelled ${totalEx} orders on exchange and ${dbCount} in DB`).catch(() => {});
-    return { cancelled: totalEx, dbUpdated: dbCount };
+    if (positionAmt !== 0) {
+      const closeSide = positionAmt > 0 ? 'sell' : 'buy';
+      const closeQty = Math.abs(positionAmt);
+      const closeResult = await executor.placeOrder(
+        order.symbol,
+        closeSide,
+        order.amount_usdt || 0,
+        'market',
+        null,
+        order.strategy_id || 1,
+        1,
+        closeQty,
+        true // reduceOnly
+      );
+      if (closeResult.error) {
+        return { error: `Failed to close position on Binance: ${closeResult.error}` };
+      }
+    }
+
+    await liveTradeDb.updateOrder(orderId, { status: 'CLOSED' });
+    liveTradeDb.addLog('info', `Closed trade #${orderId} (${order.symbol}) on Binance`, { user_id: targetUserId, strategy_id: order.strategy_id }).catch(() => {});
+
+    return { success: true, message: `Trade #${orderId} (${order.symbol}) closed successfully` };
   }
+
   /**
-   * User Kill-switch: cancel all open orders and disable live trading for a specific user.
+   * Kill-switch: cancel all open orders + close all open active positions + disable live trading globally.
+   */
+  async killSwitch() {
+    console.log('[LiveTradeOrchestrator] 🚨 GLOBAL KILL SWITCH ACTIVATED');
+    await liveTradeDb.setGlobalEnabled(false);
+
+    let totalCancelledEx = 0;
+    let totalClosedPositions = 0;
+    let dbCount = 0;
+
+    // 1. Cancel global admin resting orders on Spot & Futures
+    const resSpot = await binanceExecutor.cancelAllOpenOrders(1);
+    const resFutures = await binanceExecutor.cancelAllOpenOrders(3);
+    totalCancelledEx = (resSpot.count || 0) + (resFutures.count || 0);
+
+    // 2. Close all active open positions on Binance Futures for admin
+    if (binanceExecutor.isReady()) {
+      try {
+        const positions = await binanceExecutor.getPositions();
+        if (Array.isArray(positions)) {
+          for (const pos of positions) {
+            const amt = parseFloat(pos.positionAmt || 0);
+            if (amt !== 0) {
+              const closeSide = amt > 0 ? 'sell' : 'buy';
+              const closeQty = Math.abs(amt);
+              console.log(`[KillSwitch] Closing active position on Binance: ${pos.symbol} ${closeSide} ${closeQty}`);
+              const closeRes = await binanceExecutor.placeOrder(
+                pos.symbol,
+                closeSide,
+                0,
+                'market',
+                null,
+                3,
+                1,
+                closeQty,
+                true
+              );
+              if (!closeRes.error) {
+                totalClosedPositions++;
+              }
+            }
+          }
+        }
+      } catch (posErr) {
+        console.error('[KillSwitch] Error closing active positions:', posErr.message);
+      }
+    }
+
+    // 3. Sync DB status for admin orders
+    const adminOrders = await liveTradeDb.all("SELECT * FROM live_orders WHERE UPPER(status) IN ('OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED') AND user_id IS NULL");
+    for (const o of adminOrders) {
+      await liveTradeDb.updateOrder(o.id, { status: o.status.toUpperCase() === 'FILLED' ? 'CLOSED' : 'CANCELLED' });
+      dbCount++;
+    }
+
+    liveTradeDb.addLog('warn', `Global kill-switch activated — cancelled ${totalCancelledEx} orders, closed ${totalClosedPositions} positions on exchange, updated ${dbCount} in DB`).catch(() => {});
+    return { cancelled: totalCancelledEx, closedPositions: totalClosedPositions, dbUpdated: dbCount };
+  }
+
+  /**
+   * User Kill-switch: cancel all open orders + close active positions and disable live trading for a specific user.
    */
   async userKillSwitch(userId) {
     console.log(`[LiveTradeOrchestrator] 🚨 USER KILL SWITCH ACTIVATED [User ${userId}]`);
     await liveTradeDb.setUserEnabled(userId, false);
 
-    const userCfg = await liveTradeDb.getUserBinanceConfig(userId);
-    let cancelledCount = 0;
     let cancelledEx = 0;
+    let closedPositions = 0;
+    let dbCount = 0;
+
+    const userCfg = await liveTradeDb.getUserBinanceConfig(userId);
     if (userCfg) {
       const apiKey = decrypt(userCfg.api_key_enc);
       const apiSecret = decrypt(userCfg.api_sec_enc);
@@ -576,20 +691,48 @@ class LiveTradeOrchestrator {
         const resFutures = await userExecutor.cancelAllOpenOrders(3);
         cancelledEx = (resSpot.count || 0) + (resFutures.count || 0);
 
-        // Mark all open DB orders for this user as cancelled, but only if they were confirmed or not found
-        const userOrders = await liveTradeDb.all("SELECT * FROM live_orders WHERE UPPER(status) IN ('OPEN', 'NEW', 'PARTIALLY_FILLED') AND user_id=?", [userId]);
-        for (const o of userOrders) {
-          const cr = await userExecutor.cancelOrder(o.symbol, o.client_oid || String(o.binance_id).split('.')[0], o.strategy_id);
-          if (cr.success || cr.error === 'NOT_FOUND') {
-            await liveTradeDb.updateOrder(o.id, { status: 'CANCELLED' });
-            cancelledCount++;
+        // Close all open positions on Binance Futures for user
+        try {
+          const positions = await userExecutor.getPositions();
+          if (Array.isArray(positions)) {
+            for (const pos of positions) {
+              const amt = parseFloat(pos.positionAmt || 0);
+              if (amt !== 0) {
+                const closeSide = amt > 0 ? 'sell' : 'buy';
+                const closeQty = Math.abs(amt);
+                console.log(`[UserKillSwitch] Closing active position on Binance for user ${userId}: ${pos.symbol} ${closeSide} ${closeQty}`);
+                const closeRes = await userExecutor.placeOrder(
+                  pos.symbol,
+                  closeSide,
+                  0,
+                  'market',
+                  null,
+                  3,
+                  1,
+                  closeQty,
+                  true
+                );
+                if (!closeRes.error) {
+                  closedPositions++;
+                }
+              }
+            }
           }
+        } catch (posErr) {
+          console.error(`[UserKillSwitch] Error closing positions for user ${userId}:`, posErr.message);
+        }
+
+        // Update DB status for user's active orders
+        const userOrders = await liveTradeDb.all("SELECT * FROM live_orders WHERE UPPER(status) IN ('OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED') AND user_id=?", [userId]);
+        for (const o of userOrders) {
+          await liveTradeDb.updateOrder(o.id, { status: o.status.toUpperCase() === 'FILLED' ? 'CLOSED' : 'CANCELLED' });
+          dbCount++;
         }
       }
     }
 
-    liveTradeDb.addLog('warn', `User kill-switch activated — cancelled ${cancelledEx} orders on exchange and ${cancelledCount} in DB`, { user_id: userId }).catch(() => {});
-    return { cancelled: cancelledCount, exchangeCancelled: cancelledEx };
+    liveTradeDb.addLog('warn', `User kill-switch activated — cancelled ${cancelledEx} orders, closed ${closedPositions} positions on exchange, updated ${dbCount} in DB`, { user_id: userId }).catch(() => {});
+    return { cancelled: cancelledEx, closedPositions, dbUpdated: dbCount };
   }
 }
 

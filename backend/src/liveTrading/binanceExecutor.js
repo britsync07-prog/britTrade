@@ -168,7 +168,10 @@ class BinanceExecutor {
         const prec = this._precisions[bSymbol] || { qty: (isFutures ? 3 : 5), price: (isFutures ? 4 : 5) };
         
         let qty = fixedQty;
-        if (!qty && currentPrice > 0) {
+        if (qty != null && qty !== '') {
+          const factor = Math.pow(10, prec.qty);
+          qty = (Math.floor(parseFloat(qty) * factor) / factor).toFixed(prec.qty);
+        } else if (currentPrice > 0) {
           const rawQty = (amountUSDT * leverage) / currentPrice;
           const factor = Math.pow(10, prec.qty);
           const flooredQtyStr = (Math.floor(rawQty * factor) / factor).toFixed(prec.qty);

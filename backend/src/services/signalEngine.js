@@ -115,8 +115,9 @@ class SignalEngine {
             pnl = liquidationThreshold; 
           }
 
-          if (sig.strategyId === 1 && pnl < -5 && (sig.entryCount || 1) <= 10) {
-            const currentEntryCount = sig.entryCount || 1;
+          const currentEntryCount = sig.entryCount || 1;
+          const targetPnlDrop = -5 * currentEntryCount; // Level 1 DCA at -5%, Level 2 DCA at -10%, Level 3 DCA at -15%, etc.
+          if (sig.strategyId === 1 && pnl <= targetPnlDrop && currentEntryCount <= 10) {
             const newEntryCount = currentEntryCount + 1;
             const newAvgPrice = ((sig.price * currentEntryCount) + currentPrice) / newEntryCount;
             const newTp = newAvgPrice * 1.01;
