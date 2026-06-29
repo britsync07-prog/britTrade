@@ -1,5 +1,4 @@
 .idea/
-finger print sighup/
 *.log
 node_modules/
 dist/
