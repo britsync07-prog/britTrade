@@ -78,6 +78,13 @@ router.post('/balance', protect, async (req, res) => {
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
+router.post('/credentials', protect, async (req, res) => {
+  try {
+    const result = await authService.updateCredentials(req.userId, req.body.email, req.body.password);
+    res.json(result);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
 router.post('/purchase', protect, async (req, res) => {
   try {
     const result = await authService.purchasePlan(req.userId, req.body.planId);

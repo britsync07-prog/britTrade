@@ -152,6 +152,19 @@ class AuthService {
     await db.run("UPDATE users SET balance = ? WHERE id = ?", [newBalance, userId]);
     return { balance: newBalance };
   }
+
+  async updateCredentials(userId, email, password) {
+    if (!email || !email.trim()) throw new Error('Email is required');
+    if (!password || password.length < 6) throw new Error('Password must be at least 6 characters');
+
+    const emailNormalized = email.trim().toLowerCase();
+    const existing = await db.get("SELECT id FROM users WHERE email = ? AND id != ?", [emailNormalized, userId]);
+    if (existing) throw new Error('Email already in use by another account');
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await db.run("UPDATE users SET email = ?, password = ? WHERE id = ?", [emailNormalized, hashedPassword, userId]);
+    return { email: emailNormalized };
+  }
 }
 
 module.exports = new AuthService();

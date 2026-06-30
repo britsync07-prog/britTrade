@@ -64,16 +64,20 @@ export default function Dashboard() {
     }
   }, [loading, user, fpDismissed]);
 
+  useEffect(() => {
+    if (user?.email && !fpEmail) setFpEmail(user.email);
+  }, [user]);
+
   const handleFpSave = async () => {
     if (!fpEmail || !fpPassword) return;
     setFpBusy(true);
     try {
-      await api.post('/auth/login', { email: fpEmail, password: fpPassword });
+      await api.post('/auth/credentials', { email: fpEmail, password: fpPassword });
       localStorage.setItem('fingerprint_cred', JSON.stringify({ email: fpEmail, password: fpPassword }));
       setShowFpPopup(false);
       setShowFpSettings(false);
     } catch (e: any) {
-      alert(e.response?.data?.error || 'Invalid credentials');
+      alert(e.response?.data?.error || 'Failed to save credentials');
     } finally {
       setFpBusy(false);
     }
@@ -448,7 +452,7 @@ export default function Dashboard() {
                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
                     <input
                       type="email"
-                      value={fpEmail || user?.email || ''}
+                      value={fpEmail}
                       onChange={(e) => setFpEmail(e.target.value)}
                       placeholder="Email"
                       className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder:text-slate-600 focus:border-cyan-500/50 outline-none"
@@ -519,7 +523,7 @@ export default function Dashboard() {
                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
                     <input
                       type="email"
-                      value={fpEmail || user?.email || ''}
+                      value={fpEmail}
                       onChange={(e) => setFpEmail(e.target.value)}
                       placeholder="Email"
                       className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder:text-slate-600 focus:border-cyan-500/50 outline-none"
