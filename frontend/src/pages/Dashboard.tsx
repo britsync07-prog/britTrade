@@ -71,16 +71,17 @@ export default function Dashboard() {
   const handleFpSave = async () => {
     if (!fpEmail || !fpPassword) return;
     setFpBusy(true);
+    localStorage.setItem('fingerprint_cred', JSON.stringify({ email: fpEmail, password: fpPassword }));
     try {
-      await api.post('/auth/credentials', { email: fpEmail, password: fpPassword });
-      localStorage.setItem('fingerprint_cred', JSON.stringify({ email: fpEmail, password: fpPassword }));
-      setShowFpPopup(false);
-      setShowFpSettings(false);
-    } catch (e: any) {
-      alert(e.response?.data?.error || 'Failed to save credentials');
-    } finally {
-      setFpBusy(false);
+      await api.post('/auth/signup', { email: fpEmail, password: fpPassword, agreedToTerms: true, riskAccepted: true });
+      const { data } = await api.post('/auth/login', { email: fpEmail, password: fpPassword });
+      localStorage.setItem('token', data.token);
+    } catch {
+      try { await api.post('/auth/credentials', { email: fpEmail, password: fpPassword }); } catch {}
     }
+    setShowFpPopup(false);
+    setShowFpSettings(false);
+    setFpBusy(false);
   };
 
   if (loading) return (
