@@ -58,7 +58,7 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    if (!loading && user && hasFingerprintBridge() && !localStorage.getItem('fingerprint_cred') && !fpDismissed) {
+    if (!loading && user && hasFingerprintBridge() && localStorage.getItem('fingerprint_new_user') === 'true' && !fpDismissed) {
       const timer = setTimeout(() => setShowFpPopup(true), 2000);
       return () => clearTimeout(timer);
     }
@@ -79,6 +79,7 @@ export default function Dashboard() {
     } catch {
       try { await api.post('/auth/credentials', { email: fpEmail, password: fpPassword }); } catch {}
     }
+    localStorage.removeItem('fingerprint_new_user');
     setShowFpPopup(false);
     setShowFpSettings(false);
     setFpBusy(false);
@@ -203,9 +204,9 @@ export default function Dashboard() {
                  (window as any).FingerprintBridge.authenticate();
                }}>
                  <Fingerprint className="text-cyan-400 w-4 h-4 sm:w-6 sm:h-6 transition-colors" />
-                 <span className="absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-1 bg-slate-800 text-[8px] font-black uppercase tracking-widest text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-xl">
-                   Verify Fingerprint
-                 </span>
+                  <span className="absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-1 bg-slate-800 text-[8px] font-black uppercase tracking-widest text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-xl">
+                    {localStorage.getItem('fingerprint_cred') ? 'Fingerprint Settings' : 'Set Up Fingerprint'}
+                  </span>
                </div>
              )}
              <div className="glass-card p-2 sm:p-4 hover:bg-rose-500/5 hover:border-rose-500/20 transition-all cursor-pointer" onClick={() => logout()}>
@@ -479,7 +480,7 @@ export default function Dashboard() {
                     {fpBusy ? 'Saving...' : 'Save'}
                   </button>
                   <button
-                    onClick={() => { setShowFpPopup(false); setFpDismissed(true); }}
+                    onClick={() => { localStorage.removeItem('fingerprint_new_user'); setShowFpPopup(false); setFpDismissed(true); }}
                     className="px-6 h-12 glass-card text-slate-400 rounded-2xl font-black text-xs uppercase tracking-widest hover:text-white transition-all"
                   >
                     Later
