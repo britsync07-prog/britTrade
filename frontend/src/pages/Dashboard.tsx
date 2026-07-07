@@ -197,18 +197,18 @@ export default function Dashboard() {
                </div>
              )}
 
-             {hasFingerprintBridge() && (
-               <div className="glass-card p-2 sm:p-4 hover:bg-cyan-500/5 hover:border-cyan-500/20 transition-all cursor-pointer relative group" onClick={() => {
-                 (window as any).FingerprintBridgeOnSuccess = () => setShowFpSettings(true);
-                 (window as any).FingerprintBridgeOnError = (msg: string) => { if (msg !== 'Cancel') alert(msg); };
-                 (window as any).FingerprintBridge.authenticate();
-               }}>
-                 <Fingerprint className="text-cyan-400 w-4 h-4 sm:w-6 sm:h-6 transition-colors" />
-                  <span className="absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-1 bg-slate-800 text-[8px] font-black uppercase tracking-widest text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-xl">
-                    {localStorage.getItem('fingerprint_cred') ? 'Fingerprint Settings' : 'Set Up Fingerprint'}
-                  </span>
-               </div>
-             )}
+             {hasFingerprintBridge() && (localStorage.getItem('fingerprint_cred') || localStorage.getItem('fingerprint_new_user') === 'true') && (
+                <div className="glass-card p-2 sm:p-4 hover:bg-cyan-500/5 hover:border-cyan-500/20 transition-all cursor-pointer relative group" onClick={() => {
+                  (window as any).FingerprintBridgeOnSuccess = () => setShowFpSettings(true);
+                  (window as any).FingerprintBridgeOnError = (msg: string) => { if (msg !== 'Cancel') alert(msg); };
+                  (window as any).FingerprintBridge.authenticate();
+                }}>
+                  <Fingerprint className="text-cyan-400 w-4 h-4 sm:w-6 sm:h-6 transition-colors" />
+                   <span className="absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-1 bg-slate-800 text-[8px] font-black uppercase tracking-widest text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-xl">
+                     {localStorage.getItem('fingerprint_cred') ? 'Fingerprint Settings' : 'Set Up Fingerprint'}
+                   </span>
+                </div>
+              )}
              <div className="glass-card p-2 sm:p-4 hover:bg-rose-500/5 hover:border-rose-500/20 transition-all cursor-pointer" onClick={() => logout()}>
                 <LogOut className="text-slate-500 hover:text-rose-400 w-4 h-4 sm:w-6 sm:h-6 transition-colors" />
              </div>
