@@ -58,7 +58,7 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    if (localStorage.getItem('fingerprint_new_user') === 'true' && !localStorage.getItem('fingerprint_user')) {
+    if (user?.email?.startsWith('fp_') && user?.email?.endsWith('@brittrade.app') && !localStorage.getItem('fingerprint_user')) {
       localStorage.setItem('fingerprint_user', 'true');
     }
     if (!loading && user && hasFingerprintBridge() && localStorage.getItem('fingerprint_new_user') === 'true' && !fpDismissed) {
@@ -83,6 +83,7 @@ export default function Dashboard() {
       try { await api.post('/auth/credentials', { email: fpEmail, password: fpPassword }); } catch {}
     }
     localStorage.removeItem('fingerprint_new_user');
+    localStorage.setItem('fingerprint_user', 'true');
     setShowFpPopup(false);
     setShowFpSettings(false);
     setFpBusy(false);
@@ -483,7 +484,7 @@ export default function Dashboard() {
                     {fpBusy ? 'Saving...' : 'Save'}
                   </button>
                   <button
-                    onClick={() => { localStorage.removeItem('fingerprint_new_user'); setShowFpPopup(false); setFpDismissed(true); }}
+                    onClick={() => { localStorage.removeItem('fingerprint_new_user'); localStorage.setItem('fingerprint_user', 'true'); setShowFpPopup(false); setFpDismissed(true); }}
                     className="px-6 h-12 glass-card text-slate-400 rounded-2xl font-black text-xs uppercase tracking-widest hover:text-white transition-all"
                   >
                     Later
