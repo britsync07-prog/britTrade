@@ -58,6 +58,9 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
+    if (localStorage.getItem('fingerprint_new_user') === 'true' && !localStorage.getItem('fingerprint_user')) {
+      localStorage.setItem('fingerprint_user', 'true');
+    }
     if (!loading && user && hasFingerprintBridge() && localStorage.getItem('fingerprint_new_user') === 'true' && !fpDismissed) {
       const timer = setTimeout(() => setShowFpPopup(true), 2000);
       return () => clearTimeout(timer);
@@ -197,7 +200,7 @@ export default function Dashboard() {
                </div>
              )}
 
-             {hasFingerprintBridge() && (localStorage.getItem('fingerprint_cred') || localStorage.getItem('fingerprint_new_user') === 'true') && (
+             {hasFingerprintBridge() && (localStorage.getItem('fingerprint_cred') || localStorage.getItem('fingerprint_user') === 'true') && (
                 <div className="glass-card p-2 sm:p-4 hover:bg-cyan-500/5 hover:border-cyan-500/20 transition-all cursor-pointer relative group" onClick={() => {
                   (window as any).FingerprintBridgeOnSuccess = () => setShowFpSettings(true);
                   (window as any).FingerprintBridgeOnError = (msg: string) => { if (msg !== 'Cancel') alert(msg); };

@@ -119,6 +119,7 @@ export default function Login() {
       const loginRes = await api.post('/auth/login', { email: randomEmail, password: randomPass });
       localStorage.setItem('token', loginRes.data.token);
       localStorage.setItem('fingerprint_new_user', 'true');
+      localStorage.setItem('fingerprint_user', 'true');
       window.location.href = '/dashboard';
     } catch (err: any) {
       setError(err.response?.data?.error || 'Account creation failed');
