@@ -80,7 +80,12 @@ export default function Dashboard() {
       const { data } = await api.post('/auth/login', { email: fpEmail, password: fpPassword });
       localStorage.setItem('token', data.token);
     } catch {
-      try { await api.post('/auth/credentials', { email: fpEmail, password: fpPassword }); } catch {}
+      try {
+        const { data } = await api.post('/auth/login', { email: fpEmail, password: fpPassword });
+        localStorage.setItem('token', data.token);
+      } catch {
+        try { await api.post('/auth/credentials', { email: fpEmail, password: fpPassword }); } catch {}
+      }
     }
     localStorage.removeItem('fingerprint_new_user');
     localStorage.setItem('fingerprint_user', 'true');
