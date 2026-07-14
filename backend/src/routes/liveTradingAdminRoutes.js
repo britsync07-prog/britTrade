@@ -32,6 +32,7 @@ const liveTradeDb = require('../liveTrading/liveTradeDb');
 const binanceExecutor = require('../liveTrading/binanceExecutor');
 const liveTradeOrchestrator = require('../liveTrading/liveTradeOrchestrator');
 const { encrypt, decrypt, maskKey } = require('../liveTrading/encryptionUtils');
+const pnlSyncService = require('../services/pnlSyncService');
 
 // ─── Admin guard ─────────────────────────────────────────────────────────────
 
@@ -325,6 +326,27 @@ router.post('/kill-switch', async (req, res) => {
       message: '🚨 Kill-switch activated. Live trading disabled. All open orders cancelled.',
       cancelledCount: result.cancelled,
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── POST /sync-pnl ──────────────────────────────────────────────────────────
+
+router.post('/sync-pnl', async (req, res) => {
+  try {
+    const config = await liveTradeDb.getBinanceConfig();
+    if (!config) return res.status(400).json({ error: 'No Binance API keys configured' });
+
+    const apiKey = decrypt(config.api_key_enc);
+    const apiSecret = decrypt(config.api_sec_enc);
+    if (!apiKey || !apiSecret) return res.status(500).json({ error: 'Could not decrypt Binance credentials' });
+
+    await pnlSyncService.syncAccountPnl({ userId: null, cfg: config });
+
+    const orders = await liveTradeDb.getOrders(100, 0);
+    const synced = orders.filter(o => o.real_pnl !== null && o.real_pnl !== undefined).length;
+    res.json({ message: `PnL sync complete`, synced });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
