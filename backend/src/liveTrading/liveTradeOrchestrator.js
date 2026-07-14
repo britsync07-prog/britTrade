@@ -39,6 +39,7 @@ class LiveTradeOrchestrator {
   constructor() {
     this._ready = false;
     this._consecutiveErrors = 0;
+    this._processingLocks = new Map();
   }
 
   // ─── Startup ──────────────────────────────────────────────────────────────
@@ -290,9 +291,32 @@ class LiveTradeOrchestrator {
   }
 
   /**
-   * Helper to process a signal for a specific account (Admin or User).
+   * Serialize entry processing per account+strategy to prevent race conditions
+   * when multiple signals fire in the same batch.
    */
   async _processSignalForAccount(executor, userId, strategyId, signal, stratConfig, testnet) {
+    if (!stratConfig || !stratConfig.enabled) return;
+
+    if (signal.isEntry) {
+      const lockKey = `${userId ?? 'admin'}_${strategyId}`;
+      if (this._processingLocks.get(lockKey)) {
+        return;
+      }
+      this._processingLocks.set(lockKey, true);
+      try {
+        await this._processSignalInternal(executor, userId, strategyId, signal, stratConfig, testnet);
+      } finally {
+        this._processingLocks.delete(lockKey);
+      }
+    } else {
+      await this._processSignalInternal(executor, userId, strategyId, signal, stratConfig, testnet);
+    }
+  }
+
+  /**
+   * Internal helper to process a signal for a specific account (Admin or User).
+   */
+  async _processSignalInternal(executor, userId, strategyId, signal, stratConfig, testnet) {
     if (!stratConfig || !stratConfig.enabled) return;
 
     const { symbol, side, signalId, isEntry } = signal;
@@ -312,14 +336,15 @@ class LiveTradeOrchestrator {
             [strategyId]
           );
 
-      const totalMarginUsed = openOrders.reduce((sum, o) => sum + (o.amount_usdt || 0), 0);
+      const openCount = openOrders.length;
       if (isEntry) {
-        if (openOrders.length >= (stratConfig.max_open_orders || 5)) {
-          log('info', `Skipping entry: Max open orders reached (${openOrders.length}/${stratConfig.max_open_orders || 5}). Close existing trades first.`);
+        if (openCount >= (stratConfig.max_open_orders || 5)) {
+          log('info', `Skipping entry: Max open orders reached (${openCount}/${stratConfig.max_open_orders || 5}). Close existing trades first.`);
           return;
         }
-        if ((totalMarginUsed + stratConfig.trade_amount_usdt) > (stratConfig.allocated_capital || 100)) {
-          log('info', `Skipping entry: Insufficient allocated capital. Used: $${totalMarginUsed.toFixed(2)}, Needed: $${stratConfig.trade_amount_usdt}, Total Allocated: $${stratConfig.allocated_capital || 100}. Increase your allocated capital in settings.`);
+        const projectedUsage = (openCount + 1) * stratConfig.trade_amount_usdt;
+        if (projectedUsage > (stratConfig.allocated_capital || 100)) {
+          log('info', `Skipping entry: Insufficient allocated capital. ${openCount} open trade(s) × $${stratConfig.trade_amount_usdt} = $${(openCount * stratConfig.trade_amount_usdt).toFixed(2)}, + new $${stratConfig.trade_amount_usdt} = $${projectedUsage.toFixed(2)}, Total Allocated: $${stratConfig.allocated_capital || 100}.`);
           return;
         }
       }
