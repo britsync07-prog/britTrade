@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Hero } from './components/ui/animated-hero';
 import RadialOrbitalTimeline from './components/ui/radial-orbital-timeline';
 import { ServiceCarousel, type Service } from './components/ui/services-card';
@@ -329,6 +329,29 @@ function LandingPage({ user }: { user: any }) {
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
+function BackButtonHandler() {
+  const location = useLocation();
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    (async () => {
+      try {
+        const CapApp = (await import('@capacitor/app')).App;
+        unlisten = (await CapApp.addListener('backButton', () => {
+          const path = location.pathname;
+          const isRoot = path === '/' || path === '/login' || path === '/dashboard' || path.startsWith('/dashboard/');
+          if (isRoot) {
+            CapApp.exitApp();
+          } else {
+            window.history.back();
+          }
+        })).remove;
+      } catch {}
+    })();
+    return () => { unlisten?.(); };
+  }, [location.pathname]);
+  return null;
+}
+
 function AppContent() {
   const { user, loading } = useAuth();
   const [maintenanceMode, setMaintenanceMode] = useState<boolean | null>(null);
@@ -358,6 +381,7 @@ function AppContent() {
     <>
       <UpdatePopup />
       <Router>
+        <BackButtonHandler />
         <Routes>
         <Route path="/" element={isMaintenanceActive ? <MaintenancePage /> : <LandingPage user={user} />} />
         <Route 
