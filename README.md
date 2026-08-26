@@ -1,4 +1,10 @@
-﻿# BritTrade AI
+# BritTrade AI
+<div align="center">
+
+![License](https://img.shields.io/github/license/britsync07-prog/britTrade?style=flat-square&label=license&color=06b6d4) ![Language](https://img.shields.io/github/languages/top/britsync07-prog/britTrade?style=flat-square&color=0ea5e9) ![Stars](https://img.shields.io/github/stars/britsync07-prog/britTrade?style=flat-square&color=f59e0b) ![Last commit](https://img.shields.io/github/last-commit/britsync07-prog/britTrade?style=flat-square&color=22c55e) ![Repo size](https://img.shields.io/github/repo-size/britsync07-prog/britTrade?style=flat-square&color=94a3b8)
+
+</div>
+
 > AI-driven crypto signal engine with automated Binance futures execution, paper-to-live parity, and an Android app.
 
 BritTrade is a full-stack crypto trading platform: a React/Vite web app and Express API that generate AI-assisted trading signals, run strategy engines (paper and live), execute real orders on Binance futures via CCXT, and broadcast entries, DCA events, and exits to Telegram. It includes Stripe billing hooks, Google OAuth sign-in, an admin dashboard with live-trading controls and PnL sync, biometric (fingerprint) signup through a companion auth stack, and Capacitor packaging for Android.
