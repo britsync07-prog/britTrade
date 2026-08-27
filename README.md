@@ -197,3 +197,8 @@ Remove these files, ignore them via `.gitignore`, and purge history before publi
 ## License
 
 MIT License — Copyright (c) 2026 Musfiqur Rahman Saimon. See [LICENSE](./LICENSE).
+
+
+---
+Keywords: crypto trading bot, binance futures, ccxt, dca, trading signals, kotlin, capacitor
+
