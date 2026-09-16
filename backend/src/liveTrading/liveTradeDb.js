@@ -156,6 +156,7 @@ async function initLiveTradeDb() {
       filled         REAL DEFAULT 0,
       fee_usdt       REAL DEFAULT 0,
       status         TEXT DEFAULT 'pending',
+      dca_level      INTEGER,
       testnet        INTEGER DEFAULT 1,
       error_msg      TEXT,
       created_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -170,6 +171,9 @@ async function initLiveTradeDb() {
   }
   if (!orderCols.some(c => c.name === 'amount_usdt')) {
     await run('ALTER TABLE live_orders ADD COLUMN amount_usdt REAL');
+  }
+  if (!orderCols.some(c => c.name === 'dca_level')) {
+    await run('ALTER TABLE live_orders ADD COLUMN dca_level INTEGER');
   }
 
   // Execution log
@@ -282,13 +286,13 @@ async function insertOrder(data) {
     user_id = null,
     strategy_id, signal_id, binance_id, client_oid, symbol, side,
     order_type = 'market', amount_usdt, amount, price, avg_fill_price = null, testnet = 1, status = 'open',
-    error_msg = null
+    error_msg = null, dca_level = null
   } = data;
   const res = await run(
     `INSERT INTO live_orders
-      (user_id, strategy_id, signal_id, binance_id, client_oid, symbol, side, order_type, amount_usdt, amount, price, avg_fill_price, testnet, status, error_msg)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    [user_id, strategy_id, signal_id, binance_id, client_oid, symbol, side, order_type, amount_usdt ?? null, amount ?? null, price, avg_fill_price, testnet ? 1 : 0, status, error_msg]
+      (user_id, strategy_id, signal_id, binance_id, client_oid, symbol, side, order_type, amount_usdt, amount, price, avg_fill_price, testnet, status, error_msg, dca_level)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [user_id, strategy_id, signal_id, binance_id, client_oid, symbol, side, order_type, amount_usdt ?? null, amount ?? null, price, avg_fill_price, testnet ? 1 : 0, status, error_msg, dca_level]
   );
   return res.lastID;
 }

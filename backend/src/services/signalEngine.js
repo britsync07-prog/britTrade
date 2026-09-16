@@ -54,10 +54,12 @@ class SignalEngine {
     this._signalListeners.push(fn);
   }
 
-  _fireSignalListeners(signal) {
+  async _fireSignalListeners(signal) {
+    let handled = false;
     for (const fn of this._signalListeners) {
-      try { fn(signal); } catch (_) {}
+      try { handled = (await fn(signal)) || handled; } catch (_) {}
     }
+    return handled;
   }
 
   async fetchOHLC(symbol, interval) {
@@ -123,11 +125,11 @@ class SignalEngine {
             const newTp = newAvgPrice * 1.01;
             const newSl = newAvgPrice * 0.85; 
             
-            await db.run("UPDATE signals SET price = ?, tp = ?, sl = ?, entryCount = ? WHERE id = ?", [newAvgPrice, newTp, newSl, newEntryCount, sig.id]);
-            
             // Fire the actual live trade entry for this DCA action so Binance syncs
+            const dcaPlaced = await this._fireSignalListeners({ strategyId: sig.strategyId, symbol: sig.symbol, side: sig.side, price: currentPrice, tp: newTp, sl: newSl, signalId: sig.id, isEntry: true, isDCA: true, dcaLevel: newEntryCount });
+            if (!dcaPlaced) continue;
             await getTelegramService().broadcastSignal({ strategyId: sig.strategyId, strategyName: 'GridMeanReversion', symbol: sig.symbol, side: sig.side, price: currentPrice, tp: newTp, sl: newSl, stakeAmount: 10, isDCA: true });
-            this._fireSignalListeners({ strategyId: sig.strategyId, symbol: sig.symbol, side: sig.side, price: currentPrice, tp: newTp, sl: newSl, signalId: sig.id, isEntry: true, isDCA: true });
+            await db.run("UPDATE signals SET price = ?, tp = ?, sl = ?, entryCount = ? WHERE id = ?", [newAvgPrice, newTp, newSl, newEntryCount, sig.id]);
             continue; 
           }
 
@@ -161,7 +163,7 @@ class SignalEngine {
             await getTelegramService().broadcastClose(sig.strategyId, sig.symbol, exitSide, currentPrice, pnl, status);
 
             // FIX: Fire live trade hook for exit signal
-            this._fireSignalListeners({ 
+            await this._fireSignalListeners({
               strategyId: sig.strategyId, 
               symbol: sig.symbol, 
               side: exitSide, 
@@ -272,10 +274,10 @@ class SignalEngine {
                  await getTelegramService().broadcastClose(id, symbol, signalSide, currentPrice, pnl, finalStatus);
                  
                  // Fire live trade hook for exit signal using the original signalId
-                 this._fireSignalListeners({ 
-                   strategyId: id, 
-                   symbol, 
-                   side: signalSide, 
+                  await this._fireSignalListeners({
+                    strategyId: id,
+                    symbol,
+                    side: signalSide,
                    price: currentPrice, 
                    signalId: activeSignal.id, 
                    isEntry: false 
@@ -292,7 +294,7 @@ class SignalEngine {
                   await paperTradeService.openPaperTrade(id, result.lastID, symbol, signalSide, currentPrice, leverage);
                   await getTelegramService().broadcastSignal({ strategyId: id, strategyName: strategy.name, symbol, side: signalSide, price: currentPrice, tp: initialTp, sl: initialSl, stakeAmount: 10 });
                   // Fire live trade hook (non-blocking)
-                  this._fireSignalListeners({ strategyId: id, symbol, side: signalSide, price: currentPrice, tp: initialTp, sl: initialSl, signalId: result.lastID, isEntry: true });
+                  await this._fireSignalListeners({ strategyId: id, symbol, side: signalSide, price: currentPrice, tp: initialTp, sl: initialSl, signalId: result.lastID, isEntry: true });
                }
             }
           } else delete this.lastSignals[`${id}_${symbol}`];
