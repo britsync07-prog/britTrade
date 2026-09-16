@@ -3,3 +3,18 @@
 node_modules/
 dist/
 .DS_Store
+
+# Runtime databases and local state
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+*.bak
+*.bak_*
+*.corrupt_*
+
+# Local secrets/config
+.env
+.env.*
+!.env.example
