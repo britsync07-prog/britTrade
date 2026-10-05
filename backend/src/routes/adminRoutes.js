@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const authMiddleware = require('./authMiddleware');
+const planMaintenanceService = require('../services/planMaintenanceService');
 
 // Admin Check Middleware
 const adminMiddleware = (req, res, next) => {
@@ -106,7 +107,7 @@ router.post('/users/:id/purchases', authMiddleware, adminMiddleware, async (req,
     
     // Delegate to authService which handles both purchase recording AND strategy auto-subscription
     const authService = require('../services/authService');
-    await authService.purchasePlan(userId, normalizedPlanId);
+    await authService.purchasePlan(userId, normalizedPlanId, null, { allowMaintenance: true });
     
     res.json({ message: 'Plan granted and strategies subscribed' });
   } catch (e) {
@@ -149,6 +150,24 @@ router.get('/stats', authMiddleware, adminMiddleware, async (req, res) => {
 });
 
 // --- Marketing Management (Events & Offers) ---
+
+// Plan maintenance
+router.get('/marketing/plan-maintenance', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    res.json(await planMaintenanceService.getAll());
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.put('/marketing/plan-maintenance/:planId', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const result = await planMaintenanceService.setMaintenance(req.params.planId, !!req.body.maintenance);
+    res.json(result);
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
 
 // Events
 router.get('/marketing/events', authMiddleware, adminMiddleware, async (req, res) => {

@@ -14,6 +14,7 @@ const db = require('./db');
 
 const authService = require('./services/authService');
 const strategyService = require('./services/strategyService');
+const planMaintenanceService = require('./services/planMaintenanceService');
 
 const telegramService = require('./services/telegramService');
 const { protect: authMiddleware } = require('./middleware/authMiddleware');
@@ -521,12 +522,20 @@ app.get('/public/version', (req, res) => {
   });
 });
 
+app.get('/public/plan-maintenance', async (req, res, next) => {
+  try {
+    res.json(await planMaintenanceService.getAll());
+  } catch (e) { next(e); }
+});
+
 app.get('/public/strategies/performance', async (req, res, next) => {
   try {
     const strategies = await strategyService.getAll();
     const performance = strategies.map(s => ({
       id: s.id,
       name: s.name,
+      profMonthly: s.profMonthly,
+      pnlMonthly: s.pnlMonthly,
       prof24h: s.prof24h,
       pnl24h: s.pnl24h,
       winRate: s.winRate

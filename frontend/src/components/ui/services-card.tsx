@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { motion, useInView } from "framer-motion";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Shadcn UI Carousel Imports
@@ -221,6 +221,7 @@ export interface Service {
   dailyReturn?: string; // e.g. "+$0.00"
   isSimulated?: boolean;
   discountPercentage?: number;
+  maintenance?: boolean;
 }
 
 // Sub-component for individual cards
@@ -253,9 +254,16 @@ const ServiceCard = ({
         service.gradient
       )}
     >
+      {service.maintenance && (
+        <div className="absolute top-8 left-8 z-20 inline-flex items-center gap-2 rounded-full border border-amber-300/30 bg-black/30 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-amber-200 backdrop-blur-md">
+          <Wrench className="h-3 w-3" />
+          Under Maintenance
+        </div>
+      )}
+
       {/* Card Content */}
       <div className="z-10 flex flex-col items-start text-left">
-        <span className="mb-8 text-sm font-mono text-white/50">
+        <span className={cn("mb-8 text-sm font-mono text-white/50", service.maintenance && "mt-10")}>
           ( {service.number} )
         </span>
         <service.icon className="mb-auto h-12 w-12 text-white" />
@@ -273,10 +281,10 @@ const ServiceCard = ({
               <span className="text-3xl font-black text-emerald-400 drop-shadow-[0_0_15px_rgba(52,211,153,0.3)]">
                 {service.dailyReturn}
               </span>
-              <span className="text-[10px] font-medium text-white/40 uppercase">24h Return</span>
+              <span className="text-[10px] font-medium text-white/40 uppercase">1 Month Profit</span>
             </div>
             <p className="text-[9px] text-white/30 mt-1 italic">
-              Based on daily $100 paper trades
+              Based on last 30 days of $100 paper trades
             </p>
           </div>
         )}
@@ -305,10 +313,16 @@ const ServiceCard = ({
             </div>
           )}
           <Button 
-            className="w-full bg-white text-black hover:bg-white/90 font-bold py-6 rounded-xl"
+            className={cn(
+              "w-full font-bold py-6 rounded-xl",
+              service.maintenance
+                ? "cursor-not-allowed border border-white/10 bg-white/10 text-white/45 backdrop-blur-md hover:bg-white/10"
+                : "bg-white text-black hover:bg-white/90"
+            )}
+            disabled={service.maintenance}
             onClick={() => service.planId && onPurchase?.(service.planId)}
           >
-            {service.planId ? 'Purchase Now' : 'Get Started'}
+            {service.maintenance ? 'Under Maintenance' : service.planId ? 'Purchase Now' : 'Get Started'}
           </Button>
         </div>
       </div>

@@ -1,9 +1,9 @@
 import { TrendingUp, Activity, BarChart3, Target } from 'lucide-react';
 
 export function PerformanceTicker({ data = [] }: { data?: any[] }) {
-  const combinedYield = data.reduce((acc, s) => acc + parseFloat(s.pnl24h || 0), 0);
-  const avgProfit = data.length > 0 
-    ? data.reduce((acc, s) => acc + parseFloat(s.prof24h || 0), 0) / data.length 
+  const combinedYield = data.reduce((acc, s) => acc + parseFloat(s.pnlMonthly ?? s.pnl24h ?? 0), 0);
+  const avgProfit = data.length > 0
+    ? data.reduce((acc, s) => acc + parseFloat(s.profMonthly ?? s.prof24h ?? 0), 0) / data.length
     : 0;
   const avgWinRate = data.length > 0 
     ? data.reduce((acc, s) => acc + parseFloat(s.winRate || 0), 0) / data.length 
@@ -11,7 +11,7 @@ export function PerformanceTicker({ data = [] }: { data?: any[] }) {
 
   const stats = [
     { 
-      label: "Combined 24h Yield", 
+      label: "Combined 1 Month Profit",
       value: `${combinedYield >= 0 ? '+' : ''}${combinedYield.toFixed(2)}%`, 
       icon: TrendingUp, 
       color: "text-emerald-400" 

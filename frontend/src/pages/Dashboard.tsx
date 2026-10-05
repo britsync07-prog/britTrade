@@ -342,9 +342,9 @@ export default function Dashboard() {
                            <div className={`text-[10px] sm:text-xs font-bold ${strat.risk === 'High' ? 'text-red-400' : 'text-cyan-400'}`}>{strat.risk || 'Medium'}</div>
                         </div>
                         <div className="border-x border-white/5 px-1 sm:px-2">
-                           <div className="text-[8px] sm:text-[10px] text-gray-500 uppercase tracking-wider font-semibold">24H RETURN</div>
-                           <div className={`text-[10px] sm:text-xs font-bold ${Number(strat.pnl24h || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                              {Number(strat.pnl24h || 0) >= 0 ? '+' : ''}{Number(strat.pnl24h || 0).toFixed(2)}%
+                           <div className="text-[8px] sm:text-[10px] text-gray-500 uppercase tracking-wider font-semibold">1M RETURN</div>
+                           <div className={`text-[10px] sm:text-xs font-bold ${Number(strat.pnlMonthly ?? strat.pnl24h ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                              {Number(strat.pnlMonthly ?? strat.pnl24h ?? 0) >= 0 ? '+' : ''}{Number(strat.pnlMonthly ?? strat.pnl24h ?? 0).toFixed(2)}%
                            </div>
                         </div>
                         <div className="text-right">
@@ -355,11 +355,11 @@ export default function Dashboard() {
 
                      <div className="mb-5 sm:mb-8 p-3 sm:p-4 rounded-xl bg-white/5 border border-white/10 flex items-center justify-between group-hover:border-white/20 transition-all">
                         <div className="pr-2">
-                           <div className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5 sm:mb-1">Return from Daily $100</div>
-                           <div className="text-[9px] sm:text-xs text-slate-500 font-medium">Based on 24h simulated paper trades</div>
+                           <div className="text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5 sm:mb-1">Return from $100</div>
+                           <div className="text-[9px] sm:text-xs text-slate-500 font-medium">Based on last 30 days of simulated paper trades</div>
                         </div>
-                        <div className={`text-base sm:text-xl font-black tracking-tighter whitespace-nowrap ${Number(strat.prof24h || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                           {Number(strat.prof24h || 0) >= 0 ? '+$' : '-$'}{Math.abs(Number(strat.prof24h || 0)).toFixed(2)}
+                        <div className={`text-base sm:text-xl font-black tracking-tighter whitespace-nowrap ${Number(strat.profMonthly ?? strat.prof24h ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                           {Number(strat.profMonthly ?? strat.prof24h ?? 0) >= 0 ? '+$' : '-$'}{Math.abs(Number(strat.profMonthly ?? strat.prof24h ?? 0)).toFixed(2)}
                         </div>
                      </div>
                   </div>

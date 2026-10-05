@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../db');
+const planMaintenanceService = require('./planMaintenanceService');
 
 const SECRET = process.env.JWT_SECRET || 'your_super_secret_key';
 
@@ -109,21 +110,25 @@ class AuthService {
     return user;
   }
 
-  async purchasePlan(userId, planId, expiresAt = null) {
+  async purchasePlan(userId, planId, expiresAt = null, options = {}) {
     try {
-      if (!planId) throw new Error('Plan ID is required');
+      const normalizedPlanId = planMaintenanceService.normalizePlanId(planId);
+      if (!normalizedPlanId) throw new Error('Plan ID is required');
+      if (!options.allowMaintenance && await planMaintenanceService.isInMaintenance(normalizedPlanId)) {
+        throw new Error('This plan is currently under maintenance');
+      }
       
       // Check if already purchased/active
       const now = new Date().toISOString();
       const existing = await db.get(
         "SELECT id FROM purchases WHERE userId = ? AND planId = ? AND (expiresAt IS NULL OR expiresAt > ?)", 
-        [userId, planId, now]
+        [userId, normalizedPlanId, now]
       );
       if (existing) return { status: 'Already active' };
 
       await db.run(
         "INSERT INTO purchases (userId, planId, expiresAt) VALUES (?, ?, ?)", 
-        [userId, planId, expiresAt]
+        [userId, normalizedPlanId, expiresAt]
       );
       
       // Automatic subscription logic
@@ -135,12 +140,12 @@ class AuthService {
         'bundle': [1, 2, 3]
       };
 
-      const stratIds = planToStrat[planId] || [];
+      const stratIds = planToStrat[normalizedPlanId] || [];
       for (const sid of stratIds) {
         await strategyService.subscribe(userId, sid, true);
       }
 
-      return { status: 'Success', planId };
+      return { status: 'Success', planId: normalizedPlanId };
     } catch (error) {
       console.error(`[AuthService] purchasePlan failed for user ${userId}, plan ${planId}:`, error);
       throw error;

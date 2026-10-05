@@ -3,6 +3,7 @@ const router = express.Router();
 const authService = require('../services/authService');
 const authMiddleware = require('./authMiddleware');
 const db = require('../db');
+const planMaintenanceService = require('../services/planMaintenanceService');
 
 // Get active offers
 router.get('/offers', async (req, res) => {
@@ -33,7 +34,7 @@ const getStripe = () => {
 // Create a Checkout Session
 router.post('/create-session', authMiddleware, express.json(), async (req, res) => {
   try {
-    const { planId } = req.body;
+    const planId = planMaintenanceService.normalizePlanId(req.body.planId);
     
     const plans = {
       'low_risk': { name: 'Low Risk Strategy', amount: 2500 }, // $25.00
@@ -45,6 +46,9 @@ router.post('/create-session', authMiddleware, express.json(), async (req, res) 
     const plan = plans[planId];
     if (!plan) {
       return res.status(400).json({ error: 'Invalid plan selected' });
+    }
+    if (await planMaintenanceService.isInMaintenance(planId)) {
+      return res.status(400).json({ error: 'This plan is currently under maintenance' });
     }
 
     // Check for active offers for this plan
@@ -121,7 +125,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     console.log(`[Stripe Webhook] Payment successful for User ${userId}, Plan ${planId}`);
     
     try {
-      await authService.purchasePlan(Number(userId), planId);
+      await authService.purchasePlan(Number(userId), planId, null, { allowMaintenance: true });
     } catch (e) {
       console.error('[Webhook Error] Failed to grant access:', e.message);
       // Stripe will retry if we return 500, but since the payment was successful, 

@@ -11,7 +11,10 @@ import {
   MessageSquare,
   Gift,
   Tag,
-  Radio
+  Radio,
+  Wrench,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
@@ -38,6 +41,7 @@ export default function AdminDashboard() {
   const [filter, setFilter] = useState<'all' | 'premium' | 'trial'>('all');
   const [activeTab, setActiveTab] = useState<'operators' | 'support' | 'marketing' | 'livetrading'>('livetrading');
   const [marketingData, setMarketingData] = useState<{ events: any[], offers: any[] }>({ events: [], offers: [] });
+  const [planMaintenance, setPlanMaintenance] = useState<Record<string, boolean>>({});
   const [binanceStats, setBinanceStats] = useState({ balance: 0, pnl: 0 });
 
   useEffect(() => {
@@ -61,11 +65,18 @@ export default function AdminDashboard() {
 
   const fetchMarketing = async () => {
     try {
-      const [eventsRes, offersRes] = await Promise.all([
+      const [eventsRes, offersRes, maintenanceRes] = await Promise.all([
         api.get('/admin/marketing/events'),
-        api.get('/admin/marketing/offers')
+        api.get('/admin/marketing/offers'),
+        api.get('/admin/marketing/plan-maintenance')
       ]);
       setMarketingData({ events: eventsRes.data, offers: offersRes.data });
+      setPlanMaintenance(
+        maintenanceRes.data.reduce((acc: Record<string, boolean>, item: any) => {
+          acc[item.planId] = !!item.maintenance;
+          return acc;
+        }, {})
+      );
     } catch (e) {
       console.error('Failed to fetch marketing data', e);
     }
@@ -149,11 +160,21 @@ export default function AdminDashboard() {
     }
   };
 
+  const handlePlanMaintenanceToggle = async (planId: string) => {
+    const maintenance = !planMaintenance[planId];
+    try {
+      await api.put(`/admin/marketing/plan-maintenance/${planId}`, { maintenance });
+      setPlanMaintenance(prev => ({ ...prev, [planId]: maintenance }));
+    } catch (e: any) {
+      alert(e.response?.data?.error || 'Failed to update plan maintenance');
+    }
+  };
+
   const plans = [
-    { id: 'low_risk', name: '$25' },
-    { id: 'medium_risk', name: '$20' },
-    { id: 'high_risk', name: '$15' },
-    { id: 'bundle', name: '$50' },
+    { id: 'low_risk', label: 'Low Risk Strategy', name: '$25' },
+    { id: 'medium_risk', label: 'Medium Risk Strategy', name: '$20' },
+    { id: 'high_risk', label: 'High Risk Strategy', name: '$15' },
+    { id: 'bundle', label: 'All Strategies Bundle', name: '$50' },
   ];
 
   if (loading && !users.length) {
@@ -258,6 +279,53 @@ export default function AdminDashboard() {
             animate={{ opacity: 1, y: 0 }}
             className="space-y-12"
           >
+            {/* Plan Maintenance Section */}
+            <div className="glass-card overflow-hidden border-white/5">
+              <div className="p-8 border-b border-white/5 bg-white/[0.01]">
+                <h2 className="text-2xl font-black tracking-tight text-white flex items-center gap-3">
+                  <Wrench className="text-amber-400" />
+                  Plan Maintenance
+                </h2>
+                <p className="text-slate-500 text-sm font-medium">Pause purchases while keeping plan cards visible on the landing page.</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-white/5">
+                {plans.map(plan => {
+                  const isMaintenance = !!planMaintenance[plan.id];
+                  const Icon = isMaintenance ? EyeOff : Eye;
+                  return (
+                    <button
+                      key={plan.id}
+                      onClick={() => handlePlanMaintenanceToggle(plan.id)}
+                      className={`p-6 text-left transition-all ${
+                        isMaintenance
+                          ? 'bg-amber-500/10 hover:bg-amber-500/15'
+                          : 'bg-white/[0.01] hover:bg-white/[0.03]'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-4 mb-6">
+                        <div>
+                          <div className="text-sm font-black text-white">{plan.label}</div>
+                          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mt-1">{plan.id.replace('_', ' ')}</div>
+                        </div>
+                        <div className={`p-2 rounded-xl border ${
+                          isMaintenance
+                            ? 'bg-amber-500/10 text-amber-300 border-amber-400/20'
+                            : 'bg-emerald-500/10 text-emerald-300 border-emerald-400/20'
+                        }`}>
+                          <Icon className="w-4 h-4" />
+                        </div>
+                      </div>
+                      <div className={`text-[10px] font-black uppercase tracking-widest ${
+                        isMaintenance ? 'text-amber-300' : 'text-emerald-300'
+                      }`}>
+                        {isMaintenance ? 'Under Maintenance' : 'Purchases Active'}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Events Section */}
             <div className="glass-card overflow-hidden border-white/5">
               <div className="p-8 border-b border-white/5 flex justify-between items-center bg-white/[0.01]">

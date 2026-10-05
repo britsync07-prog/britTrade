@@ -128,8 +128,15 @@ function LandingPage({ user }: { user: any }) {
   useEffect(() => {
     const fetchPerf = async () => {
       try {
-        const { data } = await api.get('/public/strategies/performance');
+        const [{ data }, { data: maintenanceRows }] = await Promise.all([
+          api.get('/public/strategies/performance'),
+          api.get('/public/plan-maintenance')
+        ]);
         setPerfData(data);
+        const maintenanceByPlan = maintenanceRows.reduce((acc: Record<string, boolean>, item: any) => {
+          acc[item.planId] = !!item.maintenance;
+          return acc;
+        }, {});
         
         // Strategy Name Mapping
         const nameMap: Record<string, string> = {
@@ -144,23 +151,26 @@ function LandingPage({ user }: { user: any }) {
           const match = data.find((p: any) => p.name === backendName);
           
           if (match) {
+            const monthlyProfit = match.profMonthly ?? match.prof24h ?? '0.00';
             return { 
               ...s, 
-              dailyReturn: `${parseFloat(match.prof24h) >= 0 ? '+' : ''}$${match.prof24h}` 
+              maintenance: !!maintenanceByPlan[s.planId || ''],
+              dailyReturn: `${parseFloat(monthlyProfit) >= 0 ? '+' : ''}$${monthlyProfit}`
             };
           }
           
           // Special handling for Bundle (combined profit)
         // Special handling for Bundle (combined profit)
         if (s.planId === 'bundle') {
-          const totalProf = data.reduce((acc: number, p: any) => acc + parseFloat(p.prof24h || 0), 0);
+          const totalProf = data.reduce((acc: number, p: any) => acc + parseFloat(p.profMonthly ?? p.prof24h ?? 0), 0);
           return { 
             ...s, 
+            maintenance: !!maintenanceByPlan[s.planId],
             dailyReturn: `${totalProf >= 0 ? '+' : ''}$${totalProf.toFixed(2)}` 
           };
         }
 
-        return s;
+        return { ...s, maintenance: !!maintenanceByPlan[s.planId || ''] };
       });
 
       // Apply offers on top of updated performance data
@@ -178,7 +188,7 @@ function LandingPage({ user }: { user: any }) {
               discountPercentage: offer.discountPercentage
             };
           }
-          return s;
+          return { ...s, maintenance: !!maintenanceByPlan[s.planId || ''] };
         });
         setLocalServices(finalized);
         } catch (e) {
@@ -228,6 +238,10 @@ function LandingPage({ user }: { user: any }) {
       }
     } catch (e: any) {
       console.error('Stripe session failed, trying direct purchase', e);
+      if (e.response?.data?.error === 'This plan is currently under maintenance') {
+        alert(e.response.data.error);
+        return;
+      }
       try {
         await api.post('/auth/purchase', { planId });
         window.location.href = '/dashboard?purchased=true';
@@ -279,7 +293,7 @@ function LandingPage({ user }: { user: any }) {
             <p className="text-slate-400 max-w-2xl mx-auto px-2">
               Select a signal package tailored to your risk tolerance and trading goals.
               <br />
-              <span className="text-[10px] uppercase tracking-widest text-cyan-400/60 font-bold">Based on 24h simulated paper trades</span>
+              <span className="text-[10px] uppercase tracking-widest text-cyan-400/60 font-bold">Based on 1 month simulated paper trades</span>
             </p>
           </div>
           <ServiceCarousel services={localServices} onPurchase={handlePurchase} />

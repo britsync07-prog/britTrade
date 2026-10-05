@@ -216,6 +216,12 @@ const initDb = async () => {
     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
+  await run(`CREATE TABLE IF NOT EXISTS plan_maintenance (
+    planId TEXT PRIMARY KEY,
+    maintenance INTEGER DEFAULT 0,
+    updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
   await run(`CREATE TABLE IF NOT EXISTS notes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     userId INTEGER,

@@ -54,13 +54,11 @@ class StrategyService {
       await paperTradeService.checkAndReset(s.id);
 
       // 1. Get raw signals
-      const budget = await db.get("SELECT lastReset FROM strategy_daily_budgets WHERE strategyId = ?", [s.id]);
-      const lastReset = budget ? budget.lastReset : new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-
       const allSignals = await db.query("SELECT pnl, status FROM signals WHERE strategyId = ? AND LOWER(side) IN ('buy', 'long', 'short')", [s.id]);
-      const signals24h = await db.query(
+      const monthStart = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const signalsMonthly = await db.query(
         "SELECT pnl, status, side, price, symbol FROM signals WHERE strategyId = ? AND (timestamp >= ? OR status = 'active') AND LOWER(side) IN ('buy', 'long', 'short')",
-        [s.id, lastReset]
+        [s.id, monthStart]
       );
 
       const isClosed = (sig) => ['closed', 'completed', 'tp_hit', 'sl_hit'].includes(sig.status);
@@ -72,11 +70,11 @@ class StrategyService {
       // 2. Calculate Realized PnL from signals (Since Reset)
       // sig.pnl is the % return of the trade. Since each trade is $10 (10% of $100 budget),
       // the contribution to the total $100 budget is (sig.pnl / 10).
-      const realizedSignals = signals24h.filter(isClosed);
-      const realizedDailyUsd = realizedSignals.reduce((acc, sig) => acc + (parseFloat(sig.pnl || 0) / 10), 0);
+      const realizedSignals = signalsMonthly.filter(isClosed);
+      const realizedMonthlyUsd = realizedSignals.reduce((acc, sig) => acc + (parseFloat(sig.pnl || 0) / 10), 0);
 
       // 3. Unrealized PnL (for active signals)
-      const activeSignals = signals24h.filter(sig => sig.status === 'active');
+      const activeSignals = signalsMonthly.filter(sig => sig.status === 'active');
       let unrealizedPnlUsd = 0;
       
       for (const sig of activeSignals) {
@@ -94,10 +92,12 @@ class StrategyService {
         }
       }
 
-      const total24hProfitUsd = realizedDailyUsd + unrealizedPnlUsd;
+      const totalMonthlyProfitUsd = realizedMonthlyUsd + unrealizedPnlUsd;
 
-      s.pnl24h = total24hProfitUsd.toFixed(2); 
-      s.prof24h = total24hProfitUsd.toFixed(2);
+      s.pnlMonthly = totalMonthlyProfitUsd.toFixed(2);
+      s.profMonthly = totalMonthlyProfitUsd.toFixed(2);
+      s.pnl24h = totalMonthlyProfitUsd.toFixed(2);
+      s.prof24h = totalMonthlyProfitUsd.toFixed(2);
       s.signalCount = allSignals.length;
       s.activeSignalCount = activeSignals.length;
       s.closedSignalCount = closed.length;
