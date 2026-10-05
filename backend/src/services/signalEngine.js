@@ -289,10 +289,10 @@ class SignalEngine {
                if (isEntry) {
                   const leverage = 5;
                   // Start Paper Trade for this signal
-                  await paperTradeService.openPaperTrade(id, result.lastID, symbol, signalSide, currentPrice, leverage);
-                  await getTelegramService().broadcastSignal({ strategyId: id, strategyName: strategy.name, symbol, side: signalSide, price: currentPrice, tp: initialTp, sl: initialSl, stakeAmount: 10 });
-                  // Fire live trade hook (non-blocking)
-                  this._fireSignalListeners({ strategyId: id, symbol, side: signalSide, price: currentPrice, tp: initialTp, sl: initialSl, signalId: result.lastID, isEntry: true });
+                   await paperTradeService.openPaperTrade(id, result.id, symbol, signalSide, currentPrice, leverage);
+                   await getTelegramService().broadcastSignal({ strategyId: id, strategyName: strategy.name, symbol, side: signalSide, price: currentPrice, tp: initialTp, sl: initialSl, stakeAmount: 10 });
+                   // Fire live trade hook (non-blocking)
+                   this._fireSignalListeners({ strategyId: id, symbol, side: signalSide, price: currentPrice, tp: initialTp, sl: initialSl, signalId: result.id, isEntry: true });
                }
             }
           } else delete this.lastSignals[`${id}_${symbol}`];

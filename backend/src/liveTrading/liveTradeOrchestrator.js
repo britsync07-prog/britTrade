@@ -55,15 +55,11 @@ class LiveTradeOrchestrator {
 
       // Start the background watcher for stale limit orders
       this._startOrderWatcher();
+      this._startReconciliationWatcher();
 
       // Register as listener on the signal engine (lazy require avoids circular deps)
       const signalEngine = require('../services/signalEngine');
-      signalEngine.registerSignalListener((signal) => {
-        // Non-blocking: fire and forget with error guard
-        this.handleSignal(signal).catch(err =>
-          console.error('[LiveTradeOrchestrator] handleSignal error:', err.message)
-        );
-      });
+      signalEngine.registerSignalListener((signal) => this.handleSignal(signal));
 
       this._ready = true;
       console.log('[LiveTradeOrchestrator] ✅ Ready — listening for signals');
@@ -161,6 +157,128 @@ class LiveTradeOrchestrator {
     }, 30000); // Check every 30 seconds
   }
 
+  _startReconciliationWatcher() {
+    setInterval(async () => {
+      try {
+        if (!this._ready) return;
+
+        const adminCfg = await liveTradeDb.getBinanceConfig();
+        if (adminCfg && adminCfg.enabled === 1 && binanceExecutor.isReady()) {
+          await this._reconcileAccount(binanceExecutor, null, adminCfg.testnet === 1);
+        }
+
+        const userCfgs = await liveTradeDb.getEnabledUserBinanceConfigs();
+        for (const userCfg of userCfgs) {
+          const apiKey = decrypt(userCfg.api_key_enc);
+          const apiSecret = decrypt(userCfg.api_sec_enc);
+          if (!apiKey || !apiSecret) continue;
+
+          const userExecutor = new BinanceExecutor();
+          await userExecutor.init(apiKey, apiSecret, userCfg.testnet === 1);
+          await this._reconcileAccount(userExecutor, userCfg.user_id, userCfg.testnet === 1);
+        }
+      } catch (err) {
+        console.error('[Reconcile] Error:', err.message);
+      }
+    }, 60000);
+  }
+
+  async _alertAdmins(message) {
+    try {
+      const telegramService = require('../services/telegramService');
+      const admins = await db.query("SELECT telegramId FROM users WHERE role = 'admin' AND status = 'active' AND telegramId IS NOT NULL");
+      for (const admin of admins) {
+        await telegramService.sendDirectNotification(admin.telegramId, message);
+      }
+    } catch (err) {
+      console.error('[Reconcile] Admin alert failed:', err.message);
+    }
+  }
+
+  _orderKey(order) {
+    return String(order.client_oid || order.clientOrderId || order.origClientOrderId || order.binance_id || order.orderId || '').split('.')[0];
+  }
+
+  _isTerminalStatus(status) {
+    return ['CLOSED', 'CANCELLED', 'CANCELED', 'ERROR', 'REJECTED', 'EXPIRED', 'DESYNC'].includes((status || '').toUpperCase());
+  }
+
+  async _cancelKnownHiddenOpenOrders(executor, userId, strategyId, symbol = null) {
+    const exchangeOpen = await executor.getOpenOrders(strategyId, symbol);
+    if (!Array.isArray(exchangeOpen) || exchangeOpen.length === 0) return { cancelled: 0, failed: 0 };
+
+    const dbOrders = userId
+      ? await liveTradeDb.all("SELECT * FROM live_orders WHERE user_id=? ORDER BY created_at DESC LIMIT 500", [userId])
+      : await liveTradeDb.all("SELECT * FROM live_orders WHERE user_id IS NULL ORDER BY created_at DESC LIMIT 500");
+
+    const byKey = new Map();
+    for (const order of dbOrders) {
+      const key = this._orderKey(order);
+      if (key) byKey.set(key, order);
+    }
+
+    let cancelled = 0;
+    let failed = 0;
+    for (const exchangeOrder of exchangeOpen) {
+      const dbOrder = byKey.get(this._orderKey(exchangeOrder));
+      if (!dbOrder || !this._isTerminalStatus(dbOrder.status)) continue;
+
+      const cancelRes = await executor.cancelOrder(exchangeOrder.symbol, exchangeOrder.orderId || exchangeOrder.clientOrderId, dbOrder.strategy_id || strategyId);
+      const msg = `DESYNC: Binance has open ${exchangeOrder.symbol} order ${exchangeOrder.orderId}, but DB order ${dbOrder.id} is ${dbOrder.status}.`;
+      if (cancelRes.success || cancelRes.error === 'NOT_FOUND') {
+        cancelled++;
+        await liveTradeDb.updateOrder(dbOrder.id, { status: 'CANCELLED', error_msg: msg });
+        await liveTradeDb.addLog('warn', `${msg} Cancelled on Binance.`, { user_id: userId, strategy_id: dbOrder.strategy_id, signal_id: dbOrder.signal_id });
+        await this._alertAdmins(`BritTrade safety: cancelled hidden Binance order. ${msg}`);
+      } else {
+        failed++;
+        await liveTradeDb.updateOrder(dbOrder.id, { status: 'DESYNC', error_msg: `${msg} Cancel failed: ${cancelRes.message || cancelRes.error || 'Unknown error'}` });
+        await liveTradeDb.addLog('error', `${msg} Cancel failed: ${cancelRes.message || cancelRes.error || 'Unknown error'}`, { user_id: userId, strategy_id: dbOrder.strategy_id, signal_id: dbOrder.signal_id });
+        await this._alertAdmins(`BritTrade urgent: hidden Binance order could not be cancelled. ${msg}`);
+      }
+    }
+
+    return { cancelled, failed };
+  }
+
+  async _reconcileAccount(executor, userId, testnet) {
+    if (!executor.isReady()) return;
+
+    await this._cancelKnownHiddenOpenOrders(executor, userId, 1);
+
+    const activeOrders = userId
+      ? await liveTradeDb.all("SELECT * FROM live_orders WHERE user_id=? AND UPPER(status) IN ('OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED') ORDER BY created_at DESC LIMIT 100", [userId])
+      : await liveTradeDb.all("SELECT * FROM live_orders WHERE user_id IS NULL AND UPPER(status) IN ('OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED') ORDER BY created_at DESC LIMIT 100");
+
+    if (!activeOrders.length) return;
+
+    const positions = await executor.getPositions();
+    const posBySymbol = new Map();
+    if (Array.isArray(positions)) {
+      for (const pos of positions) posBySymbol.set(normalizeSymbol(pos.symbol, true), parseFloat(pos.positionAmt || 0));
+    }
+
+    for (const order of activeOrders) {
+      const oid = this._orderKey(order);
+      if (!oid) continue;
+
+      const exchangeOrder = await executor.getOrder(order.symbol, oid, order.strategy_id || 1);
+      const exchangeStatus = (exchangeOrder?.status || '').toUpperCase();
+      if (!exchangeStatus) continue;
+
+      if (exchangeStatus === 'FILLED') {
+        const posAmt = posBySymbol.get(normalizeSymbol(order.symbol, true)) || 0;
+        await liveTradeDb.updateOrder(order.id, {
+          status: Math.abs(posAmt) > 0.000001 ? 'FILLED' : 'CLOSED',
+          avg_fill_price: parseFloat(exchangeOrder.avgPrice || exchangeOrder.price || order.avg_fill_price || 0),
+          filled: parseFloat(exchangeOrder.executedQty || exchangeOrder.origQty || order.filled || 0)
+        });
+      } else if (['CANCELED', 'CANCELLED', 'EXPIRED', 'REJECTED'].includes(exchangeStatus)) {
+        await liveTradeDb.updateOrder(order.id, { status: 'CANCELLED' });
+      }
+    }
+  }
+
   /** Read config from DB and initialize the executor if possible */
   async _bootExecutorFromDb() {
     const config = await liveTradeDb.getBinanceConfig();
@@ -186,9 +304,11 @@ class LiveTradeOrchestrator {
    * This is non-blocking — errors are caught internally.
    */
   async handleSignal(signal) {
-    if (!this._ready) return;
+    if (!this._ready) return false;
 
     const { strategyId, signalId, symbol, side } = signal;
+    let allLiveAccountsHandled = true;
+    let sawLiveAccount = false;
     try {
       // 1. Get global admin config
       const globalConfig = await liveTradeDb.getBinanceConfig();
@@ -205,7 +325,7 @@ class LiveTradeOrchestrator {
       if (!adminEnabled && !subscribers.length) {
         // Only log if there was potentially someone to trade for
         console.log(`[LiveTradeOrchestrator] No active trading accounts for Strategy ${strategyId}. Admin global: ${adminEnabled ? 'ON' : 'OFF'}, Subscribers: ${subscribers.length}`);
-        return;
+        return false;
       }
 
       console.log(`[LiveTradeOrchestrator] Processing Signal: ${symbol} ${side.toUpperCase()} for Strategy ${strategyId}`);
@@ -216,7 +336,8 @@ class LiveTradeOrchestrator {
       if (adminEnabled) {
         const adminStratConfig = await liveTradeDb.getStrategyConfig(strategyId);
         if (adminStratConfig && adminStratConfig.enabled) {
-          await this._processSignalForAccount(binanceExecutor, null, strategyId, signal, adminStratConfig, globalConfig.testnet === 1);
+          sawLiveAccount = true;
+          allLiveAccountsHandled = await this._processSignalForAccount(binanceExecutor, null, strategyId, signal, adminStratConfig, globalConfig.testnet === 1) && allLiveAccountsHandled;
           adminGlobalTraded = true;
           try {
             adminApiKey = decrypt(globalConfig.api_key_enc);
@@ -281,13 +402,15 @@ class LiveTradeOrchestrator {
             continue;
           }
 
-          await this._processSignalForAccount(userExecutor, userId, strategyId, signal, userStratConfig, userCfg.testnet === 1);
+          sawLiveAccount = true;
+          allLiveAccountsHandled = await this._processSignalForAccount(userExecutor, userId, strategyId, signal, userStratConfig, userCfg.testnet === 1) && allLiveAccountsHandled;
         }
       }
     } catch (err) {
       console.error('[LiveTradeOrchestrator] handleSignal error:', err.message);
       liveTradeDb.addLog('error', `Unexpected error in handleSignal: ${err.message}`, { strategy_id: strategyId, signal_id: signalId }).catch(() => {});
     }
+    return sawLiveAccount ? allLiveAccountsHandled : true;
   }
 
   /**
@@ -295,21 +418,22 @@ class LiveTradeOrchestrator {
    * when multiple signals fire in the same batch.
    */
   async _processSignalForAccount(executor, userId, strategyId, signal, stratConfig, testnet) {
-    if (!stratConfig || !stratConfig.enabled) return;
+    if (!stratConfig || !stratConfig.enabled) return false;
 
     if (signal.isEntry) {
-      const lockKey = `${userId ?? 'admin'}_${strategyId}`;
+      const dcaLevel = signal.isDCA ? parseInt(signal.dcaLevel, 10) || null : null;
+      const lockKey = `${userId ?? 'admin'}_${strategyId}_${normalizeSymbol(signal.symbol, true)}_${dcaLevel || 'entry'}`;
       if (this._processingLocks.get(lockKey)) {
-        return;
+        return false;
       }
       this._processingLocks.set(lockKey, true);
       try {
-        await this._processSignalInternal(executor, userId, strategyId, signal, stratConfig, testnet);
+        return await this._processSignalInternal(executor, userId, strategyId, signal, stratConfig, testnet);
       } finally {
         this._processingLocks.delete(lockKey);
       }
     } else {
-      await this._processSignalInternal(executor, userId, strategyId, signal, stratConfig, testnet);
+      return await this._processSignalInternal(executor, userId, strategyId, signal, stratConfig, testnet);
     }
   }
 
@@ -317,10 +441,11 @@ class LiveTradeOrchestrator {
    * Internal helper to process a signal for a specific account (Admin or User).
    */
   async _processSignalInternal(executor, userId, strategyId, signal, stratConfig, testnet) {
-    if (!stratConfig || !stratConfig.enabled) return;
+    if (!stratConfig || !stratConfig.enabled) return false;
 
     const { symbol, side, signalId, isEntry } = signal;
     const label = (userId ? `U${userId}` : 'ADMIN') + `|S${strategyId}`;
+    const dcaLevel = signal.isDCA ? parseInt(signal.dcaLevel, 10) || null : null;
 
     const log = (level, msg) => {
       console.log(`[LiveTrading][${label}][${level.toUpperCase()}] ${msg}`);
@@ -338,14 +463,15 @@ class LiveTradeOrchestrator {
 
       const openCount = openOrders.length;
       if (isEntry) {
-        if (openCount >= (stratConfig.max_open_orders || 5)) {
+        const isDcaForOpenSymbol = !!signal.isDCA && openOrders.some(o => normalizeSymbol(o.symbol, true) === normalizeSymbol(symbol, true));
+        if (!isDcaForOpenSymbol && openCount >= (stratConfig.max_open_orders || 5)) {
           log('info', `Skipping entry: Max open orders reached (${openCount}/${stratConfig.max_open_orders || 5}). Close existing trades first.`);
-          return;
+          return false;
         }
         const projectedUsage = (openCount + 1) * stratConfig.trade_amount_usdt;
         if (projectedUsage > (stratConfig.allocated_capital || 100)) {
           log('info', `Skipping entry: Insufficient allocated capital. ${openCount} open trade(s) × $${stratConfig.trade_amount_usdt} = $${(openCount * stratConfig.trade_amount_usdt).toFixed(2)}, + new $${stratConfig.trade_amount_usdt} = $${projectedUsage.toFixed(2)}, Total Allocated: $${stratConfig.allocated_capital || 100}.`);
-          return;
+          return false;
         }
       }
 
@@ -402,7 +528,7 @@ class LiveTradeOrchestrator {
                  orderSide = targetSide; // REQUIRED FIX: Ensure the orchestrator knows whether to buy or sell
              } else {
                  log('info', `Skipping entry for ${symbol}: An active position already exists in the same direction and is not a DCA.`);
-                 return;
+                 return false;
              }
           } else {
              log('info', `Detected opposite signal for ${symbol}: Closing current ${positionSide} and opening ${targetSide}.`);
@@ -416,10 +542,39 @@ class LiveTradeOrchestrator {
         // Exit signal but no position found
         log('info', `Skipping exit for ${symbol}: No active position found on Binance to close.`);
         if (openForSymbol) {
-          await liveTradeDb.updateOrder(openForSymbol.id, { status: 'CLOSED' });
-          log('info', `Marked stale DB order ${openForSymbol.id} as CLOSED as no Binance position exists.`);
+          const openStatus = (openForSymbol.status || '').toUpperCase();
+          const cleanOid = openForSymbol.client_oid || String(openForSymbol.binance_id).split('.')[0];
+
+          if (openStatus === 'FILLED') {
+            await liveTradeDb.updateOrder(openForSymbol.id, { status: 'CLOSED' });
+            log('info', `Marked filled DB order ${openForSymbol.id} as CLOSED as no Binance position exists.`);
+          } else if (cleanOid) {
+            const exchangeOrder = await executor.getOrder(openForSymbol.symbol, cleanOid, openForSymbol.strategy_id || strategyId);
+            const exchangeStatus = (exchangeOrder?.status || '').toUpperCase();
+
+            if (exchangeStatus === 'FILLED') {
+              await liveTradeDb.updateOrder(openForSymbol.id, {
+                status: 'FILLED',
+                avg_fill_price: parseFloat(exchangeOrder.avgPrice || exchangeOrder.price || openForSymbol.avg_fill_price || 0),
+                filled: parseFloat(exchangeOrder.executedQty || exchangeOrder.origQty || openForSymbol.filled || 0)
+              });
+              log('warn', `Exit skipped: order ${openForSymbol.id} filled after position check. Left as FILLED for next sync/close pass.`);
+            } else if (['NEW', 'OPEN', 'PARTIALLY_FILLED'].includes(exchangeStatus) || exchangeOrder?.error) {
+              const cancelRes = await executor.cancelOrder(openForSymbol.symbol, cleanOid, openForSymbol.strategy_id || strategyId);
+              if (cancelRes.success || cancelRes.error === 'NOT_FOUND') {
+                await liveTradeDb.updateOrder(openForSymbol.id, { status: 'CANCELLED' });
+                log('info', `Cancelled stale pending order ${openForSymbol.id}; no Binance position existed.`);
+              } else {
+                await liveTradeDb.updateOrder(openForSymbol.id, { error_msg: `Exit skipped; stale order cancel failed: ${cancelRes.message || cancelRes.error || 'Unknown error'}` });
+                log('error', `Exit skipped and stale order ${openForSymbol.id} could not be cancelled: ${cancelRes.message || cancelRes.error || 'Unknown error'}`);
+              }
+            } else if (['CANCELED', 'CANCELLED', 'EXPIRED', 'REJECTED'].includes(exchangeStatus)) {
+              await liveTradeDb.updateOrder(openForSymbol.id, { status: 'CANCELLED' });
+              log('info', `Synced stale order ${openForSymbol.id} as ${exchangeStatus}.`);
+            }
+          }
         }
-        return;
+        return false;
       } else {
         // Entry signal, no position
         const s = (side || '').toLowerCase();
@@ -427,7 +582,24 @@ class LiveTradeOrchestrator {
         else if (s === 'sell' || s === 'short') orderSide = 'sell';
         else {
           log('warn', `Unknown signal side "${side}". Supported sides: buy, long, short, sell.`);
-          return;
+          return false;
+        }
+      }
+
+      if (isEntryOrder && openForSymbol && !signal.isDCA) {
+        log('info', `Skipping entry for ${symbol}: Active DB order already exists for this symbol (Order ID: ${openForSymbol.id}).`);
+        return false;
+      }
+
+      if (isEntryOrder) {
+        const hidden = await this._cancelKnownHiddenOpenOrders(executor, userId, strategyId, symbol);
+        if (hidden.failed > 0) {
+          log('error', `Skipping entry for ${symbol}: Binance/DB desync detected and hidden order cancel failed.`);
+          return false;
+        }
+        if (hidden.cancelled > 0) {
+          log('warn', `Skipping entry for ${symbol}: cancelled ${hidden.cancelled} hidden Binance order(s); waiting for next signal.`);
+          return false;
         }
       }
 
@@ -445,7 +617,24 @@ class LiveTradeOrchestrator {
 
         if (existingOrder && !signal.isDCA) {
           log('info', `Order side ${orderSide ? orderSide.toUpperCase() : 'UNKNOWN'} for Signal ${signalId} has already been placed (Order ID: ${existingOrder.id}). Skipping duplicate execution.`);
-          return;
+          return false;
+        }
+      }
+
+      if (signal.isDCA && signalId && dcaLevel) {
+        const existingDca = userId
+          ? await liveTradeDb.get(
+              "SELECT id FROM live_orders WHERE signal_id=? AND user_id=? AND side=? AND dca_level=? AND status != 'error'",
+              [signalId, userId, orderSide, dcaLevel]
+            )
+          : await liveTradeDb.get(
+              "SELECT id FROM live_orders WHERE signal_id=? AND user_id IS NULL AND side=? AND dca_level=? AND status != 'error'",
+              [signalId, orderSide, dcaLevel]
+            );
+
+        if (existingDca) {
+          log('info', `DCA level ${dcaLevel} for Signal ${signalId} already has order ${existingDca.id}.`);
+          return true;
         }
       }
 
@@ -462,10 +651,14 @@ class LiveTradeOrchestrator {
       
       if (isEntryOrder && !targetPrice) {
         log('error', `Cannot place LIMIT entry for ${symbol}: Signal provided no entry price.`);
-        return;
+        return false;
       }
 
-      log('info', `Placing ${orderTypeToUse.toUpperCase()} ${orderSide.toUpperCase()} order for ${symbol} | Amount: $${finalAmount} | Price: ${targetPrice || 'Market'}`);
+      const clientOrderId = signal.isDCA && signalId && dcaLevel
+        ? `bt${userId || 'a'}s${signalId}d${dcaLevel}`
+        : null;
+
+      log('info', `Placing ${orderTypeToUse.toUpperCase()} ${orderSide.toUpperCase()} order for ${symbol} | Amount: $${finalAmount} | Price: ${targetPrice || 'Market'}${dcaLevel ? ` | DCA ${dcaLevel}` : ''}`);
 
       const order = await executor.placeOrder(
         symbol,
@@ -476,7 +669,8 @@ class LiveTradeOrchestrator {
         strategyId,
         stratConfig.leverage || 1,
         fixedQty,
-        !isEntryOrder // reduceOnly = true for exits
+        !isEntryOrder, // reduceOnly = true for exits
+        clientOrderId
       );
 
       if (order.error) {
@@ -491,9 +685,10 @@ class LiveTradeOrchestrator {
           amount_usdt: finalAmount,
           testnet: testnet ? 1 : 0,
           status: 'error',
-          error_msg: String(order.error)
+          error_msg: String(order.error),
+          dca_level: dcaLevel
         });
-        return;
+        return false;
       }
 
       const orderId = await liveTradeDb.insertOrder({
@@ -511,14 +706,17 @@ class LiveTradeOrchestrator {
         avg_fill_price: parseFloat(order.average || order.price) || 0,
         testnet: testnet ? 1 : 0,
         status: isEntryOrder ? (order.status || 'OPEN') : 'CLOSED',
-        error_msg: null
+        error_msg: null,
+        dca_level: dcaLevel
       });
 
       if (orderToClose) await liveTradeDb.updateOrder(orderToClose.id, { status: 'CLOSED' });
       log('info', `Order saved | DB id=${orderId} | Binance id=${order.id}`);
+      return true;
 
     } catch (err) {
       log('error', `Error processing account: ${err.message}`);
+      return false;
     }
   }
 
