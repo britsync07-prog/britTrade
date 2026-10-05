@@ -55,6 +55,7 @@ class LiveTradeOrchestrator {
 
       // Start the background watcher for stale limit orders
       this._startOrderWatcher();
+      this._startReconciliationWatcher();
 
       // Register as listener on the signal engine (lazy require avoids circular deps)
       const signalEngine = require('../services/signalEngine');
@@ -154,6 +155,128 @@ class LiveTradeOrchestrator {
         console.error('[OrderWatcher] Error:', err.message);
       }
     }, 30000); // Check every 30 seconds
+  }
+
+  _startReconciliationWatcher() {
+    setInterval(async () => {
+      try {
+        if (!this._ready) return;
+
+        const adminCfg = await liveTradeDb.getBinanceConfig();
+        if (adminCfg && adminCfg.enabled === 1 && binanceExecutor.isReady()) {
+          await this._reconcileAccount(binanceExecutor, null, adminCfg.testnet === 1);
+        }
+
+        const userCfgs = await liveTradeDb.getEnabledUserBinanceConfigs();
+        for (const userCfg of userCfgs) {
+          const apiKey = decrypt(userCfg.api_key_enc);
+          const apiSecret = decrypt(userCfg.api_sec_enc);
+          if (!apiKey || !apiSecret) continue;
+
+          const userExecutor = new BinanceExecutor();
+          await userExecutor.init(apiKey, apiSecret, userCfg.testnet === 1);
+          await this._reconcileAccount(userExecutor, userCfg.user_id, userCfg.testnet === 1);
+        }
+      } catch (err) {
+        console.error('[Reconcile] Error:', err.message);
+      }
+    }, 60000);
+  }
+
+  async _alertAdmins(message) {
+    try {
+      const telegramService = require('../services/telegramService');
+      const admins = await db.query("SELECT telegramId FROM users WHERE role = 'admin' AND status = 'active' AND telegramId IS NOT NULL");
+      for (const admin of admins) {
+        await telegramService.sendDirectNotification(admin.telegramId, message);
+      }
+    } catch (err) {
+      console.error('[Reconcile] Admin alert failed:', err.message);
+    }
+  }
+
+  _orderKey(order) {
+    return String(order.client_oid || order.clientOrderId || order.origClientOrderId || order.binance_id || order.orderId || '').split('.')[0];
+  }
+
+  _isTerminalStatus(status) {
+    return ['CLOSED', 'CANCELLED', 'CANCELED', 'ERROR', 'REJECTED', 'EXPIRED', 'DESYNC'].includes((status || '').toUpperCase());
+  }
+
+  async _cancelKnownHiddenOpenOrders(executor, userId, strategyId, symbol = null) {
+    const exchangeOpen = await executor.getOpenOrders(strategyId, symbol);
+    if (!Array.isArray(exchangeOpen) || exchangeOpen.length === 0) return { cancelled: 0, failed: 0 };
+
+    const dbOrders = userId
+      ? await liveTradeDb.all("SELECT * FROM live_orders WHERE user_id=? ORDER BY created_at DESC LIMIT 500", [userId])
+      : await liveTradeDb.all("SELECT * FROM live_orders WHERE user_id IS NULL ORDER BY created_at DESC LIMIT 500");
+
+    const byKey = new Map();
+    for (const order of dbOrders) {
+      const key = this._orderKey(order);
+      if (key) byKey.set(key, order);
+    }
+
+    let cancelled = 0;
+    let failed = 0;
+    for (const exchangeOrder of exchangeOpen) {
+      const dbOrder = byKey.get(this._orderKey(exchangeOrder));
+      if (!dbOrder || !this._isTerminalStatus(dbOrder.status)) continue;
+
+      const cancelRes = await executor.cancelOrder(exchangeOrder.symbol, exchangeOrder.orderId || exchangeOrder.clientOrderId, dbOrder.strategy_id || strategyId);
+      const msg = `DESYNC: Binance has open ${exchangeOrder.symbol} order ${exchangeOrder.orderId}, but DB order ${dbOrder.id} is ${dbOrder.status}.`;
+      if (cancelRes.success || cancelRes.error === 'NOT_FOUND') {
+        cancelled++;
+        await liveTradeDb.updateOrder(dbOrder.id, { status: 'CANCELLED', error_msg: msg });
+        await liveTradeDb.addLog('warn', `${msg} Cancelled on Binance.`, { user_id: userId, strategy_id: dbOrder.strategy_id, signal_id: dbOrder.signal_id });
+        await this._alertAdmins(`BritTrade safety: cancelled hidden Binance order. ${msg}`);
+      } else {
+        failed++;
+        await liveTradeDb.updateOrder(dbOrder.id, { status: 'DESYNC', error_msg: `${msg} Cancel failed: ${cancelRes.message || cancelRes.error || 'Unknown error'}` });
+        await liveTradeDb.addLog('error', `${msg} Cancel failed: ${cancelRes.message || cancelRes.error || 'Unknown error'}`, { user_id: userId, strategy_id: dbOrder.strategy_id, signal_id: dbOrder.signal_id });
+        await this._alertAdmins(`BritTrade urgent: hidden Binance order could not be cancelled. ${msg}`);
+      }
+    }
+
+    return { cancelled, failed };
+  }
+
+  async _reconcileAccount(executor, userId, testnet) {
+    if (!executor.isReady()) return;
+
+    await this._cancelKnownHiddenOpenOrders(executor, userId, 1);
+
+    const activeOrders = userId
+      ? await liveTradeDb.all("SELECT * FROM live_orders WHERE user_id=? AND UPPER(status) IN ('OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED') ORDER BY created_at DESC LIMIT 100", [userId])
+      : await liveTradeDb.all("SELECT * FROM live_orders WHERE user_id IS NULL AND UPPER(status) IN ('OPEN', 'FILLED', 'NEW', 'PARTIALLY_FILLED') ORDER BY created_at DESC LIMIT 100");
+
+    if (!activeOrders.length) return;
+
+    const positions = await executor.getPositions();
+    const posBySymbol = new Map();
+    if (Array.isArray(positions)) {
+      for (const pos of positions) posBySymbol.set(normalizeSymbol(pos.symbol, true), parseFloat(pos.positionAmt || 0));
+    }
+
+    for (const order of activeOrders) {
+      const oid = this._orderKey(order);
+      if (!oid) continue;
+
+      const exchangeOrder = await executor.getOrder(order.symbol, oid, order.strategy_id || 1);
+      const exchangeStatus = (exchangeOrder?.status || '').toUpperCase();
+      if (!exchangeStatus) continue;
+
+      if (exchangeStatus === 'FILLED') {
+        const posAmt = posBySymbol.get(normalizeSymbol(order.symbol, true)) || 0;
+        await liveTradeDb.updateOrder(order.id, {
+          status: Math.abs(posAmt) > 0.000001 ? 'FILLED' : 'CLOSED',
+          avg_fill_price: parseFloat(exchangeOrder.avgPrice || exchangeOrder.price || order.avg_fill_price || 0),
+          filled: parseFloat(exchangeOrder.executedQty || exchangeOrder.origQty || order.filled || 0)
+        });
+      } else if (['CANCELED', 'CANCELLED', 'EXPIRED', 'REJECTED'].includes(exchangeStatus)) {
+        await liveTradeDb.updateOrder(order.id, { status: 'CANCELLED' });
+      }
+    }
   }
 
   /** Read config from DB and initialize the executor if possible */
@@ -419,8 +542,37 @@ class LiveTradeOrchestrator {
         // Exit signal but no position found
         log('info', `Skipping exit for ${symbol}: No active position found on Binance to close.`);
         if (openForSymbol) {
-          await liveTradeDb.updateOrder(openForSymbol.id, { status: 'CLOSED' });
-          log('info', `Marked stale DB order ${openForSymbol.id} as CLOSED as no Binance position exists.`);
+          const openStatus = (openForSymbol.status || '').toUpperCase();
+          const cleanOid = openForSymbol.client_oid || String(openForSymbol.binance_id).split('.')[0];
+
+          if (openStatus === 'FILLED') {
+            await liveTradeDb.updateOrder(openForSymbol.id, { status: 'CLOSED' });
+            log('info', `Marked filled DB order ${openForSymbol.id} as CLOSED as no Binance position exists.`);
+          } else if (cleanOid) {
+            const exchangeOrder = await executor.getOrder(openForSymbol.symbol, cleanOid, openForSymbol.strategy_id || strategyId);
+            const exchangeStatus = (exchangeOrder?.status || '').toUpperCase();
+
+            if (exchangeStatus === 'FILLED') {
+              await liveTradeDb.updateOrder(openForSymbol.id, {
+                status: 'FILLED',
+                avg_fill_price: parseFloat(exchangeOrder.avgPrice || exchangeOrder.price || openForSymbol.avg_fill_price || 0),
+                filled: parseFloat(exchangeOrder.executedQty || exchangeOrder.origQty || openForSymbol.filled || 0)
+              });
+              log('warn', `Exit skipped: order ${openForSymbol.id} filled after position check. Left as FILLED for next sync/close pass.`);
+            } else if (['NEW', 'OPEN', 'PARTIALLY_FILLED'].includes(exchangeStatus) || exchangeOrder?.error) {
+              const cancelRes = await executor.cancelOrder(openForSymbol.symbol, cleanOid, openForSymbol.strategy_id || strategyId);
+              if (cancelRes.success || cancelRes.error === 'NOT_FOUND') {
+                await liveTradeDb.updateOrder(openForSymbol.id, { status: 'CANCELLED' });
+                log('info', `Cancelled stale pending order ${openForSymbol.id}; no Binance position existed.`);
+              } else {
+                await liveTradeDb.updateOrder(openForSymbol.id, { error_msg: `Exit skipped; stale order cancel failed: ${cancelRes.message || cancelRes.error || 'Unknown error'}` });
+                log('error', `Exit skipped and stale order ${openForSymbol.id} could not be cancelled: ${cancelRes.message || cancelRes.error || 'Unknown error'}`);
+              }
+            } else if (['CANCELED', 'CANCELLED', 'EXPIRED', 'REJECTED'].includes(exchangeStatus)) {
+              await liveTradeDb.updateOrder(openForSymbol.id, { status: 'CANCELLED' });
+              log('info', `Synced stale order ${openForSymbol.id} as ${exchangeStatus}.`);
+            }
+          }
         }
         return false;
       } else {
@@ -437,6 +589,18 @@ class LiveTradeOrchestrator {
       if (isEntryOrder && openForSymbol && !signal.isDCA) {
         log('info', `Skipping entry for ${symbol}: Active DB order already exists for this symbol (Order ID: ${openForSymbol.id}).`);
         return false;
+      }
+
+      if (isEntryOrder) {
+        const hidden = await this._cancelKnownHiddenOpenOrders(executor, userId, strategyId, symbol);
+        if (hidden.failed > 0) {
+          log('error', `Skipping entry for ${symbol}: Binance/DB desync detected and hidden order cancel failed.`);
+          return false;
+        }
+        if (hidden.cancelled > 0) {
+          log('warn', `Skipping entry for ${symbol}: cancelled ${hidden.cancelled} hidden Binance order(s); waiting for next signal.`);
+          return false;
+        }
       }
 
       // A. Check if we already processed this exact signal and side for this account (de-duplication)

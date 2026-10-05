@@ -384,18 +384,18 @@ class BinanceExecutor {
     return { success: false, error: 'FAILED', message: lastError || 'Unknown error' };
   }
 
-  async cancelAllOpenOrders(strategyId = 1) {
-    if (!this._initialized) return { success: false, error: 'Not initialized' };
+  async getOpenOrders(strategyId = 1, symbol = null) {
+    if (!this._initialized) return { error: 'Not initialized' };
     const isFutures = FUTURES_STRATEGIES.has(Number(strategyId));
+    const bSymbol = symbol ? normalizeSymbol(symbol, isFutures) : null;
     const envs = this._getEnvs(isFutures);
 
     for (const env of envs) {
       try {
         const timeRes = await axios.get(`${env.url}/v1/time`, { timeout: 30000 });
         const baseUrl = isFutures ? `${env.url}/v1` : `${env.url}/v3`;
-        
-        // Fetch open orders
         const params = { timestamp: timeRes.data.serverTime, recvWindow: 10000 };
+        if (bSymbol) params.symbol = bSymbol;
         const query = Object.keys(params).map(k => `${k}=${params[k]}`).join('&');
         const signature = crypto.createHmac('sha256', this._apiSecret).update(query).digest('hex');
 
@@ -403,18 +403,23 @@ class BinanceExecutor {
           headers: { 'X-MBX-APIKEY': this._apiKey },
           timeout: 30000
         });
-        
-        let cancelledCount = 0;
-        if (Array.isArray(res.data)) {
-           for (const order of res.data) {
-              const cres = await this.cancelOrder(order.symbol, order.orderId, strategyId);
-              if (cres.success) cancelledCount++;
-           }
-        }
-        return { success: true, count: cancelledCount };
+        return Array.isArray(res.data) ? res.data : [];
       } catch (e) { }
     }
-    return { success: false, error: 'Connection failed' };
+    return { error: 'Failed to fetch open orders' };
+  }
+
+  async cancelAllOpenOrders(strategyId = 1) {
+    if (!this._initialized) return { success: false, error: 'Not initialized' };
+    const openOrders = await this.getOpenOrders(strategyId);
+    if (!Array.isArray(openOrders)) return { success: false, error: openOrders.error || 'Connection failed' };
+
+    let cancelledCount = 0;
+    for (const order of openOrders) {
+      const cres = await this.cancelOrder(order.symbol, order.orderId, strategyId);
+      if (cres.success) cancelledCount++;
+    }
+    return { success: true, count: cancelledCount };
   }
 
   destroy() { this._initialized = false; }
