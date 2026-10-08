@@ -645,11 +645,10 @@ class LiveTradeOrchestrator {
       
       const targetPrice = signal.price || signal.entry || signal.entry_price || null;
 
-      // 3. Place order
-      // STRICTOR REQUIREMENT: LIMIT for entry, MARKET for exit
-      const orderTypeToUse = isEntryOrder ? 'limit' : 'market';
+      // 3. Place order: initial entries use target LIMIT, DCA/exits use MARKET.
+      const orderTypeToUse = isEntryOrder && !signal.isDCA ? 'limit' : 'market';
       
-      if (isEntryOrder && !targetPrice) {
+      if (isEntryOrder && orderTypeToUse === 'limit' && !targetPrice) {
         log('error', `Cannot place LIMIT entry for ${symbol}: Signal provided no entry price.`);
         return false;
       }
