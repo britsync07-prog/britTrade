@@ -9,6 +9,7 @@ axios.defaults.httpsAgent = new https.Agent({ family: 4, keepAlive: true });
 const { RSI, BollingerBands, ADX, ATR } = require('technicalindicators');
 const paperTradeService = require('./paperTradeService');
 const { normalizeSymbol } = require('../liveTrading/symbolUtils');
+const liveTradeDb = require('../liveTrading/liveTradeDb');
 
 let telegramService = null;
 function getTelegramService() {
@@ -62,6 +63,39 @@ class SignalEngine {
     return ok;
   }
 
+  async _getLiveEntryStats(signalId, symbol, side) {
+    if (!signalId) return null;
+
+    const s = (side || '').toLowerCase();
+    const entrySide = (s === 'short' || s === 'sell') ? 'sell' : 'buy';
+    const rows = await liveTradeDb.all(
+      `SELECT side, amount, filled, price, avg_fill_price, status
+       FROM live_orders
+       WHERE signal_id = ?
+         AND symbol = ?
+         AND LOWER(side) = ?
+         AND UPPER(status) NOT IN ('CANCELLED','CANCELED','ERROR','REJECTED','EXPIRED')`,
+      [signalId, symbol, entrySide]
+    );
+
+    let qty = 0;
+    let notional = 0;
+    for (const row of rows) {
+      const rowStatus = (row.status || '').toUpperCase();
+      const filledQty = parseFloat(row.filled || 0);
+      const rowQty = filledQty > 0 || ['FILLED', 'CLOSED'].includes(rowStatus)
+        ? parseFloat(row.amount || filledQty || 0)
+        : 0;
+      const rowPrice = parseFloat(row.avg_fill_price || row.price || 0);
+      if (rowQty > 0 && rowPrice > 0) {
+        qty += rowQty;
+        notional += rowQty * rowPrice;
+      }
+    }
+
+    return qty > 0 ? { qty, avgPrice: notional / qty, entryCount: rows.length } : null;
+  }
+
   async fetchOHLC(symbol, interval) {
     const bSymbol = normalizeSymbol(symbol, true);
 
@@ -104,9 +138,11 @@ class SignalEngine {
           let status = 'active';
           let pnl = 0;
           let leverage = 5; // Default to 5x leverage for all futures strategies
+          const liveEntry = sig.strategyId === 1 ? await this._getLiveEntryStats(sig.id, sig.symbol, sig.side) : null;
+          const entryPriceForCalc = liveEntry?.avgPrice || sig.price;
 
-          if (sig.side === 'buy' || sig.side === 'long') pnl = ((currentPrice - sig.price) / sig.price) * 100 * leverage;
-          else pnl = ((sig.price - currentPrice) / sig.price) * 100 * leverage;
+          if (sig.side === 'buy' || sig.side === 'long') pnl = ((currentPrice - entryPriceForCalc) / entryPriceForCalc) * 100 * leverage;
+          else pnl = ((entryPriceForCalc - currentPrice) / entryPriceForCalc) * 100 * leverage;
           
           pnl = pnl - (leverage * 0.1); // Deduct 0.1% exchange fee
 
@@ -128,8 +164,12 @@ class SignalEngine {
             // Only average the signal after live trading accepts the DCA.
             const liveAccepted = await this._fireSignalListeners({ strategyId: sig.strategyId, symbol: sig.symbol, side: sig.side, price: currentPrice, tp: newTp, sl: newSl, signalId: sig.id, isEntry: true, isDCA: true });
             if (liveAccepted) {
-              await db.run("UPDATE signals SET price = ?, tp = ?, sl = ?, entryCount = ? WHERE id = ?", [newAvgPrice, newTp, newSl, newEntryCount, sig.id]);
-              await getTelegramService().broadcastSignal({ strategyId: sig.strategyId, strategyName: 'GridMeanReversion', symbol: sig.symbol, side: sig.side, price: currentPrice, tp: newTp, sl: newSl, stakeAmount: 10, isDCA: true });
+              const actualEntry = await this._getLiveEntryStats(sig.id, sig.symbol, sig.side);
+              const actualAvg = actualEntry?.avgPrice || newAvgPrice;
+              const actualTp = actualAvg * 1.01;
+              const actualSl = actualAvg * 0.85;
+              await db.run("UPDATE signals SET price = ?, tp = ?, sl = ?, entryCount = ? WHERE id = ?", [actualAvg, actualTp, actualSl, actualEntry?.entryCount || newEntryCount, sig.id]);
+              await getTelegramService().broadcastSignal({ strategyId: sig.strategyId, strategyName: 'GridMeanReversion', symbol: sig.symbol, side: sig.side, price: currentPrice, tp: actualTp, sl: actualSl, stakeAmount: 10, isDCA: true });
             }
             continue; 
           }
@@ -149,22 +189,21 @@ class SignalEngine {
             }
           }
 
+          const tpForCalc = liveEntry?.avgPrice
+            ? ((sig.side === 'buy' || sig.side === 'long') ? liveEntry.avgPrice * 1.01 : liveEntry.avgPrice * 0.99)
+            : sig.tp;
+
           if (sig.side === 'buy' || sig.side === 'long') {
-            if (currentPrice >= sig.tp) status = 'tp_hit';
+            if (currentPrice >= tpForCalc) status = 'tp_hit';
             else if (currentPrice <= sig.sl) status = 'sl_hit';
           } else {
-            if (currentPrice <= sig.tp) status = 'tp_hit';
+            if (currentPrice <= tpForCalc) status = 'tp_hit';
             else if (currentPrice >= sig.sl) status = 'sl_hit';
           }
 
           if (status !== 'active') {
-            await db.run("UPDATE signals SET status = ?, pnl = ? WHERE id = ?", [status, pnl, sig.id]);
-            await paperTradeService.closePaperTrade(sig.id, currentPrice); // Close paper trade too
             const exitSide = (sig.side === 'buy' || sig.side === 'long') ? 'sell' : 'cover';
-            await getTelegramService().broadcastClose(sig.strategyId, sig.symbol, exitSide, currentPrice, pnl, status);
-
-            // FIX: Fire live trade hook for exit signal
-            await this._fireSignalListeners({ 
+            const liveClosed = await this._fireSignalListeners({ 
               strategyId: sig.strategyId, 
               symbol: sig.symbol, 
               side: exitSide, 
@@ -172,6 +211,15 @@ class SignalEngine {
               signalId: sig.id, 
               isEntry: false 
             });
+
+            if (!liveClosed) {
+              console.warn(`[SignalEngine] Live close rejected for signal ${sig.id} ${sig.symbol}; keeping signal active for retry.`);
+              continue;
+            }
+
+            await db.run("UPDATE signals SET status = ?, pnl = ? WHERE id = ?", [status, pnl, sig.id]);
+            await paperTradeService.closePaperTrade(sig.id, currentPrice); // Close paper trade too
+            await getTelegramService().broadcastClose(sig.strategyId, sig.symbol, exitSide, currentPrice, pnl, status);
           }
         }
       } catch (e) { console.error('[Signal Tracker Error]', e.message); }
@@ -247,9 +295,11 @@ class SignalEngine {
                 const activeSide = activeSignal.side.toLowerCase();
                 const leverage = 5;
                 const fees = leverage * 0.1; // 0.1% per trade (entry+exit approx)
+                const liveEntry = id === 1 ? await this._getLiveEntryStats(activeSignal.id, symbol, activeSignal.side) : null;
+                const entryPrice = liveEntry?.avgPrice || activeSignal.price;
                 const currentGrossPnl = (activeSide === 'buy' || activeSide === 'long') 
-                    ? ((currentPrice - activeSignal.price) / activeSignal.price) * 100 * leverage 
-                    : ((activeSignal.price - currentPrice) / activeSignal.price) * 100 * leverage;
+                    ? ((currentPrice - entryPrice) / entryPrice) * 100 * leverage 
+                    : ((entryPrice - currentPrice) / entryPrice) * 100 * leverage;
                 
                 const respectsExitProfitOnly = ![1, 3].includes(id) || (currentGrossPnl > fees);
                 if (respectsExitProfitOnly && ((signalSide === 'sell' && (activeSide === 'buy' || activeSide === 'long')) || (signalSide === 'cover' && activeSide === 'short'))) shouldTrigger = true;
@@ -260,22 +310,15 @@ class SignalEngine {
                let pnl = 0, finalStatus = isEntry ? 'active' : 'completed';
 
                if (!isEntry && activeSignal) {
-                 const entryPrice = activeSignal.price || currentPrice;
+                 const liveEntry = id === 1 ? await this._getLiveEntryStats(activeSignal.id, symbol, activeSignal.side) : null;
+                 const entryPrice = liveEntry?.avgPrice || activeSignal.price || currentPrice;
                  const leverage = 5;
                  pnl = (activeSignal.side === 'buy' || activeSignal.side === 'long') ? ((currentPrice - entryPrice) / entryPrice) * 100 * leverage : ((entryPrice - currentPrice) / entryPrice) * 100 * leverage;
                  pnl = pnl - (leverage * 0.1); // Deduct 0.1% exchange fee
                  const liquidationThreshold = leverage > 1 ? -85 : -100;
                  if (pnl <= liquidationThreshold) { pnl = liquidationThreshold; finalStatus = 'sl_hit'; }
                  
-                 // Update the existing signal to closed/completed
-                 await db.run("UPDATE signals SET status = ?, pnl = ? WHERE id = ?", [finalStatus === 'active' ? 'closed' : finalStatus, pnl, activeSignal.id]);
-                 await paperTradeService.closePaperTrade(activeSignal.id, currentPrice);
-                 
-                 // Broadcast the close event
-                 await getTelegramService().broadcastClose(id, symbol, signalSide, currentPrice, pnl, finalStatus);
-                 
-                 // Fire live trade hook for exit signal using the original signalId
-                 await this._fireSignalListeners({ 
+                 const liveClosed = await this._fireSignalListeners({ 
                    strategyId: id, 
                    symbol, 
                    side: signalSide, 
@@ -283,6 +326,16 @@ class SignalEngine {
                    signalId: activeSignal.id, 
                    isEntry: false 
                  });
+
+                 if (!liveClosed) {
+                   console.warn(`[SignalEngine] Live close rejected for signal ${activeSignal.id} ${symbol}; keeping signal active for retry.`);
+                   return;
+                 }
+
+                 // Update the existing signal to closed/completed only after the live close is accepted.
+                 await db.run("UPDATE signals SET status = ?, pnl = ? WHERE id = ?", [finalStatus === 'active' ? 'closed' : finalStatus, pnl, activeSignal.id]);
+                 await paperTradeService.closePaperTrade(activeSignal.id, currentPrice);
+                 await getTelegramService().broadcastClose(id, symbol, signalSide, currentPrice, pnl, finalStatus);
                  
                  return; // Stop here, do not insert a new signal for the exit
                }
@@ -295,7 +348,15 @@ class SignalEngine {
                    await paperTradeService.openPaperTrade(id, result.id, symbol, signalSide, currentPrice, leverage);
                    await getTelegramService().broadcastSignal({ strategyId: id, strategyName: strategy.name, symbol, side: signalSide, price: currentPrice, tp: initialTp, sl: initialSl, stakeAmount: 10 });
                    // Fire live trade hook and keep paper/live signal state aligned.
-                   await this._fireSignalListeners({ strategyId: id, symbol, side: signalSide, price: currentPrice, tp: initialTp, sl: initialSl, signalId: result.id, isEntry: true });
+                   const liveAccepted = await this._fireSignalListeners({ strategyId: id, symbol, side: signalSide, price: currentPrice, tp: initialTp, sl: initialSl, signalId: result.id, isEntry: true });
+                   if (id === 1 && liveAccepted) {
+                     const liveEntry = await this._getLiveEntryStats(result.id, symbol, signalSide);
+                     if (liveEntry?.avgPrice) {
+                       const liveTp = liveEntry.avgPrice * 1.01;
+                       const liveSl = liveEntry.avgPrice * 0.85;
+                       await db.run("UPDATE signals SET price = ?, tp = ?, sl = ? WHERE id = ?", [liveEntry.avgPrice, liveTp, liveSl, result.id]);
+                     }
+                   }
                }
             }
           } else delete this.lastSignals[`${id}_${symbol}`];
